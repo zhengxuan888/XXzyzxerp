@@ -35,6 +35,8 @@ yarn-error.log*
 /.dev-server.log
 /.dev-server.err.log
 /design-menu-current.png
+/.local-storage/
+/.local-logs/
 
 # env files (can opt-in for committing if needed)
 .env*

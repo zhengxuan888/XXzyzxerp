@@ -112,6 +112,12 @@ enum DeliveryAttemptStatus {
   FAILED
 }
 
+enum AttachmentStatus {
+  ACTIVE
+  DELETED
+  QUARANTINED
+}
+
 model LegalEntity {
   id        String   @id @default(uuid())
   code      String   @unique
@@ -138,6 +144,7 @@ model LegalEntity {
   channelConnections ChannelConnection[]
   conversations      Conversation[]
   inboxAuditEvents   InboxAuditEvent[]
+  attachments        Attachment[]
 }
 
 model BusinessUnit {
@@ -176,6 +183,7 @@ model BusinessUnit {
   conversations         Conversation[]
   inboxTags             InboxTag[]
   inboxAuditEvents      InboxAuditEvent[]
+  attachments           Attachment[]
 
   @@unique([legalEntityId, code])
   @@index([legalEntityId])
@@ -205,6 +213,7 @@ model Department {
   documents          Document[]
   channelConnections ChannelConnection[]
   conversations      Conversation[]
+  attachments        Attachment[]
 
   @@unique([businessUnitId, code, parentId])
   @@index([businessUnitId, parentId])
@@ -258,6 +267,7 @@ model User {
   attendanceRecords     Attendance[]
   inventoryTransactions InventoryTransaction[]
   inboxAuditEvents      InboxAuditEvent[]      @relation("InboxAuditActor")
+  attachments           Attachment[]           @relation("AttachmentUploader")
 }
 
 model Role {
@@ -380,6 +390,7 @@ model Membership {
   assignedConversations       ConversationAssignment[] @relation("ConversationAssignee")
   conversationAssignmentsMade ConversationAssignment[] @relation("ConversationAssigner")
   inboxAuditEvents            InboxAuditEvent[]        @relation("InboxAuditMembership")
+  uploadedAttachments         Attachment[]             @relation("AttachmentUploaderMembership")
 
   @@index([userId, isActive])
   @@index([businessUnitId, isActive])
@@ -1114,4 +1125,35 @@ model InboxAuditEvent {
   actorMembership Membership?   @relation("InboxAuditMembership", fields: [actorMembershipId], references: [id], onDelete: SetNull)
 
   @@index([businessUnitId, conversationId, createdAt])
+}
+
+model Attachment {
+  id                     String           @id @default(uuid())
+  legalEntityId          String
+  businessUnitId         String
+  departmentId           String?
+  targetType             String
+  targetId               String
+  originalName           String
+  storageProvider        String
+  storageKey             String           @unique
+  mimeType               String
+  extension              String
+  sizeBytes              Int
+  sha256                 String
+  status                 AttachmentStatus @default(ACTIVE)
+  uploadedByUserId       String
+  uploadedByMembershipId String
+  deletedAt              DateTime?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  legalEntity          LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit         BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department           Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  uploadedByUser       User         @relation("AttachmentUploader", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+  uploadedByMembership Membership   @relation("AttachmentUploaderMembership", fields: [uploadedByMembershipId], references: [id], onDelete: Restrict)
+
+  @@index([businessUnitId, departmentId, targetType, targetId, status])
+  @@index([sha256])
 }

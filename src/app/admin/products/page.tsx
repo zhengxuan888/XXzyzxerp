@@ -45,6 +45,7 @@ export default async function ProductsPage() {
       apiBase="/api/mvp"
       resource="products"
       listTitle="Products"
+      detailPath="/admin/products"
       canCreate={canCreate.allowed}
       canDelete={canDelete.allowed}
       rows={rows}

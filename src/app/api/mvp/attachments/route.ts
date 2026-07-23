@@ -1,0 +1,129 @@
+import { NextRequest } from "next/server";
+import { requireAuthContext } from "@/lib/api-auth";
+import { checkPermission } from "@/lib/permission";
+import { fail, ok } from "@/lib/api-response";
+import { resolveAttachmentTarget } from "@/lib/attachments";
+import { validateUpload } from "@/lib/storage/file-validation";
+import { localDemoStorage } from "@/lib/storage/local-demo";
+import { prisma } from "@/lib/prisma";
+import { writeAuditLog } from "@/lib/audit";
+
+const safeSelect = {
+  id: true,
+  targetType: true,
+  targetId: true,
+  originalName: true,
+  mimeType: true,
+  extension: true,
+  sizeBytes: true,
+  sha256: true,
+  status: true,
+  createdAt: true,
+  uploadedByUser: { select: { fullName: true } },
+} as const;
+
+async function authorizeTarget(request: NextRequest, actionKey: string, targetType: string, targetId: string) {
+  const auth = await requireAuthContext(request);
+  if (!auth) return { response: fail("UNAUTHENTICATED", "请先登录。", 401) };
+  const target = await resolveAttachmentTarget(auth, targetType, targetId);
+  if (!target) return { response: fail("TARGET_NOT_FOUND", "资源不存在。", 404) };
+  const decision = await checkPermission({
+    userId: auth.userId,
+    membershipId: auth.membership.id,
+    actionKey,
+    targetBusinessUnitId: target.businessUnitId,
+    targetDepartmentId: target.departmentId,
+  });
+  if (!decision.allowed) return { response: fail("FORBIDDEN", "没有附件操作权限。", 403, decision.reasons) };
+  return { auth, target };
+}
+
+export async function GET(request: NextRequest) {
+  const targetType = request.nextUrl.searchParams.get("targetType")?.trim().toUpperCase() ?? "";
+  const targetId = request.nextUrl.searchParams.get("targetId")?.trim() ?? "";
+  const access = await authorizeTarget(request, "attachment.read", targetType, targetId);
+  if ("response" in access) return access.response;
+  const items = await prisma.attachment.findMany({
+    where: {
+      businessUnitId: access.target.businessUnitId,
+      departmentId: access.target.departmentId,
+      targetType: access.target.targetType,
+      targetId: access.target.targetId,
+      status: "ACTIVE",
+    },
+    select: safeSelect,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+  });
+  return ok(items);
+}
+
+export async function POST(request: NextRequest) {
+  const auth = await requireAuthContext(request);
+  if (!auth) return fail("UNAUTHENTICATED", "请先登录。", 401);
+  const form = await request.formData().catch(() => null);
+  const targetType = String(form?.get("targetType") ?? "").trim().toUpperCase();
+  const targetId = String(form?.get("targetId") ?? "").trim();
+  const target = await resolveAttachmentTarget(auth, targetType, targetId);
+  if (!target) return fail("TARGET_NOT_FOUND", "资源不存在。", 404);
+  const decision = await checkPermission({
+    userId: auth.userId,
+    membershipId: auth.membership.id,
+    actionKey: "attachment.create",
+    targetBusinessUnitId: target.businessUnitId,
+    targetDepartmentId: target.departmentId,
+  });
+  if (!decision.allowed) return fail("FORBIDDEN", "没有附件操作权限。", 403, decision.reasons);
+  const file = form?.get("file");
+  if (!file || typeof file === "string" || typeof file.arrayBuffer !== "function") {
+    return fail("FILE_REQUIRED", "请选择需要上传的文件。", 400);
+  }
+  if (file.size > 10 * 1024 * 1024) return fail("FILE_SIZE_LIMIT_EXCEEDED", "文件超过允许大小。", 413);
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let validated;
+  try {
+    validated = validateUpload({ originalName: file.name, declaredMime: file.type, bytes });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "INVALID_FILE";
+    const status = code === "FILE_SIZE_LIMIT_EXCEEDED" ? 413 : 400;
+    return fail(code, "文件类型、扩展名、签名或大小不符合安全规则。", status);
+  }
+
+  await localDemoStorage.put({ storageKey: validated.storageKey, bytes });
+  try {
+    const attachment = await prisma.attachment.create({
+      data: {
+        legalEntityId: auth.membership.legalEntityId,
+        businessUnitId: target.businessUnitId,
+        departmentId: target.departmentId,
+        targetType: target.targetType,
+        targetId: target.targetId,
+        originalName: validated.originalName,
+        storageProvider: localDemoStorage.providerKey,
+        storageKey: validated.storageKey,
+        mimeType: validated.mimeType,
+        extension: validated.extension,
+        sizeBytes: validated.sizeBytes,
+        sha256: validated.sha256,
+        uploadedByUserId: auth.userId,
+        uploadedByMembershipId: auth.membership.id,
+      },
+      select: safeSelect,
+    });
+    await writeAuditLog({
+      actorUserId: auth.userId,
+      actorMembershipId: auth.membership.id,
+      module: "mvp.attachments",
+      action: "attachment.create",
+      targetType: target.targetType.toLowerCase(),
+      targetId: target.targetId,
+      businessUnitId: target.businessUnitId,
+      roleId: auth.membership.roleId,
+      details: { attachmentId: attachment.id, mimeType: attachment.mimeType, sizeBytes: attachment.sizeBytes, sha256: attachment.sha256 },
+    });
+    return ok(attachment, { status: 201 });
+  } catch (error) {
+    await localDemoStorage.delete(validated.storageKey);
+    throw error;
+  }
+}

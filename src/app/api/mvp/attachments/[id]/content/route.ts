@@ -1,0 +1,35 @@
+import { NextRequest, NextResponse } from "next/server";
+import { requireAuthContext } from "@/lib/api-auth";
+import { checkPermission } from "@/lib/permission";
+import { prisma } from "@/lib/prisma";
+import { localDemoStorage } from "@/lib/storage/local-demo";
+
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const auth = await requireAuthContext(request);
+  if (!auth) return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 });
+  const { id } = await props.params;
+  const attachment = await prisma.attachment.findFirst({
+    where: { id, businessUnitId: auth.membership.businessUnitId, status: "ACTIVE" },
+  });
+  if (!attachment) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  const decision = await checkPermission({
+    userId: auth.userId,
+    membershipId: auth.membership.id,
+    actionKey: "attachment.read",
+    targetBusinessUnitId: attachment.businessUnitId,
+    targetDepartmentId: attachment.departmentId,
+  });
+  if (!decision.allowed) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  const bytes = await localDemoStorage.get(attachment.storageKey);
+  if (!bytes) return NextResponse.json({ error: "STORED_OBJECT_MISSING" }, { status: 404 });
+  return new NextResponse(Buffer.from(bytes), {
+    headers: {
+      "Content-Type": attachment.mimeType,
+      "Content-Length": String(bytes.byteLength),
+      "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(attachment.originalName)}`,
+      "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'none'; sandbox",
+    },
+  });
+}

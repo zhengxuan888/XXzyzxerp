@@ -42,6 +42,7 @@ test("统一收件箱可完成 Demo 消息、状态和客户关联闭环", async
   await page.goto("/admin/inbox");
   await expect(page.getByRole("heading", { name: "统一收件箱" })).toBeVisible();
   await expect(page.getByText("演示咨询客户").first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "会话图片与附件" })).toBeVisible();
   await page.getByRole("button", { name: "拉取演示消息" }).click();
   await expect(page.getByRole("article").getByText("可以帮我确认预计送达时间吗？").last()).toBeVisible();
   await page.getByLabel("处理状态").selectOption("PENDING");
@@ -143,4 +144,58 @@ test("移动端订单录入核心页面无页面级水平溢出", async ({ page 
   await expect(page.getByRole("heading", { name: "录入订单" })).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   expect(overflow).toBe(false);
+});
+
+test("商品图片完成安全上传、预览、404 占位与删除", async ({ page }) => {
+  await login(page);
+  const products = await page.evaluate(async () => fetch("/api/mvp/products?page=1&pageSize=1").then((response) => response.json()));
+  const productId = products.data[0].id;
+  await page.goto(`/admin/products/${productId}`);
+  await expect(page.getByRole("heading", { name: "商品图片与资料" })).toBeVisible();
+
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nWQAAAAASUVORK5CYII=", "base64");
+  const uploadName = `acceptance-${Date.now()}.png`;
+  await page.getByLabel("选择附件").setInputFiles({ name: uploadName, mimeType: "image/png", buffer: png });
+  await expect(page.getByAltText(uploadName)).toBeVisible();
+
+  await page.route("**/api/mvp/attachments/*/content**", async (route) => route.fulfill({ status: 404, body: "missing" }));
+  await page.reload();
+  await expect(page.getByText("图片加载失败")).toBeVisible();
+  await expect(page.getByRole("button", { name: "重试" })).toBeVisible();
+  await page.unroute("**/api/mvp/attachments/*/content**");
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("article").filter({ hasText: uploadName }).getByRole("button", { name: "删除" }).click();
+  await expect(page.getByText(uploadName)).toHaveCount(0);
+});
+
+test("附件拒绝伪造类型、超限文件和无权限上传", async ({ page }) => {
+  await login(page);
+  const products = await page.evaluate(async () => fetch("/api/mvp/products?page=1&pageSize=1").then((response) => response.json()));
+  const productId = products.data[0].id;
+  await page.goto(`/admin/products/${productId}`);
+  await page.getByLabel("选择附件").setInputFiles({ name: "malware.png", mimeType: "image/png", buffer: Buffer.from("MZ executable") });
+  await expect(page.getByText("文件类型、扩展名、签名或大小不符合安全规则。", { exact: true })).toBeVisible();
+
+  const oversizedStatus = await page.evaluate(async (targetId) => {
+    const bytes = new Uint8Array(5 * 1024 * 1024 + 1);
+    bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const form = new FormData();
+    form.set("targetType", "PRODUCT");
+    form.set("targetId", targetId);
+    form.set("file", new File([bytes], "large.png", { type: "image/png" }));
+    return (await fetch("/api/mvp/attachments", { method: "POST", body: form })).status;
+  }, productId);
+  expect(oversizedStatus).toBe(413);
+
+  await page.context().clearCookies();
+  await login(page, "测试员工_中文", password);
+  const forbiddenStatus = await page.evaluate(async (targetId) => {
+    const form = new FormData();
+    form.set("targetType", "PRODUCT");
+    form.set("targetId", targetId);
+    form.set("file", new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])], "test.png", { type: "image/png" }));
+    return (await fetch("/api/mvp/attachments", { method: "POST", body: form })).status;
+  }, productId);
+  expect(forbiddenStatus).toBe(403);
 });

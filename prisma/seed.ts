@@ -96,6 +96,9 @@ const actionDefs: SeedAction[] = [
   { key: "inbox.manage", name: "会话状态与标签管理", namespace: "inbox", scope: "DEPARTMENT" },
   { key: "inbox.assign", name: "会话分派", namespace: "inbox", scope: "DEPARTMENT" },
   { key: "inbox.customer.link", name: "关联客户或线索", namespace: "inbox", scope: "DEPARTMENT" },
+  { key: "attachment.read", name: "附件查看", namespace: "attachment", scope: "DEPARTMENT" },
+  { key: "attachment.create", name: "附件上传", namespace: "attachment", scope: "DEPARTMENT" },
+  { key: "attachment.delete", name: "附件删除", namespace: "attachment", scope: "DEPARTMENT" },
 ];
 
 const menuDefs = [
@@ -498,6 +501,9 @@ async function main() {
     "inbox.manage",
     "inbox.assign",
     "inbox.customer.link",
+    "attachment.read",
+    "attachment.create",
+    "attachment.delete",
   ]);
 
   for (const action of actions) {

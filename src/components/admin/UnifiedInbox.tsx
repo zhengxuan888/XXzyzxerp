@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Inbox, MessageSquareText, RefreshCw, Search, Tag, UserRoundCheck } from "lucide-react";
+import AttachmentPanel from "@/components/admin/AttachmentPanel";
 
 type InboxData = {
   conversations: Array<{
@@ -28,7 +29,7 @@ type InboxData = {
 
 const statusLabel: Record<string, string> = { OPEN: "待处理", PENDING: "跟进中", RESOLVED: "已解决", CLOSED: "已关闭" };
 
-export default function UnifiedInbox() {
+export default function UnifiedInbox({ canUploadAttachments, canDeleteAttachments }: { canUploadAttachments: boolean; canDeleteAttachments: boolean }) {
   const [data, setData] = useState<InboxData | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -206,6 +207,15 @@ export default function UnifiedInbox() {
           )}
         </aside>
       </section>
+      {selected && (
+        <AttachmentPanel
+          targetType="CONVERSATION"
+          targetId={selected.id}
+          canUpload={canUploadAttachments}
+          canDelete={canDeleteAttachments}
+          title="会话图片与附件"
+        />
+      )}
       <style jsx>{`.control{min-height:44px;width:100%;border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:0 10px;font-size:13px;outline:none}.control:focus{border-color:#7c3aed;box-shadow:0 0 0 3px rgba(124,58,237,.12)}`}</style>
     </main>
   );

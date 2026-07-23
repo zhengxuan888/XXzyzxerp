@@ -9,13 +9,17 @@ export default async function InboxPage() {
   if (!session?.activeMembershipId) redirect("/login");
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
-  const decision = await checkPermission({
-    userId: session.userId,
-    membershipId: membership.id,
-    actionKey: "inbox.read",
-    targetBusinessUnitId: membership.businessUnitId,
-    targetDepartmentId: membership.departmentId,
-  });
+  const [decision, upload, remove] = await Promise.all(
+    ["inbox.read", "attachment.create", "attachment.delete"].map((actionKey) =>
+      checkPermission({
+        userId: session.userId,
+        membershipId: membership.id,
+        actionKey,
+        targetBusinessUnitId: membership.businessUnitId,
+        targetDepartmentId: membership.departmentId,
+      }),
+    ),
+  );
   if (!decision.allowed) redirect("/admin");
-  return <UnifiedInbox />;
+  return <UnifiedInbox canUploadAttachments={upload.allowed} canDeleteAttachments={remove.allowed} />;
 }

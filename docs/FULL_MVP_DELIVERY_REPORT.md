@@ -198,3 +198,13 @@ Playwright 覆盖登录后岗位工作台与核心入口、订单模板/客户�
 - 新增迁移 `20260723215042_unified_inbox_foundation`，为 expand-only，可在应用回滚时安全闲置新表。
 
 验证：Prisma、TypeScript、ESLint 通过；9 个单元测试文件、26 项测试通过；Playwright 5 项通过，包含 Demo 消息→状态→客户关联闭环及统一收件箱移动端无页面级水平溢出。真实第三方账号、真实凭据、生产部署和 Push 均未执行。
+
+## 2026-07-24 安全图片与附件 Gate
+
+- 新增可替换 `StorageAdapter` 和本地 `LOCAL_DEMO` 实现，不依赖具体云厂商。
+- 上传强制校验真实文件签名、声明 MIME、扩展名和大小；存储键使用安全随机 UUID，拒绝路径穿越和可执行内容。
+- 附件记录绑定法人、业务板块、部门、目标资源、上传人和 Membership；读取、上传、删除均执行后端 Action + Scope。
+- 商品详情和统一收件箱已接入图片/PDF附件；支持预览、404 失败占位、重试、确认删除和审计。
+- 新增迁移 `20260723224949_secure_attachments`，仅应用于 V2 本地数据库。
+- 最终验证：Vitest 12 个文件、33 项通过；Playwright Chromium 12 项通过；TypeScript、ESLint、Prisma validate、6 个迁移状态和 Next.js production build 全部通过。
+- 当前仍使用本机私有目录的 `LOCAL_DEMO` 存储；生产上线前必须切换经过评审的私有对象存储，并补充恶意软件扫描、加密、生命周期和备份恢复策略。
