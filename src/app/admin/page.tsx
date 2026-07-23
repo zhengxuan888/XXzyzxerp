@@ -4,6 +4,7 @@ import { getActiveMembershipById } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkPermission } from "@/lib/permission";
 import { redirect } from "next/navigation";
+import { zh } from "@/lib/i18n";
 
 const cards = [
   { label: "Legal Entities", href: "/admin/organizations", actionKey: "legal_entity.read" },
@@ -60,27 +61,27 @@ export default async function AdminHomePage() {
   return (
     <div className="space-y-6">
       <p className="text-sm text-gray-500">
-        Welcome to ERP V2. Current membership: {membership.businessUnit?.name ?? "Current business unit"}.
+        欢迎使用 ERP V2。当前业务板块：{membership.businessUnit?.name ?? "当前业务板块"}。
       </p>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <div className="rounded border border-gray-200 p-4">
-          <p className="text-xs text-gray-500">Legal entities</p>
+          <p className="text-xs text-gray-500">公司主体</p>
           <p className="text-2xl font-bold">{legalEntityCount}</p>
         </div>
         <div className="rounded border border-gray-200 p-4">
-          <p className="text-xs text-gray-500">Business units</p>
+          <p className="text-xs text-gray-500">业务板块</p>
           <p className="text-2xl font-bold">{unitCount}</p>
         </div>
         <div className="rounded border border-gray-200 p-4">
-          <p className="text-xs text-gray-500">Departments</p>
+          <p className="text-xs text-gray-500">部门</p>
           <p className="text-2xl font-bold">{deptCount}</p>
         </div>
         <div className="rounded border border-gray-200 p-4">
-          <p className="text-xs text-gray-500">Active users</p>
+          <p className="text-xs text-gray-500">在职员工</p>
           <p className="text-2xl font-bold">{userCount}</p>
         </div>
         <div className="rounded border border-gray-200 p-4">
-          <p className="text-xs text-gray-500">Active grants</p>
+          <p className="text-xs text-gray-500">有效协作授权</p>
           <p className="text-2xl font-bold">{grantCount}</p>
         </div>
       </div>
@@ -92,7 +93,7 @@ export default async function AdminHomePage() {
             href={item.href}
             className="rounded border border-gray-200 p-4 text-sm font-medium hover:bg-gray-50"
           >
-            {item.label}
+            {zh(item.label)}
           </Link>
         ))}
       </section>

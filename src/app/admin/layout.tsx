@@ -32,14 +32,14 @@ export default async function AdminLayout({
   });
   const membershipOptions = availableMemberships.map((item) => ({
     id: item.id,
-    label: `${item.businessUnit?.name || item.businessUnitId} / ${item.role?.code || "role"}${item.department?.name ? ` / ${item.department.name}` : ""}`,
+    label: `${item.businessUnit?.name || item.businessUnitId} / ${item.role?.name || "未命名角色"}${item.department?.name ? ` / ${item.department.name}` : ""}`,
   }));
 
   return (
     <AppShell
       menuItems={rootItems}
       brand="ERP V2"
-      userName={`${session.username} / ${membership.role?.code ?? "NoRole"}`}
+      userName={`${session.username} / ${membership.role?.name ?? "未分配角色"}`}
       memberships={membershipOptions}
       activeMembershipId={membership.id}
       currentPath=""

@@ -6,6 +6,7 @@ import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
+import { zh } from "@/lib/i18n";
 
 export default async function ShipmentDetailPage({ params }: { params: { id: string } }) {
   const session = await getSessionFromCookie();
@@ -37,25 +38,25 @@ export default async function ShipmentDetailPage({ params }: { params: { id: str
     <div className="space-y-6">
       <p className="text-xs text-gray-500">
         <Link href="/admin/shipments" className="text-blue-700 hover:underline">
-          Shipments
+          发货与物流
         </Link>
       </p>
-      <h1 className="text-xl font-semibold text-gray-900">Shipment {shipment.id}</h1>
-      <p className="text-sm text-gray-600">Order: {shipment.order.orderNo}</p>
-      <p className="text-sm text-gray-600">Tracking No: {shipment.trackingNo || "-"}</p>
-      <p className="text-sm text-gray-600">Carrier: {shipment.carrier || "-"}</p>
-      <p className="text-sm text-gray-600">Current Status: {shipment.status}</p>
+      <h1 className="text-xl font-semibold text-gray-900">物流单 {shipment.id}</h1>
+      <p className="text-sm text-gray-600">订单：{shipment.order.orderNo}</p>
+      <p className="text-sm text-gray-600">物流单号：{shipment.trackingNo || "-"}</p>
+      <p className="text-sm text-gray-600">承运商：{shipment.carrier || "-"}</p>
+      <p className="text-sm text-gray-600">当前状态：{zh(shipment.status)}</p>
 
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <div className="rounded border border-gray-200 p-4">
-          <h2 className="mb-3 font-medium">Events</h2>
+          <h2 className="mb-3 font-medium">物流轨迹</h2>
           <ul className="space-y-2 text-sm text-gray-700">
             {shipment.events.length === 0 ? (
-              <li className="text-gray-500">No events.</li>
+              <li className="text-gray-500">暂无物流轨迹。</li>
             ) : (
               shipment.events.map((item) => (
                 <li key={item.id} className="rounded border border-gray-100 p-2">
-                  <p className="font-medium">{item.eventType}</p>
+                  <p className="font-medium">{zh(item.eventType)}</p>
                   <p>{item.memo || "-"}</p>
                   <p className="text-xs text-gray-500">{new Date(item.occurredAt).toLocaleString()}</p>
                 </li>

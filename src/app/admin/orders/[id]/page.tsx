@@ -8,6 +8,7 @@ import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
+import { zh } from "@/lib/i18n";
 
 export default async function OrderDetailPage({ params }: { params: { id: string } }) {
   const session = await getSessionFromCookie();
@@ -53,28 +54,28 @@ export default async function OrderDetailPage({ params }: { params: { id: string
       <div className="rounded border border-gray-200 p-4">
         <p className="mb-4 text-xs text-gray-500">
           <Link href="/admin/orders" className="text-blue-700 hover:underline">
-            Orders
+            订单管理
           </Link>
         </p>
-        <h1 className="text-xl font-semibold text-gray-900">Order {order.orderNo}</h1>
+        <h1 className="text-xl font-semibold text-gray-900">订单 {order.orderNo}</h1>
         <p className="mt-2 text-sm text-gray-600">
-          Customer: {order.customer?.code} {order.customer?.name}
+          客户：{order.customer?.code} {order.customer?.name}
         </p>
-        <p className="text-sm text-gray-600">Status: {order.status}</p>
+        <p className="text-sm text-gray-600">状态：{zh(order.status)}</p>
         <p className="text-sm text-gray-600">
-          Amount: {formatMoneyCents(order.productValueCents + order.shippingFeeCents, order.currency)} | COD:{" "}
+          订单金额：{formatMoneyCents(order.productValueCents + order.shippingFeeCents, order.currency)} | COD 应收：{" "}
           {formatMoneyCents(order.codAmountCents, order.currency)}
         </p>
-        <p className="text-sm text-gray-600">Creator: {order.creatorUser?.fullName ?? order.creatorUser?.username}</p>
-        <p className="text-sm text-gray-600">Created: {format(order.createdAt, "yyyy-MM-dd HH:mm:ss")}</p>
+        <p className="text-sm text-gray-600">创建人：{order.creatorUser?.fullName ?? order.creatorUser?.username}</p>
+        <p className="text-sm text-gray-600">创建时间：{format(order.createdAt, "yyyy-MM-dd HH:mm:ss")}</p>
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <section className="rounded border border-gray-200 p-4">
-          <h2 className="mb-3 font-medium">Items</h2>
+          <h2 className="mb-3 font-medium">订单商品</h2>
           <ul className="space-y-2 text-sm">
             {order.items.length === 0 ? (
-              <li className="text-gray-500">No items.</li>
+              <li className="text-gray-500">暂无商品。</li>
             ) : (
               order.items.map((item) => (
                 <li key={item.id} className="flex justify-between">
@@ -92,9 +93,9 @@ export default async function OrderDetailPage({ params }: { params: { id: string
       </div>
 
       <section className="rounded border border-gray-200 p-4">
-        <h2 className="mb-3 font-medium">Notes</h2>
-        <p className="text-sm text-gray-600">Order note: {order.note || "-"}</p>
-        <p className="text-sm text-gray-600">Exception note: {order.exceptionNote || "-"}</p>
+        <h2 className="mb-3 font-medium">备注</h2>
+        <p className="text-sm text-gray-600">订单备注：{order.note || "-"}</p>
+        <p className="text-sm text-gray-600">异常备注：{order.exceptionNote || "-"}</p>
       </section>
     </div>
   );

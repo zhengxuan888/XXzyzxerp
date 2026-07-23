@@ -91,7 +91,7 @@ const actionDefs: SeedAction[] = [
 const menuDefs = [
   {
     key: "dashboard",
-    label: "Dashboard",
+    label: "工作台",
     path: "/admin",
     requiredActionKey: "dashboard.view",
     sortOrder: 1,
@@ -99,7 +99,7 @@ const menuDefs = [
   },
   {
     key: "organizations",
-    label: "Organizations",
+    label: "公司主体",
     path: "/admin/organizations",
     requiredActionKey: "legal_entity.read",
     sortOrder: 10,
@@ -107,7 +107,7 @@ const menuDefs = [
   },
   {
     key: "business-units",
-    label: "Business Units",
+    label: "业务板块",
     path: "/admin/business-units",
     requiredActionKey: "business_unit.read",
     sortOrder: 20,
@@ -115,7 +115,7 @@ const menuDefs = [
   },
   {
     key: "departments",
-    label: "Departments",
+    label: "部门管理",
     path: "/admin/departments",
     requiredActionKey: "department.read",
     sortOrder: 30,
@@ -123,7 +123,7 @@ const menuDefs = [
   },
   {
     key: "sites",
-    label: "Sites",
+    label: "站点管理",
     path: "/admin/sites",
     requiredActionKey: "site.read",
     sortOrder: 40,
@@ -131,7 +131,7 @@ const menuDefs = [
   },
   {
     key: "users",
-    label: "Users",
+    label: "员工账号",
     path: "/admin/users",
     requiredActionKey: "user.read",
     sortOrder: 50,
@@ -139,7 +139,7 @@ const menuDefs = [
   },
   {
     key: "memberships",
-    label: "Memberships",
+    label: "岗位与归属",
     path: "/admin/memberships",
     requiredActionKey: "membership.read",
     sortOrder: 60,
@@ -147,7 +147,7 @@ const menuDefs = [
   },
   {
     key: "roles",
-    label: "Roles",
+    label: "角色权限",
     path: "/admin/roles",
     requiredActionKey: "role.read",
     sortOrder: 70,
@@ -155,7 +155,7 @@ const menuDefs = [
   },
   {
     key: "menus",
-    label: "Menu Settings",
+    label: "菜单管理",
     path: "/admin/menus",
     requiredActionKey: "menu.read",
     sortOrder: 80,
@@ -163,7 +163,7 @@ const menuDefs = [
   },
   {
     key: "access-grants",
-    label: "Access Grants",
+    label: "协作授权",
     path: "/admin/access-grants",
     requiredActionKey: "access_grant.read",
     sortOrder: 90,
@@ -171,7 +171,7 @@ const menuDefs = [
   },
   {
     key: "customers",
-    label: "Customers",
+    label: "客户管理",
     path: "/admin/customers",
     requiredActionKey: "customer.read",
     sortOrder: 100,
@@ -179,7 +179,7 @@ const menuDefs = [
   },
   {
     key: "products",
-    label: "Products",
+    label: "商品管理",
     path: "/admin/products",
     requiredActionKey: "product.read",
     sortOrder: 110,
@@ -187,7 +187,7 @@ const menuDefs = [
   },
   {
     key: "orders",
-    label: "Orders",
+    label: "订单管理",
     path: "/admin/orders",
     requiredActionKey: "order.read",
     sortOrder: 120,
@@ -195,7 +195,7 @@ const menuDefs = [
   },
   {
     key: "inventory",
-    label: "Inventory",
+    label: "库存管理",
     path: "/admin/inventory",
     requiredActionKey: "inventory.read",
     sortOrder: 115,
@@ -203,7 +203,7 @@ const menuDefs = [
   },
   {
     key: "shipments",
-    label: "Shipments",
+    label: "发货与物流",
     path: "/admin/shipments",
     requiredActionKey: "shipment.read",
     sortOrder: 130,
@@ -211,7 +211,7 @@ const menuDefs = [
   },
   {
     key: "expenses",
-    label: "Expenses",
+    label: "费用支出",
     path: "/admin/expenses",
     requiredActionKey: "expense.read",
     sortOrder: 140,
@@ -219,7 +219,7 @@ const menuDefs = [
   },
   {
     key: "approvals",
-    label: "Approvals",
+    label: "审批管理",
     path: "/admin/approvals",
     requiredActionKey: "approval.submit",
     sortOrder: 150,
@@ -227,7 +227,7 @@ const menuDefs = [
   },
   {
     key: "attendance",
-    label: "Attendance",
+    label: "考勤管理",
     path: "/admin/attendance",
     requiredActionKey: "attendance.read",
     sortOrder: 160,
@@ -235,7 +235,7 @@ const menuDefs = [
   },
   {
     key: "leave-requests",
-    label: "Leave Requests",
+    label: "请假管理",
     path: "/admin/leave-requests",
     requiredActionKey: "leave_request.read",
     sortOrder: 170,
@@ -243,7 +243,7 @@ const menuDefs = [
   },
   {
     key: "announcements",
-    label: "Announcements",
+    label: "公告管理",
     path: "/admin/announcements",
     requiredActionKey: "announcement.read",
     sortOrder: 180,
@@ -251,7 +251,7 @@ const menuDefs = [
   },
   {
     key: "documents",
-    label: "Documents",
+    label: "文档管理",
     path: "/admin/documents",
     requiredActionKey: "document.read",
     sortOrder: 190,
@@ -262,20 +262,20 @@ const menuDefs = [
 async function main() {
   const legalEntity = await prisma.legalEntity.upsert({
     where: { code: "SAMPLE_LEGAL_ENTITY" },
-    update: {},
+    update: { name: "演示公司" },
     create: {
       code: "SAMPLE_LEGAL_ENTITY",
-      name: "Sample Company",
+      name: "演示公司",
     },
   });
 
   const businessUnit = await prisma.businessUnit.upsert({
     where: { legalEntityId_code: { legalEntityId: legalEntity.id, code: "SAMPLE_BU" } },
-    update: {},
+    update: { name: "Facebook COD 演示板块" },
     create: {
       legalEntityId: legalEntity.id,
       code: "SAMPLE_BU",
-      name: "Sample Business Unit",
+      name: "Facebook COD 演示板块",
     },
   });
 
@@ -292,17 +292,20 @@ async function main() {
       data: {
         businessUnitId: businessUnit.id,
         code: "ROOT_DEPT",
-        name: "Default Department",
+        name: "默认部门",
         hierarchyPath: "/ROOT_DEPT",
       },
     }));
+  if (existingRootDepartment && existingRootDepartment.name !== "默认部门") {
+    await prisma.department.update({ where: { id: existingRootDepartment.id }, data: { name: "默认部门" } });
+  }
 
   const site = await prisma.site.upsert({
     where: { businessUnitId_code: { businessUnitId: businessUnit.id, code: "DEFAULT_SITE" } },
-    update: {},
+    update: { name: "默认站点" },
     create: {
       code: "DEFAULT_SITE",
-      name: "Default Site",
+      name: "默认站点",
       businessUnitId: businessUnit.id,
       departmentId: rootDepartment.id,
     },
@@ -351,13 +354,13 @@ async function main() {
   const roleFounder = await prisma.role.upsert({
     where: { code: "platform_admin" },
     update: {
-      name: "Platform Admin",
+      name: "平台管理员",
       isSystem: true,
     },
     create: {
       code: "platform_admin",
-      name: "Platform Admin",
-      description: "System platform admin role with global capabilities.",
+      name: "平台管理员",
+      description: "负责平台级配置和全部业务板块管理。",
       isSystem: true,
     },
   });
@@ -365,13 +368,13 @@ async function main() {
   const roleManager = await prisma.role.upsert({
     where: { code: "business_manager" },
     update: {
-      name: "Business Manager",
+      name: "业务板块负责人",
       isSystem: true,
     },
     create: {
       code: "business_manager",
-      name: "Business Manager",
-      description: "Can manage users, memberships, and permissions in own business scope.",
+      name: "业务板块负责人",
+      description: "仅管理本人有效岗位所属业务板块内的人员、岗位与业务。",
       isSystem: true,
     },
   });
@@ -379,13 +382,13 @@ async function main() {
   const roleStaff = await prisma.role.upsert({
     where: { code: "employee" },
     update: {
-      name: "Employee",
+      name: "普通员工",
       isSystem: false,
     },
     create: {
       code: "employee",
-      name: "Employee",
-      description: "Basic operator role for operational staff.",
+      name: "普通员工",
+      description: "按配置权限执行日常业务操作。",
       isSystem: false,
     },
   });
@@ -525,11 +528,11 @@ async function main() {
   const founderPassword = await bcrypt.hash(process.env.SEED_FOUNDER_PASSWORD || "ChangeMe#2026", 10);
   const founderUser = await prisma.user.upsert({
     where: { username: "founder" },
-    update: { fullName: "Foundation Admin" },
+    update: { fullName: "演示管理员" },
     create: {
       username: "founder",
       email: "founder@local.erp",
-      fullName: "Foundation Admin",
+      fullName: "演示管理员",
       passwordHash: founderPassword,
       isActive: true,
     },
