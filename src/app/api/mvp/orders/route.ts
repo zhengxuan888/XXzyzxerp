@@ -1,14 +1,12 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 
-import { OrderStatus, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 import { requireAuthContext } from "@/lib/api-auth";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
 import { fail, ok, paginated, parsePagination } from "@/lib/api-response";
-import { finalizeOrderInventory, InventoryError, reserveOrderInventory } from "@/lib/inventory";
-import { canTransitionOrder } from "@/lib/order-state";
 import { normalizeMoneyCents } from "@/lib/money";
 import { parseOrderTemplateConfiguration, sanitizeOrderCustomValues } from "@/lib/order-template";
 
@@ -78,16 +76,6 @@ function parseSingleItem(body: SingleItemPayload | null): ParsedOrderItem[] {
       skuId,
     },
   ];
-}
-
-function statusBodyToUpdateStatus(raw: unknown): OrderStatus | null {
-  if (typeof raw === "string") {
-    const normalized = raw.trim().toUpperCase();
-    if (["DRAFT", "SUBMITTED", "WAITING_SHIPMENT", "SHIPPED", "DELIVERED", "EXCEPTION", "COMPLETED", "CANCELLED"].includes(normalized)) {
-      return normalized as OrderStatus;
-    }
-  }
-  return null;
 }
 
 export async function GET(request: NextRequest) {
@@ -167,12 +155,35 @@ export async function POST(request: NextRequest) {
     return fail("SKU_REQUIRED", "当前订单模板要求必须选择 SKU。", 400);
   }
   const recipientPhone = typeof body.recipientPhone === "string" ? body.recipientPhone.trim() : "";
+  const recipientEmail = typeof body.recipientEmail === "string" ? body.recipientEmail.trim().toLowerCase() : "";
   const recipientAddress = typeof body.recipientAddress === "string" ? body.recipientAddress.trim() : "";
+  const recipientCountryCode = typeof body.recipientCountryCode === "string" ? body.recipientCountryCode.trim() : "";
+  const recipientPostalCode = typeof body.recipientPostalCode === "string" ? body.recipientPostalCode.trim() : "";
+  const recipientRegion = typeof body.recipientRegion === "string" ? body.recipientRegion.trim() : "";
+  const recipientCity = typeof body.recipientCity === "string" ? body.recipientCity.trim() : "";
   if (templateConfiguration.requireRecipientPhone && !recipientPhone) {
     return fail("RECIPIENT_PHONE_REQUIRED", "当前订单模板要求填写收件人电话。", 400);
   }
+  if (templateConfiguration.requireRecipientEmail && !recipientEmail) {
+    return fail("RECIPIENT_EMAIL_REQUIRED", "当前订单模板要求填写客户邮箱。", 400);
+  }
+  if (recipientEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) {
+    return fail("RECIPIENT_EMAIL_INVALID", "客户邮箱格式不正确。", 400);
+  }
   if (templateConfiguration.requireRecipientAddress && !recipientAddress) {
     return fail("RECIPIENT_ADDRESS_REQUIRED", "当前订单模板要求填写详细地址。", 400);
+  }
+  if (templateConfiguration.requireRecipientCountryCode && !recipientCountryCode) {
+    return fail("RECIPIENT_COUNTRY_CODE_REQUIRED", "当前订单模板要求填写收件人国家代码。", 400);
+  }
+  if (templateConfiguration.requireRecipientPostalCode && !recipientPostalCode) {
+    return fail("RECIPIENT_POSTAL_CODE_REQUIRED", "当前订单模板要求填写邮政编码。", 400);
+  }
+  if (templateConfiguration.requireRecipientRegion && !recipientRegion) {
+    return fail("RECIPIENT_REGION_REQUIRED", "当前订单模板要求填写地区/州。", 400);
+  }
+  if (templateConfiguration.requireRecipientCity && !recipientCity) {
+    return fail("RECIPIENT_CITY_REQUIRED", "当前订单模板要求填写城市。", 400);
   }
   const customFields = sanitizeOrderCustomValues(body.customFields, templateConfiguration.customFields);
   if (customFields.missing.length > 0) {
@@ -232,6 +243,9 @@ export async function POST(request: NextRequest) {
   if (!Number.isSafeInteger(packageWeightGrams) || packageWeightGrams < 0) {
     return fail("INVALID_PACKAGE_WEIGHT", "包裹重量格式不正确。", 400);
   }
+  if (templateConfiguration.requirePackageWeight && packageWeightGrams <= 0) {
+    return fail("PACKAGE_WEIGHT_REQUIRED", "当前订单模板要求填写包裹重量。", 400);
+  }
 
   const productValue = items.reduce((sum: number, item: ParsedOrderItem) => sum + item.quantity * item.unitPriceCents, 0);
   if (!Number.isSafeInteger(productValue)) {
@@ -259,10 +273,15 @@ export async function POST(request: NextRequest) {
         logisticsChannel: typeof body.logisticsChannel === "string" ? body.logisticsChannel.trim().slice(0, 50) : templateConfiguration.logisticsChannel,
         recipientName: typeof body.recipientName === "string" ? body.recipientName.trim().slice(0, 100) : null,
         recipientPhone: recipientPhone || null,
-        recipientCountryCode: typeof body.recipientCountryCode === "string" ? body.recipientCountryCode.trim().toUpperCase().slice(0, 3) : null,
-        recipientPostalCode: typeof body.recipientPostalCode === "string" ? body.recipientPostalCode.trim().slice(0, 30) : null,
-        recipientRegion: typeof body.recipientRegion === "string" ? body.recipientRegion.trim().slice(0, 100) : null,
-        recipientCity: typeof body.recipientCity === "string" ? body.recipientCity.trim().slice(0, 100) : null,
+        recipientEmail: recipientEmail || null,
+        emailValidationStatus: typeof body.emailValidationStatus === "string"
+          ? body.emailValidationStatus.trim().toUpperCase().slice(0, 30)
+          : null,
+        emailValidatedAt: body.emailValidationStatus === "likely_valid" ? new Date() : null,
+        recipientCountryCode: recipientCountryCode ? recipientCountryCode.toUpperCase().slice(0, 3) : null,
+        recipientPostalCode: recipientPostalCode ? recipientPostalCode.slice(0, 30) : null,
+        recipientRegion: recipientRegion ? recipientRegion.slice(0, 100) : null,
+        recipientCity: recipientCity ? recipientCity.slice(0, 100) : null,
         recipientAddress: recipientAddress || null,
         packageWeightGrams,
         paymentMethod: typeof body.paymentMethod === "string" ? body.paymentMethod.trim().slice(0, 30) : templateConfiguration.paymentMethod,
@@ -319,6 +338,13 @@ export async function PUT(request: NextRequest) {
   if (!body || typeof body.id !== "string") {
     return NextResponse.json({ error: "id is required." }, { status: 400 });
   }
+  if (body.status !== undefined) {
+    return fail(
+      "WORKFLOW_ACTION_REQUIRED",
+      "订单状态不能通过通用更新接口修改，请使用提交、核单、发货或物流事件专用动作。",
+      400,
+    );
+  }
 
   const target = await prisma.order.findUnique({ where: { id: body.id } });
   if (!target) return NextResponse.json({ error: "Order not found." }, { status: 404 });
@@ -326,7 +352,7 @@ export async function PUT(request: NextRequest) {
   const canUpdate = await checkPermission({
     userId: auth.userId,
     membershipId: auth.membership.id,
-    actionKey: body.status ? "order.status.update" : "order.update",
+    actionKey: "order.update",
     targetBusinessUnitId: target.businessUnitId,
   });
   if (!canUpdate.allowed) {
@@ -336,100 +362,21 @@ export async function PUT(request: NextRequest) {
   const data: {
     note?: string;
     exceptionNote?: string;
-    deliveredAt?: Date | null;
-    status?: OrderStatus;
   } = {};
   if (typeof body.note === "string") data.note = body.note;
   if (typeof body.exceptionNote === "string") data.exceptionNote = body.exceptionNote;
-  if (typeof body.deliveredAt === "string") {
-    const deliveredAt = new Date(body.deliveredAt);
-    if (Number.isNaN(deliveredAt.getTime())) {
-      return NextResponse.json({ error: "deliveredAt invalid format." }, { status: 400 });
-    }
-    data.deliveredAt = deliveredAt;
-  }
 
-  const nextStatus = typeof body.status === "string" ? statusBodyToUpdateStatus(body.status) : null;
-  if (nextStatus) {
-    if (!canTransitionOrder(target.status, nextStatus)) {
-      return NextResponse.json({ error: `Invalid status transition from ${target.status} to ${nextStatus}.` }, { status: 400 });
-    }
-    data.status = nextStatus;
-  }
-
-  let row;
-  try {
-    row = await prisma.$transaction(
-      async (tx) => {
-        const current = await tx.order.findUniqueOrThrow({
-          where: { id: target.id },
-          include: { items: { select: { skuId: true, quantity: true } } },
-        });
-        if (current.status !== target.status) {
-          throw new Error("ORDER_CONCURRENTLY_CHANGED");
-        }
-        if (nextStatus === "SUBMITTED") {
-          if (!auth.membership.siteId) throw new InventoryError("SITE_REQUIRED", "A site is required to reserve inventory.");
-          await reserveOrderInventory(
-            tx,
-            {
-              userId: auth.userId,
-              membershipId: auth.membership.id,
-              businessUnitId: auth.membership.businessUnitId,
-              siteId: auth.membership.siteId,
-            },
-            current,
-          );
-        }
-        if (nextStatus === "SHIPPED") {
-          if (!auth.membership.siteId) throw new InventoryError("SITE_REQUIRED", "A site is required to ship inventory.");
-          await finalizeOrderInventory(
-            tx,
-            {
-              userId: auth.userId,
-              membershipId: auth.membership.id,
-              businessUnitId: auth.membership.businessUnitId,
-              siteId: auth.membership.siteId,
-            },
-            current.id,
-            "SHIP",
-          );
-        }
-        if (nextStatus === "CANCELLED" && current.status !== "DRAFT") {
-          if (!auth.membership.siteId) throw new InventoryError("SITE_REQUIRED", "A site is required to release inventory.");
-          await finalizeOrderInventory(
-            tx,
-            {
-              userId: auth.userId,
-              membershipId: auth.membership.id,
-              businessUnitId: auth.membership.businessUnitId,
-              siteId: auth.membership.siteId,
-            },
-            current.id,
-            "RELEASE",
-          );
-        }
-        return tx.order.update({ where: { id: current.id, status: current.status }, data });
-      },
-      { isolationLevel: "Serializable" },
-    );
-  } catch (error) {
-    if (error instanceof InventoryError) return fail(error.code, error.message, 409);
-    if (error instanceof Error && error.message === "ORDER_CONCURRENTLY_CHANGED") {
-      return fail("ORDER_CONCURRENTLY_CHANGED", "Order status changed; refresh before retrying.", 409);
-    }
-    throw error;
-  }
+  const row = await prisma.order.update({ where: { id: target.id }, data });
   await writeAuditLog({
     actorUserId: auth.userId,
     actorMembershipId: auth.membership.id,
     module: "mvp.orders",
-    action: nextStatus ? "order.status.update" : "order.update",
+    action: "order.update",
     targetType: "order",
     targetId: row.id,
     businessUnitId: row.businessUnitId,
     roleId: auth.membership.roleId,
-    details: { changed: { status: nextStatus, note: data.note } },
+    details: { changed: { note: data.note, exceptionNote: data.exceptionNote } },
   });
 
   return ok(row);

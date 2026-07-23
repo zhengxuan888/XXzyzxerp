@@ -12,7 +12,10 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
   const auth = await requireAuthContext(request);
   if (!auth) return NextResponse.json({ error: "Unauthenticated." }, { status: 401 });
 
-  const shipment = await prisma.shipment.findUnique({ where: { id }, select: { id: true, businessUnitId: true } });
+  const shipment = await prisma.shipment.findFirst({
+    where: { id, businessUnitId: auth.membership.businessUnitId },
+    select: { id: true, businessUnitId: true, orderId: true, status: true, workStatus: true, firstTrackedAt: true },
+  });
   if (!shipment) return NextResponse.json({ error: "Shipment not found." }, { status: 404 });
 
   const canTrack = await checkPermission({
@@ -41,15 +44,63 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         actorMembershipId: auth.membership.id,
       },
     });
+    const workStatus =
+      parsed.status === "EXCEPTION"
+        ? "NEEDS_ATTENTION"
+        : parsed.status === "DELIVERED" || parsed.status === "CANCELLED"
+          ? "CLOSED"
+          : "MONITORING";
     const updatedShipment = await tx.shipment.update({
         where: { id: shipment.id },
         data: {
           status: parsed.status,
+          workStatus,
+          firstTrackedAt: shipment.firstTrackedAt ?? parsed.occurredAt,
+          lastTrackedAt: parsed.occurredAt,
           deliveredAt: parsed.status === "DELIVERED" ? parsed.occurredAt : undefined,
+          closedAt: parsed.status === "DELIVERED" || parsed.status === "CANCELLED" ? parsed.occurredAt : null,
           exceptionReason: parsed.status === "EXCEPTION" ? parsed.exceptionReason : parsed.status === "CANCELLED" ? null : undefined,
           exceptionSeverity: parsed.status === "EXCEPTION" ? parsed.exceptionSeverity ?? "MEDIUM" : undefined,
+          nextFollowUpAt:
+            parsed.status === "DELIVERED" || parsed.status === "CANCELLED"
+              ? null
+              : new Date(parsed.occurredAt.getTime() + 24 * 60 * 60 * 1000),
         },
       });
+    const order = await tx.order.findUnique({ where: { id: shipment.orderId }, select: { status: true } });
+    if (order) {
+      const nextOrderStatus =
+        parsed.status === "DELIVERED"
+          ? "DELIVERED"
+          : parsed.status === "EXCEPTION"
+            ? "EXCEPTION"
+            : parsed.status === "IN_TRANSIT" && order.status === "EXCEPTION"
+              ? "SHIPPED"
+              : null;
+      if (nextOrderStatus) {
+        await tx.order.update({
+          where: { id: shipment.orderId, status: order.status },
+          data: {
+            status: nextOrderStatus,
+            deliveredAt: nextOrderStatus === "DELIVERED" ? parsed.occurredAt : undefined,
+            exceptionNote: nextOrderStatus === "EXCEPTION" ? parsed.exceptionReason : nextOrderStatus === "SHIPPED" ? null : undefined,
+          },
+        });
+      }
+    }
+    await tx.logisticsFollowUp.create({
+      data: {
+        shipmentId: shipment.id,
+        businessUnitId: shipment.businessUnitId,
+        actorUserId: auth.userId,
+        actorMembershipId: auth.membership.id,
+        actionType: "TRACKING_EVENT",
+        fromStatus: shipment.workStatus,
+        toStatus: workStatus,
+        note: parsed.memo ?? parsed.exceptionReason,
+        nextFollowUpAt: updatedShipment.nextFollowUpAt,
+      },
+    });
     return { event, shipment: updatedShipment };
   });
 

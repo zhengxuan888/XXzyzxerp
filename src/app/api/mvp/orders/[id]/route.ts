@@ -12,6 +12,15 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ id
 
   const row = await prisma.order.findUnique({ where: { id } });
   if (!row) return NextResponse.json({ error: "Order not found." }, { status: 404 });
+  if (row.businessUnitId !== auth.membership.businessUnitId) {
+    return NextResponse.json({ error: "Order not found." }, { status: 404 });
+  }
+  if (row.status !== "DRAFT") {
+    return NextResponse.json(
+      { ok: false, error: { code: "ORDER_DELETE_NOT_ALLOWED", message: "只有草稿订单可以删除；已进入流程的订单必须取消并保留审计记录。" } },
+      { status: 409 },
+    );
+  }
 
   const canDelete = await checkPermission({
     userId: auth.userId,

@@ -4,7 +4,7 @@ import { requireAuthContext } from "@/lib/api-auth";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
-import { ok, paginated, parsePagination } from "@/lib/api-response";
+import { fail, ok, paginated, parsePagination } from "@/lib/api-response";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuthContext(request);
@@ -43,8 +43,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "orderId is required." }, { status: 400 });
   }
 
-  const order = await prisma.order.findUnique({ where: { id: body.orderId } });
+  const order = await prisma.order.findFirst({
+    where: { id: body.orderId, businessUnitId: auth.membership.businessUnitId },
+  });
   if (!order) return NextResponse.json({ error: "Order not found." }, { status: 404 });
+  if (order.status !== "WAITING_SHIPMENT") {
+    return fail("ORDER_NOT_READY_TO_SHIP", "只有已核单并进入待发货状态的订单才能创建物流单。", 409);
+  }
 
   const canCreate = await checkPermission({
     userId: auth.userId,
@@ -56,14 +61,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "FORBIDDEN", reasons: canCreate.reasons }, { status: 403 });
   }
 
+  const trackingNo = typeof body.trackingNo === "string" ? body.trackingNo.trim() : "";
+  const carrier = typeof body.carrier === "string" ? body.carrier.trim() : "";
+  if (!trackingNo || !carrier) {
+    return fail("SHIPMENT_FIELDS_REQUIRED", "承运商和物流单号必填。", 400);
+  }
+  const duplicate = await prisma.shipment.findFirst({
+    where: { businessUnitId: order.businessUnitId, trackingNo },
+    select: { id: true },
+  });
+  if (duplicate) return fail("TRACKING_NO_ALREADY_EXISTS", "该物流单号已存在。", 409);
+
   const row = await prisma.shipment.create({
     data: {
       orderId: order.id,
       legalEntityId: order.legalEntityId,
       businessUnitId: order.businessUnitId,
       siteId: auth.membership.siteId,
-      carrier: typeof body.carrier === "string" ? body.carrier : null,
-      trackingNo: typeof body.trackingNo === "string" ? body.trackingNo : null,
+      carrier,
+      trackingNo,
       status: "PENDING",
       memo: typeof body.memo === "string" ? body.memo : null,
       events: {

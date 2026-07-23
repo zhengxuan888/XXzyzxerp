@@ -8,12 +8,18 @@ import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
+import type { OrderStatus } from "@prisma/client";
+import { zh } from "@/lib/i18n";
 
-export default async function OrdersPage() {
+const ORDER_STATUSES = new Set<OrderStatus>(["DRAFT", "SUBMITTED", "WAITING_SHIPMENT", "SHIPPED", "DELIVERED", "EXCEPTION", "COMPLETED", "CANCELLED"]);
+
+export default async function OrdersPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   const session = await getSessionFromCookie();
   if (!session?.activeMembershipId) redirect("/login");
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
+  const requestedStatus = (await searchParams).status?.toUpperCase() as OrderStatus | undefined;
+  const status = requestedStatus && ORDER_STATUSES.has(requestedStatus) ? requestedStatus : undefined;
 
   const [canRead, canCreate, canDelete] = await Promise.all([
     checkPermission({
@@ -49,7 +55,7 @@ export default async function OrdersPage() {
   });
 
   const [rows, templates] = await Promise.all([prisma.order.findMany({
-    where: { businessUnitId: membership.businessUnitId },
+    where: { businessUnitId: membership.businessUnitId, ...(status ? { status } : {}) },
     orderBy: { createdAt: "desc" },
     include: {
       customer: { select: { code: true, name: true } },
@@ -66,7 +72,9 @@ export default async function OrdersPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">录入订单</h1>
-        <p className="mt-1 text-sm text-gray-500">选择模板后自动带出渠道、币种、运费和必填规则。</p>
+        <p className="mt-1 text-sm text-gray-500">
+          {status ? `当前队列：${zh(status)}。` : "选择模板后自动带出渠道、币种、运费和必填规则。"}
+        </p>
       </div>
       <OrderEntryForm
         canCreate={canCreate.allowed}
@@ -81,6 +89,7 @@ export default async function OrdersPage() {
       apiBase="/api/mvp"
       resource="orders"
       listTitle="订单列表"
+      detailPath="/admin/orders"
       showCreate={false}
       canCreate={canCreate.allowed}
       canDelete={canDelete.allowed}

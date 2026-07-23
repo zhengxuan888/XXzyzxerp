@@ -16,4 +16,11 @@ describe("order state machine", () => {
     expect(canTransitionOrder("COMPLETED", "CANCELLED")).toBe(false);
     expect(canTransitionOrder("CANCELLED", "DRAFT")).toBe(false);
   });
+
+  it("supports review rejection and shipment recovery without bypassing review", () => {
+    expect(canTransitionOrder("SUBMITTED", "DRAFT")).toBe(true);
+    expect(canTransitionOrder("EXCEPTION", "SHIPPED")).toBe(true);
+    expect(canTransitionOrder("DRAFT", "WAITING_SHIPMENT")).toBe(false);
+    expect(canTransitionOrder("SUBMITTED", "SHIPPED")).toBe(false);
+  });
 });

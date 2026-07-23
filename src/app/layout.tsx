@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ERP V2",
-  description: "Facebook COD ERP V2 foundation",
+  title: {
+    default: "Facebook COD ERP",
+    template: "%s · Facebook COD ERP",
+  },
+  description: "择优臻选 Facebook COD 业务运营系统",
 };
 
 export default function RootLayout({

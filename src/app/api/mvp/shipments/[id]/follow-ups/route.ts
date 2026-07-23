@@ -1,0 +1,107 @@
+import { NextRequest } from "next/server";
+
+import type { LogisticsWorkStatus } from "@prisma/client";
+
+import { requireAuthContext } from "@/lib/api-auth";
+import { fail, ok } from "@/lib/api-response";
+import { writeAuditLog } from "@/lib/audit";
+import { checkPermission } from "@/lib/permission";
+import { prisma } from "@/lib/prisma";
+
+const WORK_STATUSES = new Set<LogisticsWorkStatus>([
+  "MONITORING",
+  "NEEDS_ATTENTION",
+  "IN_PROGRESS",
+  "WAITING_CUSTOMER",
+  "WAITING_CARRIER",
+  "RESOLVED",
+  "NO_ACTION_REQUIRED",
+  "CLOSED",
+]);
+
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const { id } = await props.params;
+  const auth = await requireAuthContext(request);
+  if (!auth) return fail("UNAUTHENTICATED", "请先登录。", 401);
+
+  const shipment = await prisma.shipment.findFirst({
+    where: { id, businessUnitId: auth.membership.businessUnitId },
+  });
+  if (!shipment) return fail("SHIPMENT_NOT_FOUND", "物流单不存在或不属于当前业务板块。", 404);
+
+  const permission = await checkPermission({
+    userId: auth.userId,
+    membershipId: auth.membership.id,
+    actionKey: "shipment.track.update",
+    targetBusinessUnitId: shipment.businessUnitId,
+    targetSiteId: shipment.siteId,
+  });
+  if (!permission.allowed) return fail("FORBIDDEN", "当前岗位没有物流跟进权限。", 403);
+
+  const body = await request.json().catch(() => null);
+  const note = typeof body?.note === "string" ? body.note.trim().slice(0, 2000) : "";
+  if (!note) return fail("FOLLOW_UP_NOTE_REQUIRED", "跟进备注不能为空。", 400);
+
+  const workStatus = typeof body?.workStatus === "string" ? body.workStatus.toUpperCase() as LogisticsWorkStatus : shipment.workStatus;
+  if (!WORK_STATUSES.has(workStatus)) return fail("INVALID_WORK_STATUS", "无效的跟进状态。", 400);
+
+  let nextFollowUpAt: Date | null = shipment.nextFollowUpAt;
+  if (body?.nextFollowUpAt === null || body?.nextFollowUpAt === "") {
+    nextFollowUpAt = null;
+  } else if (typeof body?.nextFollowUpAt === "string") {
+    nextFollowUpAt = new Date(body.nextFollowUpAt);
+    if (Number.isNaN(nextFollowUpAt.getTime())) return fail("INVALID_NEXT_FOLLOW_UP_AT", "下次跟进时间格式不正确。", 400);
+  }
+
+  const ownerMembershipId =
+    typeof body?.ownerMembershipId === "string" && body.ownerMembershipId.trim()
+      ? body.ownerMembershipId.trim()
+      : shipment.ownerMembershipId;
+  if (ownerMembershipId) {
+    const owner = await prisma.membership.findFirst({
+      where: { id: ownerMembershipId, businessUnitId: shipment.businessUnitId, isActive: true },
+      select: { id: true },
+    });
+    if (!owner) return fail("INVALID_FOLLOW_UP_OWNER", "跟进人不属于当前业务板块或已停用。", 400);
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const updated = await tx.shipment.update({
+      where: { id: shipment.id },
+      data: {
+        workStatus,
+        ownerMembershipId,
+        nextFollowUpAt,
+        closedAt: workStatus === "CLOSED" ? new Date() : null,
+        closeReason: workStatus === "CLOSED" ? note : null,
+      },
+    });
+    const followUp = await tx.logisticsFollowUp.create({
+      data: {
+        shipmentId: shipment.id,
+        businessUnitId: shipment.businessUnitId,
+        actorUserId: auth.userId,
+        actorMembershipId: auth.membership.id,
+        actionType: "AFTERSALES_NOTE",
+        fromStatus: shipment.workStatus,
+        toStatus: workStatus,
+        note,
+        nextFollowUpAt,
+      },
+    });
+    return { shipment: updated, followUp };
+  });
+
+  await writeAuditLog({
+    actorUserId: auth.userId,
+    actorMembershipId: auth.membership.id,
+    module: "sales.logistics_follow_up",
+    action: "shipment.follow_up.create",
+    targetType: "shipment",
+    targetId: shipment.id,
+    businessUnitId: shipment.businessUnitId,
+    roleId: auth.membership.roleId,
+    details: { workStatus, nextFollowUpAt, ownerMembershipId },
+  });
+  return ok(result, { status: 201 });
+}

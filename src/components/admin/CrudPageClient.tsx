@@ -1,7 +1,19 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { usePathname } from "next/navigation";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  FileSearch,
+  LoaderCircle,
+  Plus,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
+import Link from "next/link";
+import { useMemo, useState, type FormEvent } from "react";
+
 import { zh } from "@/lib/i18n";
 
 export type DataCellValue = string | number | boolean | null | Date | Record<string, unknown> | Array<unknown>;
@@ -33,11 +45,33 @@ export type CrudPageProps = {
   dataColumns: DataCell[];
   listTitle: string;
   showCreate?: boolean;
+  detailPath?: string;
 };
 
 const API_BASE = "/api/admin";
-
+const PAGE_SIZE = 20;
 type FormBody = Record<string, string | number | boolean>;
+
+function displayValue(value: DataCellValue) {
+  if (value instanceof Date) return value.toLocaleString("zh-CN");
+  if (typeof value === "boolean") return value ? "是" : "否";
+  if (typeof value === "object" && value !== null) return JSON.stringify(value);
+  return zh(String(value ?? ""));
+}
+
+function StatusPill({ value }: { value: DataCellValue }) {
+  const text = displayValue(value);
+  const normalized = String(value ?? "").toUpperCase();
+  const tone =
+    /DELIVERED|COMPLETED|APPROVED|ACTIVE|RESOLVED/.test(normalized)
+      ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+      : /EXCEPTION|REJECTED|CANCEL/.test(normalized)
+        ? "bg-rose-50 text-rose-700 ring-rose-200"
+        : /PENDING|SUBMITTED|WAITING|NEEDS_ATTENTION/.test(normalized)
+          ? "bg-amber-50 text-amber-700 ring-amber-200"
+          : "bg-slate-100 text-slate-700 ring-slate-200";
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${tone}`}>{text || "-"}</span>;
+}
 
 export default function CrudPage({
   resource,
@@ -50,12 +84,26 @@ export default function CrudPage({
   dataColumns,
   listTitle,
   showCreate = true,
+  detailPath,
 }: CrudPageProps) {
-  const pathname = usePathname();
   const [error, setError] = useState<string | null>(null);
   const [loadingCreate, setLoadingCreate] = useState(false);
   const [loadingDelete, setLoadingDelete] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [keyword, setKeyword] = useState("");
+  const [page, setPage] = useState(1);
   const endpointBase = apiBase ?? API_BASE;
+
+  const filteredRows = useMemo(() => {
+    const term = keyword.trim().toLowerCase();
+    if (!term) return rows;
+    return rows.filter((row) =>
+      dataColumns.some((column) => displayValue(row[column.key]).toLowerCase().includes(term)),
+    );
+  }, [dataColumns, keyword, rows]);
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const visibleRows = filteredRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -76,130 +124,181 @@ export default function CrudPage({
       }
     }
 
-    const response = await fetch(`${endpointBase}/${resource}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const result = await response.json().catch(() => null);
-    if (!response.ok) {
-      setError(result?.error?.message || result?.error || "创建失败，请检查填写内容。");
+    try {
+      const response = await fetch(`${endpointBase}/${resource}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        setError(result?.error?.message || result?.error || "创建失败，请检查填写内容");
+        return;
+      }
+      window.location.reload();
+    } catch {
+      setError("网络连接失败，请稍后重试");
+    } finally {
       setLoadingCreate(false);
-      return;
     }
-    window.location.reload();
   }
 
   async function handleDelete(id: string) {
     if (!canDelete) return;
-    const confirmDelete = window.confirm("确定要删除这条记录吗？此操作可能无法恢复。");
-    if (!confirmDelete) return;
+    if (!window.confirm("确定删除这条记录吗？此操作可能无法恢复。")) return;
 
     setLoadingDelete(id);
-    const response = await fetch(`${endpointBase}/${resource}/${id}`, {
-      method: "DELETE",
-    });
-    const payload = await response.json().catch(() => null);
-    if (!response.ok) {
-      setError(payload?.error?.message || payload?.error || "删除失败。");
+    setError(null);
+    try {
+      const response = await fetch(`${endpointBase}/${resource}/${id}`, { method: "DELETE" });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setError(payload?.error?.message || payload?.error || "删除失败");
+        return;
+      }
+      window.location.reload();
+    } catch {
+      setError("网络连接失败，请稍后重试");
+    } finally {
       setLoadingDelete(null);
-      return;
     }
-    window.location.reload();
   }
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-gray-900">{zh(listTitle)}</h2>
-        <p className="text-xs text-gray-500">当前位置：{pathname}</p>
-      </div>
+  const inputClass =
+    "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-4 focus:ring-violet-100";
 
-      {showCreate && <section className="rounded-lg border border-gray-200 p-4">
-        <h3 className="mb-3 text-sm font-medium text-gray-600">新增</h3>
-        {!canCreate && <p className="text-sm text-gray-500">当前岗位没有新增权限。</p>}
-        {canCreate ? (
-          <form className="grid grid-cols-1 gap-3 md:grid-cols-2" onSubmit={handleCreate}>
+  return (
+    <div className="space-y-5">
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-4 border-b border-slate-200 px-4 py-4 md:flex-row md:items-center md:justify-between md:px-5">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-bold text-slate-950">{zh(listTitle)}</h2>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{filteredRows.length}</span>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">支持搜索、查看详情和按权限执行操作</p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <label className="flex h-10 min-w-64 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 focus-within:border-violet-400 focus-within:bg-white focus-within:ring-4 focus-within:ring-violet-100">
+              <Search size={16} className="text-slate-400" />
+              <input
+                value={keyword}
+                onChange={(event) => {
+                  setKeyword(event.target.value);
+                  setPage(1);
+                }}
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+                placeholder="搜索当前列表"
+                aria-label="搜索当前列表"
+              />
+              {keyword && <button type="button" aria-label="清除搜索" onClick={() => setKeyword("")}><X size={14} className="text-slate-400" /></button>}
+            </label>
+            {showCreate && canCreate && (
+              <button
+                type="button"
+                onClick={() => setShowForm((value) => !value)}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white shadow-sm shadow-violet-200 hover:bg-violet-700"
+              >
+                <Plus size={17} /> 新增
+              </button>
+            )}
+          </div>
+        </div>
+
+        {showCreate && !canCreate && (
+          <p className="border-b border-slate-200 bg-amber-50 px-5 py-3 text-sm text-amber-800">当前岗位没有新增权限。</p>
+        )}
+
+        {showCreate && canCreate && showForm && (
+          <form className="grid grid-cols-1 gap-4 border-b border-slate-200 bg-slate-50/70 p-5 md:grid-cols-2 xl:grid-cols-3" onSubmit={handleCreate}>
             {createFields.map((field) => (
-              <label key={field.key} className="flex flex-col gap-1 text-sm text-gray-700">
-                <span>{zh(field.label)}</span>
+              <label key={field.key} className="space-y-1.5 text-sm text-slate-700">
+                <span className="font-medium">{zh(field.label)}{field.required && <b className="ml-1 text-rose-500">*</b>}</span>
                 {field.type === "select" ? (
-                  <select name={field.key} className="rounded border border-gray-300 px-2 py-2" required={field.required}>
+                  <select name={field.key} className={inputClass} required={field.required}>
                     <option value="">请选择</option>
-                    {(field.options ?? []).map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {zh(option.label)}
-                      </option>
-                    ))}
+                    {(field.options ?? []).map((option) => <option key={option.value} value={option.value}>{zh(option.label)}</option>)}
                   </select>
                 ) : (
-                  <input
-                    required={field.required}
-                    name={field.key}
-                    type={field.type ?? "text"}
-                    placeholder={field.placeholder}
-                    className="rounded border border-gray-300 px-2 py-2"
-                  />
+                  <input required={field.required} name={field.key} type={field.type ?? "text"} placeholder={field.placeholder} className={inputClass} />
                 )}
               </label>
             ))}
-            <div className="md:col-span-2">
+            <div className="flex items-end gap-2 md:col-span-2 xl:col-span-3">
               <button
                 disabled={loadingCreate}
-                className="rounded bg-black px-4 py-2 text-sm font-semibold text-white disabled:opacity-70"
+                className="inline-flex h-10 items-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white disabled:opacity-60"
                 type="submit"
               >
-                {loadingCreate ? "保存中..." : "保存"}
+                {loadingCreate && <LoaderCircle size={16} className="animate-spin" />}
+                {loadingCreate ? "正在保存..." : "保存"}
               </button>
+              <button type="button" onClick={() => setShowForm(false)} className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 hover:bg-slate-50">取消</button>
             </div>
           </form>
-        ) : null}
-      </section>}
+        )}
 
-      <section className="rounded-lg border border-gray-200 p-4">
-        <h3 className="mb-3 text-sm font-medium text-gray-600">数据列表</h3>
-        {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
-        {rows.length === 0 && <p className="text-sm text-gray-500">暂无数据。</p>}
-        {rows.length > 0 && (
-          <div className="overflow-auto">
+        {error && <p role="alert" className="border-b border-rose-200 bg-rose-50 px-5 py-3 text-sm text-rose-700">{error}</p>}
+
+        {visibleRows.length === 0 ? (
+          <div className="grid min-h-64 place-items-center p-8 text-center">
+            <div>
+              <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-slate-100 text-slate-400"><FileSearch size={22} /></span>
+              <h3 className="mt-3 text-sm font-semibold text-slate-800">{keyword ? "没有匹配结果" : "暂无数据"}</h3>
+              <p className="mt-1 text-xs text-slate-500">{keyword ? "请尝试其他关键词" : "有新记录后会显示在这里"}</p>
+            </div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-left text-gray-500">
-                  {dataColumns.map((col) => (
-                    <th key={col.key} className="border-b border-gray-200 px-3 py-2 font-medium">
-                      {zh(col.label)}
-                    </th>
-                  ))}
-                  <th className="border-b border-gray-200 px-3 py-2">操作</th>
+              <thead className="bg-slate-50/80">
+                <tr className="text-left text-xs font-semibold text-slate-500">
+                  {dataColumns.map((column) => <th key={column.key} className="whitespace-nowrap border-b border-slate-200 px-4 py-3">{zh(column.label)}</th>)}
+                  <th className="sticky right-0 whitespace-nowrap border-b border-slate-200 bg-slate-50 px-4 py-3 text-right">操作</th>
                 </tr>
               </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={String(row[rowId])} className="border-b border-gray-100 last:border-0">
-                    {dataColumns.map((col) => (
-                      <td key={`${String(row[rowId])}-${col.key}`} className="px-3 py-2 text-gray-700">
-                        {zh(col.render ? col.render(row) : String(row[col.key] ?? ""))}
+              <tbody className="divide-y divide-slate-100">
+                {visibleRows.map((row) => {
+                  const id = String(row[rowId]);
+                  return (
+                    <tr key={id} className="group hover:bg-violet-50/30">
+                      {dataColumns.map((column) => (
+                        <td key={`${id}-${column.key}`} className="max-w-80 whitespace-nowrap px-4 py-3 text-slate-700">
+                          {/status/i.test(column.key) ? <StatusPill value={row[column.key]} /> : <span className="block truncate">{displayValue(row[column.key]) || "-"}</span>}
+                        </td>
+                      ))}
+                      <td className="sticky right-0 whitespace-nowrap bg-white px-4 py-3 text-right group-hover:bg-[#fbfaff]">
+                        {detailPath && (
+                          <Link className="mr-1 inline-flex size-8 items-center justify-center rounded-lg text-violet-600 hover:bg-violet-100" href={`${detailPath}/${id}`} title="查看详情">
+                            <Eye size={16} />
+                          </Link>
+                        )}
+                        {canDelete && (
+                          <button
+                            className="inline-flex size-8 items-center justify-center rounded-lg text-rose-500 hover:bg-rose-50 disabled:opacity-50"
+                            onClick={() => handleDelete(id)}
+                            disabled={loadingDelete === id}
+                            title="删除"
+                          >
+                            {loadingDelete === id ? <LoaderCircle size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                          </button>
+                        )}
                       </td>
-                    ))}
-                    <td className="px-3 py-2">
-                      {canDelete ? (
-                        <button
-                          className="rounded border border-red-200 px-2 py-1 text-red-600 disabled:opacity-50"
-                          onClick={() => handleDelete(String(row[rowId]))}
-                          disabled={loadingDelete === row[rowId]}
-                        >
-                          {loadingDelete === row[rowId] ? "删除中..." : "删除"}
-                        </button>
-                      ) : (
-                        <span className="text-xs text-gray-400">无权限</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
+
+        <footer className="flex flex-col gap-3 border-t border-slate-200 px-4 py-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+          <span>第 {safePage} / {pageCount} 页，共 {filteredRows.length} 条</span>
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={safePage === 1} className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white disabled:opacity-40" aria-label="上一页"><ChevronLeft size={15} /></button>
+            <button type="button" onClick={() => setPage((value) => Math.min(pageCount, value + 1))} disabled={safePage === pageCount} className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white disabled:opacity-40" aria-label="下一页"><ChevronRight size={15} /></button>
+          </div>
+        </footer>
       </section>
     </div>
   );

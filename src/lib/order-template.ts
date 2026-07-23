@@ -14,7 +14,14 @@ export type OrderTemplateConfiguration = {
   requireCodAmount: boolean;
   requireRecipientPhone: boolean;
   requireRecipientAddress: boolean;
+  requireRecipientEmail: boolean;
   requireSku: boolean;
+  requireRecipientCountryCode: boolean;
+  requireRecipientPostalCode: boolean;
+  requireRecipientRegion: boolean;
+  requireRecipientCity: boolean;
+  requireProductName: boolean;
+  requirePackageWeight: boolean;
   customFields: OrderCustomField[];
 };
 
@@ -44,6 +51,12 @@ export function parseOrderTemplateConfiguration(raw: unknown): OrderTemplateConf
   };
   const shortText = (input: unknown, fallback: string) =>
     typeof input === "string" && input.trim() ? input.trim().slice(0, 50) : fallback;
+  const bool = (value: unknown, fallback = false) => {
+    if (typeof value === "boolean") return value;
+    if (value === "true" || value === "1") return true;
+    if (value === "false" || value === "0") return false;
+    return fallback;
+  };
 
   return {
     currency: shortText(value.currency, "CNY").toUpperCase().slice(0, 3),
@@ -52,9 +65,16 @@ export function parseOrderTemplateConfiguration(raw: unknown): OrderTemplateConf
     defaultShippingFeeCents: cents(value.defaultShippingFeeCents),
     defaultCodAmountCents: cents(value.defaultCodAmountCents),
     requireCodAmount: value.requireCodAmount !== false,
-    requireRecipientPhone: value.requireRecipientPhone !== false,
-    requireRecipientAddress: value.requireRecipientAddress !== false,
-    requireSku: value.requireSku !== false,
+  requireRecipientPhone: value.requireRecipientPhone !== false,
+  requireRecipientAddress: value.requireRecipientAddress !== false,
+  requireRecipientEmail: bool((value as Record<string, unknown>).requireRecipientEmail, false),
+  requireSku: value.requireSku !== false,
+    requireRecipientCountryCode: bool((value as Record<string, unknown>).requireRecipientCountryCode, false),
+    requireRecipientPostalCode: bool((value as Record<string, unknown>).requireRecipientPostalCode, false),
+    requireRecipientRegion: bool((value as Record<string, unknown>).requireRecipientRegion, false),
+    requireRecipientCity: bool((value as Record<string, unknown>).requireRecipientCity, false),
+    requireProductName: bool((value as Record<string, unknown>).requireProductName, true),
+    requirePackageWeight: bool((value as Record<string, unknown>).requirePackageWeight, false),
     customFields,
   };
 }

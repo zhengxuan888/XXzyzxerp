@@ -1,4 +1,23 @@
+"use client";
+
+import {
+  Bell,
+  Building2,
+  ChevronDown,
+  CircleUserRound,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Search,
+  ShieldCheck,
+  X,
+} from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useState } from "react";
+
 import { zh } from "@/lib/i18n";
 
 type MenuItem = {
@@ -23,73 +42,173 @@ type AppShellProps = {
   children: React.ReactNode;
 };
 
-function renderMenuItem(item: MenuItem, currentPath?: string) {
-  const active = currentPath === item.path || currentPath?.startsWith(`${item.path}/`);
-  return (
-    <li key={item.id}>
-      <Link
-        href={item.path}
-        className={`block rounded-md px-3 py-2 text-sm ${active ? "bg-sky-50 font-semibold text-sky-700" : "text-gray-600 hover:bg-gray-100"}`}
-      >
-        {zh(item.label)}
-      </Link>
-    </li>
-  );
+function isActive(pathname: string, path: string) {
+  if (path === "/admin") return pathname === path;
+  return pathname === path || pathname.startsWith(`${path}/`);
 }
 
 export default function AppShell({
   menuItems,
-  brand = "ERP V2",
+  brand = "Facebook COD ERP",
   userName,
   memberships = [],
   activeMembershipId,
-  currentPath,
   children,
 }: AppShellProps) {
+  const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+
+  const navigation = [
+    { id: "dashboard", label: "工作台", path: "/admin" },
+    ...menuItems.filter((item) => item.path !== "/admin"),
+  ];
+  const activeMembership = memberships.find((item) => item.id === activeMembershipId);
+
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-6xl gap-6 px-4 py-6">
-      <aside className="w-64 shrink-0">
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <p className="text-lg font-semibold text-gray-900">{brand}</p>
-          <p className="mt-1 text-xs text-gray-500">按当前岗位动态显示菜单</p>
-          <nav className="mt-4">
-            <ul className="flex flex-col gap-1">
-              <li>
-                <Link href="/admin" className="block rounded-md px-3 py-2 text-sm text-gray-600 hover:bg-gray-100">
-                  首页
-                </Link>
-              </li>
-              {menuItems.map((item) => renderMenuItem(item, currentPath))}
+    <div className="min-h-screen bg-[var(--surface-muted)] text-slate-900">
+      <header className="fixed inset-x-0 top-0 z-40 h-16 border-b border-slate-200/80 bg-white/95 backdrop-blur">
+        <div className="flex h-full items-center gap-3 px-4 lg:px-6">
+          <button
+            type="button"
+            aria-label="打开导航"
+            onClick={() => setMobileOpen(true)}
+            className="inline-flex size-10 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100 lg:hidden"
+          >
+            <Menu size={20} />
+          </button>
+
+          <Link href="/admin" className="flex min-w-0 items-center gap-3">
+            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-violet-600 to-cyan-500 text-sm font-black tracking-tight text-white shadow-sm shadow-violet-200">
+              ZC
+            </span>
+            <span className="min-w-0">
+              <strong className="block truncate text-sm font-bold tracking-tight text-slate-950">{brand}</strong>
+              <span className="block truncate text-[11px] text-slate-500">择优臻选 · 业务运营系统</span>
+            </span>
+          </Link>
+
+          <div className="ml-auto hidden max-w-md flex-1 items-center lg:flex">
+            <div className="ml-8 flex h-10 w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-slate-400">
+              <Search size={16} />
+              <span className="text-xs">搜索订单、客户、物流单号</span>
+              <kbd className="ml-auto rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-400">Ctrl K</kbd>
+            </div>
+          </div>
+
+          <div className="ml-auto flex items-center gap-1 lg:ml-4">
+            <div className="hidden items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 xl:flex">
+              <Building2 size={15} className="text-violet-600" />
+              <span className="max-w-64 truncate text-xs font-medium text-slate-700">
+                {activeMembership?.label ?? "当前业务板块"}
+              </span>
+            </div>
+            <button type="button" aria-label="通知" className="relative grid size-10 place-items-center rounded-xl text-slate-500 hover:bg-slate-100">
+              <Bell size={18} />
+              <span className="absolute right-2 top-2 size-1.5 rounded-full bg-rose-500" />
+            </button>
+            <div className="hidden items-center gap-2 pl-2 sm:flex">
+              <span className="grid size-9 place-items-center rounded-xl bg-slate-900 text-white"><CircleUserRound size={18} /></span>
+              <span className="max-w-44 truncate text-xs font-semibold text-slate-700">{userName || "当前用户"}</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {mobileOpen && (
+        <button
+          aria-label="关闭导航遮罩"
+          className="fixed inset-0 z-40 bg-slate-950/30 backdrop-blur-sm lg:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      <aside
+        className={`fixed bottom-0 left-0 top-16 z-50 border-r border-slate-200 bg-white transition-all duration-200 ${
+          collapsed ? "w-[76px]" : "w-64"
+        } ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
+      >
+        <div className="flex h-full flex-col">
+          <div className="flex items-center justify-between px-3 py-3">
+            {!collapsed && <span className="px-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">主导航</span>}
+            <button
+              type="button"
+              aria-label={collapsed ? "展开导航" : "收起导航"}
+              onClick={() => setCollapsed((value) => !value)}
+              className="hidden size-9 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 lg:grid"
+            >
+              {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+            </button>
+            <button type="button" aria-label="关闭导航" onClick={() => setMobileOpen(false)} className="grid size-9 place-items-center rounded-lg text-slate-500 lg:hidden">
+              <X size={19} />
+            </button>
+          </div>
+
+          <nav className="min-h-0 flex-1 overflow-y-auto px-3 pb-4" aria-label="主导航">
+            <ul className="space-y-1">
+              {navigation.map((item) => {
+                const active = isActive(pathname, item.path);
+                return (
+                  <li key={item.id}>
+                    <Link
+                      href={item.path}
+                      title={collapsed ? zh(item.label) : undefined}
+                      onClick={() => setMobileOpen(false)}
+                      className={`group flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition ${
+                        active
+                          ? "bg-gradient-to-r from-violet-600 to-violet-500 text-white shadow-sm shadow-violet-200"
+                          : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+                      }`}
+                    >
+                      <span className="grid size-5 shrink-0 place-items-center">
+                        {item.path === "/admin" ? <LayoutDashboard size={18} /> : <span className={`size-1.5 rounded-full ${active ? "bg-white" : "bg-slate-300 group-hover:bg-violet-500"}`} />}
+                      </span>
+                      {!collapsed && <span className="truncate">{zh(item.label)}</span>}
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           </nav>
-          <p className="mt-6 border-t border-gray-200 pt-4 text-xs text-gray-400">当前用户：{userName || "未知"}</p>
-          {memberships.length > 1 ? (
-            <form action="/api/context/active-membership" method="post" className="mt-3 flex flex-col gap-2 border-t border-gray-200 pt-4">
-              <label className="text-xs font-medium text-gray-700">当前业务板块</label>
-              <select
-                name="membershipId"
-                defaultValue={activeMembershipId ?? ""}
-                className="rounded border border-gray-300 px-2 py-2 text-sm"
+
+          <div className="border-t border-slate-200 p-3">
+            {!collapsed && memberships.length > 1 && (
+              <form action="/api/context/active-membership" method="post" className="mb-2 rounded-xl bg-slate-50 p-2">
+                <label className="mb-1 flex items-center gap-1 text-[11px] font-medium text-slate-500">
+                  <ShieldCheck size={13} /> 当前业务上下文
+                </label>
+                <div className="relative">
+                  <select
+                    name="membershipId"
+                    defaultValue={activeMembershipId ?? ""}
+                    onChange={(event) => event.currentTarget.form?.requestSubmit()}
+                    className="h-9 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-2 pr-7 text-xs text-slate-700 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                  >
+                    {memberships.map((membership) => (
+                      <option key={membership.id} value={membership.id}>{membership.label}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} className="pointer-events-none absolute right-2 top-2.5 text-slate-400" />
+                </div>
+              </form>
+            )}
+            <form action="/api/auth/logout" method="post">
+              <button
+                type="submit"
+                title={collapsed ? "退出登录" : undefined}
+                className="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm font-medium text-slate-500 hover:bg-rose-50 hover:text-rose-600"
               >
-                {memberships.map((membership) => (
-                  <option key={membership.id} value={membership.id}>
-                    {membership.label}
-                  </option>
-                ))}
-              </select>
-              <button type="submit" className="rounded border border-gray-300 px-2 py-1 text-xs">
-                切换业务板块
+                <LogOut size={17} />
+                {!collapsed && "退出登录"}
               </button>
             </form>
-          ) : null}
-          <form action="/api/auth/logout" method="post">
-            <button type="submit" className="mt-2 w-full rounded border border-gray-300 py-2 text-sm hover:bg-gray-50">
-              退出登录
-            </button>
-          </form>
+          </div>
         </div>
       </aside>
-      <main className="flex-1 rounded-lg border border-gray-200 bg-white p-6">{children}</main>
+
+      <main className={`min-h-screen pt-16 transition-all duration-200 ${collapsed ? "lg:pl-[76px]" : "lg:pl-64"}`}>
+        <div className="mx-auto w-full max-w-[1680px] p-4 md:p-6 xl:p-8">{children}</div>
+      </main>
     </div>
   );
 }

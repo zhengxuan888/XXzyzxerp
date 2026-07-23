@@ -1,16 +1,24 @@
 import { redirect } from "next/navigation";
 
 import CrudPage from "@/components/admin/CrudPage";
+import type { Prisma } from "@prisma/client";
 import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 
-export default async function ShipmentsPage() {
+export default async function ShipmentsPage({ searchParams }: { searchParams: Promise<{ queue?: string }> }) {
   const session = await getSessionFromCookie();
   if (!session?.activeMembershipId) redirect("/login");
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
+  const queue = (await searchParams).queue;
+  const queueWhere: Prisma.ShipmentWhereInput =
+    queue === "needs_attention"
+      ? { workStatus: "NEEDS_ATTENTION" as const }
+      : queue === "in_transit"
+        ? { status: { in: ["PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY"] } }
+        : {};
 
   const [canRead, canCreate] = await Promise.all([
     checkPermission({
@@ -29,13 +37,13 @@ export default async function ShipmentsPage() {
   if (!canRead.allowed) redirect("/admin");
 
   const orders = await prisma.order.findMany({
-    where: { businessUnitId: membership.businessUnitId },
+    where: { businessUnitId: membership.businessUnitId, status: "WAITING_SHIPMENT" },
     orderBy: { createdAt: "desc" },
     select: { id: true, orderNo: true },
   });
 
   const rows = await prisma.shipment.findMany({
-    where: { businessUnitId: membership.businessUnitId },
+    where: { businessUnitId: membership.businessUnitId, ...queueWhere },
     include: { order: { select: { orderNo: true } } },
     orderBy: { createdAt: "desc" },
   });
@@ -45,6 +53,7 @@ export default async function ShipmentsPage() {
       apiBase="/api/mvp"
       resource="shipments"
       listTitle="Shipments"
+      detailPath="/admin/shipments"
       canCreate={canCreate.allowed}
       canDelete={false}
       rows={rows}

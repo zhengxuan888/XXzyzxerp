@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { format } from "date-fns";
-import OrderStatusForm from "@/components/admin/OrderStatusForm";
+import OrderWorkflowActions from "@/components/admin/OrderWorkflowActions";
 import { formatMoneyCents } from "@/lib/money";
 import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
@@ -10,7 +10,8 @@ import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { zh } from "@/lib/i18n";
 
-export default async function OrderDetailPage({ params }: { params: { id: string } }) {
+export default async function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await getSessionFromCookie();
   if (!session?.activeMembershipId) {
     redirect("/login");
@@ -19,7 +20,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
 
-  const [canRead, canStatusUpdate] = await Promise.all([
+  const [canRead, canSubmit, canReview, canShip] = await Promise.all([
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
@@ -29,7 +30,19 @@ export default async function OrderDetailPage({ params }: { params: { id: string
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
-      actionKey: "order.status.update",
+      actionKey: "order.submit",
+      targetBusinessUnitId: membership.businessUnitId,
+    }),
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "order.review",
+      targetBusinessUnitId: membership.businessUnitId,
+    }),
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "order.ship",
       targetBusinessUnitId: membership.businessUnitId,
     }),
   ]);
@@ -37,7 +50,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
 
   const order = await prisma.order.findFirst({
     where: {
-      id: params.id,
+      id,
       businessUnitId: membership.businessUnitId,
     },
     include: {
@@ -90,7 +103,11 @@ export default async function OrderDetailPage({ params }: { params: { id: string
           </ul>
         </section>
 
-        <OrderStatusForm orderId={order.id} currentStatus={order.status} canUpdate={canStatusUpdate.allowed} />
+        <OrderWorkflowActions
+          orderId={order.id}
+          currentStatus={order.status}
+          permissions={{ submit: canSubmit.allowed, review: canReview.allowed, ship: canShip.allowed }}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -101,6 +118,21 @@ export default async function OrderDetailPage({ params }: { params: { id: string
             <dt className="text-gray-500">物流渠道</dt><dd>{order.logisticsChannel || "-"}</dd>
             <dt className="text-gray-500">收件人</dt><dd>{order.recipientName || "-"}</dd>
             <dt className="text-gray-500">联系电话</dt><dd>{order.recipientPhone || "-"}</dd>
+            <dt className="text-gray-500">客户邮箱</dt>
+            <dd className="flex flex-wrap items-center gap-2">
+              <span>{order.recipientEmail || "-"}</span>
+              {order.recipientEmail && (
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                  order.emailValidationStatus === "LIKELY_VALID"
+                    ? "bg-emerald-50 text-emerald-700"
+                    : order.emailValidationStatus === "INVALID"
+                      ? "bg-rose-50 text-rose-700"
+                      : "bg-amber-50 text-amber-700"
+                }`}>
+                  {order.emailValidationStatus === "LIKELY_VALID" ? "较可信" : order.emailValidationStatus === "INVALID" ? "高风险" : "未确认"}
+                </span>
+              )}
+            </dd>
             <dt className="text-gray-500">国家 / 邮编</dt><dd>{[order.recipientCountryCode, order.recipientPostalCode].filter(Boolean).join(" / ") || "-"}</dd>
             <dt className="text-gray-500">地区 / 城市</dt><dd>{[order.recipientRegion, order.recipientCity].filter(Boolean).join(" / ") || "-"}</dd>
             <dt className="text-gray-500">详细地址</dt><dd>{order.recipientAddress || "-"}</dd>
@@ -124,6 +156,22 @@ export default async function OrderDetailPage({ params }: { params: { id: string
         <h2 className="mb-3 font-medium">备注</h2>
         <p className="text-sm text-gray-600">订单备注：{order.note || "-"}</p>
         <p className="text-sm text-gray-600">异常备注：{order.exceptionNote || "-"}</p>
+      </section>
+
+      <section className="rounded border border-gray-200 p-4">
+        <h2 className="mb-3 font-medium">发货与物流</h2>
+        {order.shipments.length === 0 ? (
+          <p className="text-sm text-gray-500">尚未发货。核单通过后，可在流程操作中填写承运商和物流单号并确认发货。</p>
+        ) : (
+          <ul className="space-y-2 text-sm">
+            {order.shipments.map((shipment) => (
+              <li key={shipment.id} className="flex flex-wrap items-center justify-between gap-2 rounded border border-gray-100 p-3">
+                <span>{shipment.carrier || "未设置承运商"} · {shipment.trackingNo || "未设置单号"} · {zh(shipment.status)}</span>
+                <Link className="text-blue-700 hover:underline" href={`/admin/shipments/${shipment.id}`}>查看物流与跟进</Link>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   );

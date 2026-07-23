@@ -20,9 +20,14 @@ enum OrderStatus {
 
 enum ShipmentStatus {
   PENDING
+  PICKED_UP
   IN_TRANSIT
+  OUT_FOR_DELIVERY
   DELIVERED
   EXCEPTION
+  RETURNING
+  RETURNED
+  CLOSED
   CANCELLED
 }
 
@@ -30,6 +35,17 @@ enum LogisticsIssueSeverity {
   LOW
   MEDIUM
   HIGH
+}
+
+enum LogisticsWorkStatus {
+  MONITORING
+  NEEDS_ATTENTION
+  IN_PROGRESS
+  WAITING_CUSTOMER
+  WAITING_CARRIER
+  RESOLVED
+  NO_ACTION_REQUIRED
+  CLOSED
 }
 
 enum AttendanceType {
@@ -122,6 +138,7 @@ model BusinessUnit {
   inventoryTransactions InventoryTransaction[]
   inventoryReservations InventoryReservation[]
   orderTemplates       OrderTemplate[]
+  logisticsFollowUps   LogisticsFollowUp[]
 
   @@unique([legalEntityId, code])
   @@index([legalEntityId])
@@ -198,6 +215,7 @@ model User {
   orders      Order[] @relation("OrderCreator")
   expenses    Expense[]
   documents   Document[]
+  logisticsFollowUps LogisticsFollowUp[]
   attendanceRecords Attendance[]
   inventoryTransactions InventoryTransaction[]
 }
@@ -316,6 +334,8 @@ model Membership {
   leaveRequests LeaveRequest[] @relation("LeaveRequester")
   leaveApprovals LeaveRequest[] @relation("LeaveApprover")
   shipmentEvents ShipmentEvent[] @relation("MembershipShipmentEvents")
+  ownedShipments Shipment[] @relation("ShipmentAftersalesOwner")
+  logisticsFollowUps LogisticsFollowUp[]
   inventoryTransactions InventoryTransaction[]
 
   @@index([userId, isActive])
@@ -474,6 +494,9 @@ model Order {
   logisticsChannel String?
   recipientName   String?
   recipientPhone  String?
+  recipientEmail  String?
+  emailValidationStatus String?
+  emailValidatedAt DateTime?
   recipientCountryCode String?
   recipientPostalCode String?
   recipientRegion String?
@@ -510,6 +533,7 @@ model Order {
   @@index([legalEntityId, businessUnitId])
   @@index([customerId, status])
   @@index([orderTemplateId])
+  @@index([businessUnitId, recipientEmail])
 }
 
 model OrderTemplate {
@@ -631,6 +655,14 @@ model Shipment {
   deliveredAt    DateTime?
   exceptionReason String?
   exceptionSeverity LogisticsIssueSeverity?
+  workStatus     LogisticsWorkStatus @default(MONITORING)
+  ownerMembershipId String?
+  firstTrackedAt DateTime?
+  lastTrackedAt  DateTime?
+  estimatedDeliveryAt DateTime?
+  nextFollowUpAt DateTime?
+  closedAt       DateTime?
+  closeReason    String?
   memo           String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -639,10 +671,14 @@ model Shipment {
   legalEntity LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
   businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
   site       Site?       @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  ownerMembership Membership? @relation("ShipmentAftersalesOwner", fields: [ownerMembershipId], references: [id], onDelete: SetNull)
   events     ShipmentEvent[]
+  followUps  LogisticsFollowUp[]
 
   @@index([orderId, status])
   @@index([businessUnitId, trackingNo])
+  @@index([businessUnitId, workStatus, nextFollowUpAt])
+  @@index([ownerMembershipId, workStatus])
 }
 
 model ShipmentEvent {
@@ -650,6 +686,10 @@ model ShipmentEvent {
   shipmentId    String
   occurredAt    DateTime @default(now())
   eventType     String
+  statusMilestone String?
+  location      String?
+  source        String   @default("MANUAL")
+  externalEventKey String?
   memo          String?
   actorMembershipId String?
 
@@ -657,6 +697,29 @@ model ShipmentEvent {
   actorMembership Membership? @relation("MembershipShipmentEvents", fields: [actorMembershipId], references: [id], onDelete: SetNull)
 
   @@index([shipmentId, occurredAt])
+  @@unique([shipmentId, source, externalEventKey])
+}
+
+model LogisticsFollowUp {
+  id                String   @id @default(uuid())
+  shipmentId        String
+  businessUnitId    String
+  actorUserId       String
+  actorMembershipId String
+  actionType        String
+  fromStatus        LogisticsWorkStatus?
+  toStatus          LogisticsWorkStatus?
+  note              String?
+  nextFollowUpAt    DateTime?
+  createdAt         DateTime @default(now())
+
+  shipment       Shipment   @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  businessUnit   BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  actorUser      User       @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  actorMembership Membership @relation(fields: [actorMembershipId], references: [id], onDelete: Restrict)
+
+  @@index([shipmentId, createdAt])
+  @@index([businessUnitId, toStatus, createdAt])
 }
 
 model Expense {
