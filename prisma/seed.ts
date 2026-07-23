@@ -91,6 +91,11 @@ const actionDefs: SeedAction[] = [
 
   { key: "approval.submit", name: "Approval submit", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "approval.review", name: "Approval review", namespace: "erp", scope: "BUSINESS_UNIT" },
+  { key: "inbox.read", name: "统一收件箱查看", namespace: "inbox", scope: "DEPARTMENT" },
+  { key: "inbox.sync.demo", name: "演示渠道同步", namespace: "inbox", scope: "DEPARTMENT" },
+  { key: "inbox.manage", name: "会话状态与标签管理", namespace: "inbox", scope: "DEPARTMENT" },
+  { key: "inbox.assign", name: "会话分派", namespace: "inbox", scope: "DEPARTMENT" },
+  { key: "inbox.customer.link", name: "关联客户或线索", namespace: "inbox", scope: "DEPARTMENT" },
 ];
 
 const menuDefs = [
@@ -172,6 +177,14 @@ const menuDefs = [
     path: "/admin/access-grants",
     requiredActionKey: "access_grant.read",
     sortOrder: 90,
+    isActive: true,
+  },
+  {
+    key: "unified-inbox",
+    label: "统一收件箱",
+    path: "/admin/inbox",
+    requiredActionKey: "inbox.read",
+    sortOrder: 95,
     isActive: true,
   },
   {
@@ -480,6 +493,11 @@ async function main() {
     "document.delete",
     "approval.submit",
     "approval.review",
+    "inbox.read",
+    "inbox.sync.demo",
+    "inbox.manage",
+    "inbox.assign",
+    "inbox.customer.link",
   ]);
 
   for (const action of actions) {
@@ -599,6 +617,103 @@ async function main() {
       contactName: "王女士",
       contactPhone: "13800000000",
       address: "演示地址（非真实数据）",
+    },
+  });
+
+  const founderMembership = await prisma.membership.findFirstOrThrow({
+    where: { userId: founderUser.id, businessUnitId: businessUnit.id, isPrimary: true, isActive: true },
+  });
+  const demoConnection = await prisma.channelConnection.upsert({
+    where: {
+      businessUnitId_providerKey_externalRef: {
+        businessUnitId: businessUnit.id,
+        providerKey: "DEMO",
+        externalRef: "demo-local",
+      },
+    },
+    update: { displayName: "本地演示渠道", departmentId: rootDepartment.id, isActive: true },
+    create: {
+      legalEntityId: legalEntity.id,
+      businessUnitId: businessUnit.id,
+      departmentId: rootDepartment.id,
+      providerKey: "DEMO",
+      displayName: "本地演示渠道",
+      externalRef: "demo-local",
+      configuration: { mode: "local_only", credentials: false },
+    },
+  });
+  const demoIdentity = await prisma.contactIdentity.upsert({
+    where: {
+      channelConnectionId_providerContactKey: {
+        channelConnectionId: demoConnection.id,
+        providerContactKey: "demo-contact-001",
+      },
+    },
+    update: { displayName: "演示咨询客户" },
+    create: {
+      businessUnitId: businessUnit.id,
+      channelConnectionId: demoConnection.id,
+      providerContactKey: "demo-contact-001",
+      displayName: "演示咨询客户",
+      normalizedAddress: "demo-contact-001",
+    },
+  });
+  await prisma.inboxTag.upsert({
+    where: { businessUnitId_name: { businessUnitId: businessUnit.id, name: "高意向" } },
+    update: { color: "violet", isActive: true },
+    create: { businessUnitId: businessUnit.id, name: "高意向", color: "violet" },
+  });
+  await prisma.inboxTag.upsert({
+    where: { businessUnitId_name: { businessUnitId: businessUnit.id, name: "待回访" } },
+    update: { color: "amber", isActive: true },
+    create: { businessUnitId: businessUnit.id, name: "待回访", color: "amber" },
+  });
+  const demoConversation = await prisma.conversation.upsert({
+    where: {
+      channelConnectionId_providerThreadKey: {
+        channelConnectionId: demoConnection.id,
+        providerThreadKey: "demo-thread-001",
+      },
+    },
+    update: { preview: "请问这个商品多久可以送达？", departmentId: rootDepartment.id },
+    create: {
+      legalEntityId: legalEntity.id,
+      businessUnitId: businessUnit.id,
+      departmentId: rootDepartment.id,
+      channelConnectionId: demoConnection.id,
+      contactIdentityId: demoIdentity.id,
+      providerThreadKey: "demo-thread-001",
+      subject: "商品配送咨询",
+      preview: "请问这个商品多久可以送达？",
+      unreadCount: 1,
+      lastMessageAt: new Date(),
+    },
+  });
+  await prisma.message.upsert({
+    where: {
+      conversationId_providerMessageKey: {
+        conversationId: demoConversation.id,
+        providerMessageKey: "demo-message-001",
+      },
+    },
+    update: {},
+    create: {
+      conversationId: demoConversation.id,
+      providerMessageKey: "demo-message-001",
+      direction: "INBOUND",
+      senderIdentity: "demo-contact-001",
+      contentText: "请问这个商品多久可以送达？",
+      occurredAt: new Date(),
+    },
+  });
+  await prisma.conversationAssignment.upsert({
+    where: { id: "00000000-0000-4000-8000-000000000101" },
+    update: { assigneeMembershipId: founderMembership.id, isActive: true, endedAt: null },
+    create: {
+      id: "00000000-0000-4000-8000-000000000101",
+      conversationId: demoConversation.id,
+      assigneeMembershipId: founderMembership.id,
+      assignedByMembershipId: founderMembership.id,
     },
   });
 

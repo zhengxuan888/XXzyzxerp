@@ -36,3 +36,25 @@ test("移动端登录页无水平溢出", async ({ page }) => {
   expect(overflow).toBe(false);
   await expect(page.getByRole("button", { name: "进入工作台" })).toBeVisible();
 });
+
+test("统一收件箱可完成 Demo 消息、状态和客户关联闭环", async ({ page }) => {
+  await login(page);
+  await page.goto("/admin/inbox");
+  await expect(page.getByRole("heading", { name: "统一收件箱" })).toBeVisible();
+  await expect(page.getByText("演示咨询客户").first()).toBeVisible();
+  await page.getByRole("button", { name: "拉取演示消息" }).click();
+  await expect(page.getByRole("article").getByText("可以帮我确认预计送达时间吗？")).toBeVisible();
+  await page.getByLabel("处理状态").selectOption("PENDING");
+  await expect(page.getByText("跟进中").first()).toBeVisible();
+  await page.getByLabel("关联客户/线索").selectOption({ index: 1 });
+  await expect(page.getByText(/已关联：/)).toBeVisible();
+});
+
+test("统一收件箱移动端无页面级水平溢出", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page);
+  await page.goto("/admin/inbox");
+  await expect(page.getByRole("heading", { name: "统一收件箱" })).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+  expect(overflow).toBe(false);
+});

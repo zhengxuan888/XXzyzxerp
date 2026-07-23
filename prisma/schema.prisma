@@ -83,6 +83,35 @@ enum InventoryReservationStatus {
   CONSUMED
 }
 
+enum ConversationStatus {
+  OPEN
+  PENDING
+  RESOLVED
+  CLOSED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+  SYSTEM
+}
+
+enum MessageDeliveryStatus {
+  RECEIVED
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+}
+
+enum DeliveryAttemptStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  RETRYABLE
+  FAILED
+}
+
 model LegalEntity {
   id        String   @id @default(uuid())
   code      String   @unique
@@ -92,20 +121,23 @@ model LegalEntity {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  businessUnits     BusinessUnit[]
-  memberships       Membership[]
-  customers         Customer[]
-  products          Product[]
-  orders            Order[]
-  documents         Document[]
-  announcements     Announcement[]
-  attendanceRecords Attendance[]
-  leaveRequests     LeaveRequest[]
-  expenses          Expense[]
-  auditLogs         AuditLog[]
-  shipments         Shipment[]
-  approvalRecords   ApprovalRecord[]
-  orderTemplates    OrderTemplate[]
+  businessUnits      BusinessUnit[]
+  memberships        Membership[]
+  customers          Customer[]
+  products           Product[]
+  orders             Order[]
+  documents          Document[]
+  announcements      Announcement[]
+  attendanceRecords  Attendance[]
+  leaveRequests      LeaveRequest[]
+  expenses           Expense[]
+  auditLogs          AuditLog[]
+  shipments          Shipment[]
+  approvalRecords    ApprovalRecord[]
+  orderTemplates     OrderTemplate[]
+  channelConnections ChannelConnection[]
+  conversations      Conversation[]
+  inboxAuditEvents   InboxAuditEvent[]
 }
 
 model BusinessUnit {
@@ -118,81 +150,88 @@ model BusinessUnit {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  legalEntity     LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  departments     Department[]
-  sites           Site[]
-  memberships     Membership[]
-  auditLogs       AuditLog[]
-  accessGrants    AccessGrant[]
-  customers       Customer[]
-  products        Product[]
-  orders          Order[]
-  documents       Document[]
-  announcements   Announcement[]
-  attendance      Attendance[]
-  leaveRequests   LeaveRequest[]
-  expenses        Expense[]
-  shipments       Shipment[]
-  approvalRecords ApprovalRecord[]
-  inventoryBalances InventoryBalance[]
+  legalEntity           LegalEntity            @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  departments           Department[]
+  sites                 Site[]
+  memberships           Membership[]
+  auditLogs             AuditLog[]
+  accessGrants          AccessGrant[]
+  customers             Customer[]
+  products              Product[]
+  orders                Order[]
+  documents             Document[]
+  announcements         Announcement[]
+  attendance            Attendance[]
+  leaveRequests         LeaveRequest[]
+  expenses              Expense[]
+  shipments             Shipment[]
+  approvalRecords       ApprovalRecord[]
+  inventoryBalances     InventoryBalance[]
   inventoryTransactions InventoryTransaction[]
   inventoryReservations InventoryReservation[]
-  orderTemplates       OrderTemplate[]
-  logisticsFollowUps   LogisticsFollowUp[]
+  orderTemplates        OrderTemplate[]
+  logisticsFollowUps    LogisticsFollowUp[]
+  channelConnections    ChannelConnection[]
+  contactIdentities     ContactIdentity[]
+  conversations         Conversation[]
+  inboxTags             InboxTag[]
+  inboxAuditEvents      InboxAuditEvent[]
 
   @@unique([legalEntityId, code])
   @@index([legalEntityId])
 }
 
 model Department {
-  id            String   @id @default(uuid())
+  id             String   @id @default(uuid())
   businessUnitId String
-  parentId      String?
-  name          String
-  code          String
-  hierarchyPath String?  @map("hierarchy_path")
-  sortOrder     Int      @default(0)
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  parentId       String?
+  name           String
+  code           String
+  hierarchyPath  String?  @map("hierarchy_path")
+  sortOrder      Int      @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  parent      Department?  @relation("DepartmentTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children    Department[] @relation("DepartmentTree")
+  parent       Department?  @relation("DepartmentTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children     Department[] @relation("DepartmentTree")
 
-  memberships Membership[]
-  sites       Site[]
-  accessGrants AccessGrant[]
-  customers   Customer[]
-  orders      Order[]
-  documents   Document[]
+  memberships        Membership[]
+  sites              Site[]
+  accessGrants       AccessGrant[]
+  customers          Customer[]
+  orders             Order[]
+  documents          Document[]
+  channelConnections ChannelConnection[]
+  conversations      Conversation[]
 
-  @@index([businessUnitId, parentId])
   @@unique([businessUnitId, code, parentId])
+  @@index([businessUnitId, parentId])
 }
 
 model Site {
-  id            String   @id @default(uuid())
-  code          String
-  name          String
+  id             String   @id @default(uuid())
+  code           String
+  name           String
   businessUnitId String
-  departmentId  String?
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  departmentId   String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  department   Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
 
-  memberships    Membership[]
-  accessGrants  AccessGrant[]
-  orders         Order[]
-  expenses       Expense[]
-  documents      Document[]
-  announcements  Announcement[]
-  attendance     Attendance[]
-  shipments      Shipment[]
-  inventoryBalances InventoryBalance[]
+  memberships           Membership[]
+  accessGrants          AccessGrant[]
+  orders                Order[]
+  expenses              Expense[]
+  documents             Document[]
+  announcements         Announcement[]
+  attendance            Attendance[]
+  shipments             Shipment[]
+  inventoryBalances     InventoryBalance[]
   inventoryTransactions InventoryTransaction[]
   inventoryReservations InventoryReservation[]
 
@@ -210,55 +249,56 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  memberships Membership[]
-  auditLogs   AuditLog[]
-  orders      Order[] @relation("OrderCreator")
-  expenses    Expense[]
-  documents   Document[]
-  logisticsFollowUps LogisticsFollowUp[]
-  attendanceRecords Attendance[]
+  memberships           Membership[]
+  auditLogs             AuditLog[]
+  orders                Order[]                @relation("OrderCreator")
+  expenses              Expense[]
+  documents             Document[]
+  logisticsFollowUps    LogisticsFollowUp[]
+  attendanceRecords     Attendance[]
   inventoryTransactions InventoryTransaction[]
+  inboxAuditEvents      InboxAuditEvent[]      @relation("InboxAuditActor")
 }
 
 model Role {
-  id          String      @id @default(uuid())
-  code        String      @unique
+  id          String   @id @default(uuid())
+  code        String   @unique
   name        String
   description String?
-  isSystem    Boolean     @default(false)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  memberships      Membership[]
+  memberships     Membership[]
   rolePermissions RolePermission[]
   menuPermissions MenuPermission[]
-  delegationRules  DelegationRule[] @relation("DelegationSourceRole")
+  delegationRules DelegationRule[] @relation("DelegationSourceRole")
 }
 
 model Action {
-  id             String   @id @default(uuid())
-  key            String   @unique
-  name           String
-  description    String?
-  namespace      String   @default("erp")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id          String   @id @default(uuid())
+  key         String   @unique
+  name        String
+  description String?
+  namespace   String   @default("erp")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   rolePermissions RolePermission[]
   accessGrants    AccessGrant[]
   delegationRules DelegationRule[]
-  requiredByMenus  Menu[] @relation("MenuRequiredAction")
+  requiredByMenus Menu[]           @relation("MenuRequiredAction")
 }
 
 model RolePermission {
-  id          String   @id @default(uuid())
-  roleId      String
-  actionKey   String
-  scope       String   @default("BUSINESS_UNIT")
-  isAllowed   Boolean  @default(true)
-  conditions  Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(uuid())
+  roleId     String
+  actionKey  String
+  scope      String   @default("BUSINESS_UNIT")
+  isAllowed  Boolean  @default(true)
+  conditions Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
   action Action @relation(fields: [actionKey], references: [key], onDelete: Cascade)
@@ -268,22 +308,22 @@ model RolePermission {
 }
 
 model Menu {
-  id                 String   @id @default(uuid())
-  key                String   @unique
-  label              String
-  path               String
-  icon               String?
-  parentId           String?
-  sortOrder          Int      @default(0)
-  isActive           Boolean  @default(true)
-  requiredActionKey   String?
-  requiredCondition  Json?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                String   @id @default(uuid())
+  key               String   @unique
+  label             String
+  path              String
+  icon              String?
+  parentId          String?
+  sortOrder         Int      @default(0)
+  isActive          Boolean  @default(true)
+  requiredActionKey String?
+  requiredCondition Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  parent         Menu?          @relation("MenuTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children       Menu[]         @relation("MenuTree")
-  requiredAction Action?        @relation("MenuRequiredAction", fields: [requiredActionKey], references: [key], onDelete: SetNull)
+  parent         Menu?            @relation("MenuTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children       Menu[]           @relation("MenuTree")
+  requiredAction Action?          @relation("MenuRequiredAction", fields: [requiredActionKey], references: [key], onDelete: SetNull)
   grants         MenuPermission[]
 }
 
@@ -294,49 +334,52 @@ model MenuPermission {
   isEnabled Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  menu Menu   @relation(fields: [menuId], references: [id], onDelete: Cascade)
-  role Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  menu Menu @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@unique([menuId, roleId])
 }
 
 model Membership {
-  id            String    @id @default(uuid())
-  userId        String
+  id             String    @id @default(uuid())
+  userId         String
   businessUnitId String
-  departmentId  String?
-  siteId        String?
-  roleId        String
-  legalEntityId String
-  isPrimary     Boolean   @default(false)
-  isActive      Boolean   @default(true)
-  scope         String    @default("BUSINESS_UNIT")
-  startedAt     DateTime  @default(now())
-  endedAt       DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  departmentId   String?
+  siteId         String?
+  roleId         String
+  legalEntityId  String
+  isPrimary      Boolean   @default(false)
+  isActive       Boolean   @default(true)
+  scope          String    @default("BUSINESS_UNIT")
+  startedAt      DateTime  @default(now())
+  endedAt        DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  legalEntity  LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  legalEntity  LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
   businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  site         Site?       @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  role         Role        @relation(fields: [roleId], references: [id], onDelete: Restrict)
-  orders       Order[]     @relation("OrderOwner")
+  department   Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  site         Site?        @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  role         Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  orders       Order[]      @relation("OrderOwner")
 
   grantedAccess  AccessGrant[] @relation("GrantedAccess")
   receivedAccess AccessGrant[] @relation("ReceivedAccess")
 
-  actionAudits AuditLog[] @relation("ActorMembership")
-  submittedApprovals ApprovalRecord[] @relation("SubmittedApprovals")
-  approvedApprovals ApprovalRecord[] @relation("ApprovedApprovals")
-  attendanceRecords Attendance[] @relation("MembershipAttendance")
-  leaveRequests LeaveRequest[] @relation("LeaveRequester")
-  leaveApprovals LeaveRequest[] @relation("LeaveApprover")
-  shipmentEvents ShipmentEvent[] @relation("MembershipShipmentEvents")
-  ownedShipments Shipment[] @relation("ShipmentAftersalesOwner")
-  logisticsFollowUps LogisticsFollowUp[]
-  inventoryTransactions InventoryTransaction[]
+  actionAudits                AuditLog[]               @relation("ActorMembership")
+  submittedApprovals          ApprovalRecord[]         @relation("SubmittedApprovals")
+  approvedApprovals           ApprovalRecord[]         @relation("ApprovedApprovals")
+  attendanceRecords           Attendance[]             @relation("MembershipAttendance")
+  leaveRequests               LeaveRequest[]           @relation("LeaveRequester")
+  leaveApprovals              LeaveRequest[]           @relation("LeaveApprover")
+  shipmentEvents              ShipmentEvent[]          @relation("MembershipShipmentEvents")
+  ownedShipments              Shipment[]               @relation("ShipmentAftersalesOwner")
+  logisticsFollowUps          LogisticsFollowUp[]
+  inventoryTransactions       InventoryTransaction[]
+  assignedConversations       ConversationAssignment[] @relation("ConversationAssignee")
+  conversationAssignmentsMade ConversationAssignment[] @relation("ConversationAssigner")
+  inboxAuditEvents            InboxAuditEvent[]        @relation("InboxAuditMembership")
 
   @@index([userId, isActive])
   @@index([businessUnitId, isActive])
@@ -344,23 +387,23 @@ model Membership {
 }
 
 model AccessGrant {
-  id                 String      @id @default(uuid())
+  id                  String    @id @default(uuid())
   granteeMembershipId String
   granterMembershipId String
-  actionKey          String
-  scope              String      @default("DEPARTMENT")
-  reason             String
-  businessUnitId     String
-  departmentId       String?
-  siteId             String?
-  grantedAt          DateTime    @default(now())
-  expiresAt          DateTime?
-  revokedAt          DateTime?
-  isActive           Boolean     @default(true)
+  actionKey           String
+  scope               String    @default("DEPARTMENT")
+  reason              String
+  businessUnitId      String
+  departmentId        String?
+  siteId              String?
+  grantedAt           DateTime  @default(now())
+  expiresAt           DateTime?
+  revokedAt           DateTime?
+  isActive            Boolean   @default(true)
 
-  action           Action      @relation(fields: [actionKey], references: [key], onDelete: Cascade)
-  granteeMembership Membership @relation("ReceivedAccess", fields: [granteeMembershipId], references: [id], onDelete: Cascade)
-  granterMembership Membership @relation("GrantedAccess", fields: [granterMembershipId], references: [id], onDelete: Cascade)
+  action            Action       @relation(fields: [actionKey], references: [key], onDelete: Cascade)
+  granteeMembership Membership   @relation("ReceivedAccess", fields: [granteeMembershipId], references: [id], onDelete: Cascade)
+  granterMembership Membership   @relation("GrantedAccess", fields: [granterMembershipId], references: [id], onDelete: Cascade)
   businessUnit      BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
   department        Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   site              Site?        @relation(fields: [siteId], references: [id], onDelete: SetNull)
@@ -372,13 +415,13 @@ model AccessGrant {
 }
 
 model DelegationRule {
-  id        String   @id @default(uuid())
-  roleId    String
-  actionKey String
+  id          String   @id @default(uuid())
+  roleId      String
+  actionKey   String
   canTransfer Boolean  @default(false)
-  maxScope  String   @default("DEPARTMENT")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  maxScope    String   @default("DEPARTMENT")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   role   Role   @relation("DelegationSourceRole", fields: [roleId], references: [id], onDelete: Cascade)
   action Action @relation(fields: [actionKey], references: [key], onDelete: Cascade)
@@ -387,65 +430,66 @@ model DelegationRule {
 }
 
 model AuditLog {
-  id             String   @id @default(uuid())
-  action         String
-  actorUserId    String?
+  id                String   @id @default(uuid())
+  action            String
+  actorUserId       String?
   actorMembershipId String?
-  module         String
-  targetType     String
-  targetId       String?
-  legalEntityId  String?
-  businessUnitId String?
-  roleId         String?
-  details        Json?
-  ipAddress      String?
-  createdAt      DateTime @default(now())
+  module            String
+  targetType        String
+  targetId          String?
+  legalEntityId     String?
+  businessUnitId    String?
+  roleId            String?
+  details           Json?
+  ipAddress         String?
+  createdAt         DateTime @default(now())
 
-  actorUser      User?      @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
-  actorMembership Membership? @relation("ActorMembership", fields: [actorMembershipId], references: [id], onDelete: SetNull)
-  legalEntity    LegalEntity? @relation(fields: [legalEntityId], references: [id], onDelete: SetNull)
-  businessUnit   BusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  actorUser       User?         @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorMembership Membership?   @relation("ActorMembership", fields: [actorMembershipId], references: [id], onDelete: SetNull)
+  legalEntity     LegalEntity?  @relation(fields: [legalEntityId], references: [id], onDelete: SetNull)
+  businessUnit    BusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
 }
 
 model Customer {
-  id            String   @id @default(uuid())
-  legalEntityId String
+  id             String   @id @default(uuid())
+  legalEntityId  String
   businessUnitId String
-  departmentId  String?
-  code          String
-  name          String
-  contactName   String?
-  contactPhone  String?
-  contactEmail  String?
-  taxId         String?
-  address       String?
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  departmentId   String?
+  code           String
+  name           String
+  contactName    String?
+  contactPhone   String?
+  contactEmail   String?
+  taxId          String?
+  address        String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  legalEntity LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  department  Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  orders      Order[]
+  legalEntity       LegalEntity                @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit      BusinessUnit               @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department        Department?                @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  orders            Order[]
+  conversationLinks ConversationCustomerLink[]
 
   @@unique([businessUnitId, code])
   @@index([legalEntityId, businessUnitId])
 }
 
 model Product {
-  id            String   @id @default(uuid())
-  legalEntityId String
+  id             String   @id @default(uuid())
+  legalEntityId  String
   businessUnitId String
-  code          String
-  name          String
-  description   String?
-  category      String?
-  unit          String?
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  code           String
+  name           String
+  description    String?
+  category       String?
+  unit           String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  legalEntity LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  legalEntity  LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
   businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
   skus         ProductSku[]
   orderItems   OrderItem[]
@@ -455,18 +499,18 @@ model Product {
 }
 
 model ProductSku {
-  id          String   @id @default(uuid())
-  productId   String
-  code        String
-  barcode     String?
-  attributes  Json?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(uuid())
+  productId  String
+  code       String
+  barcode    String?
+  attributes Json?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  orderItems OrderItem[]
-  inventoryBalances InventoryBalance[]
+  product               Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orderItems            OrderItem[]
+  inventoryBalances     InventoryBalance[]
   inventoryTransactions InventoryTransaction[]
   inventoryReservations InventoryReservation[]
 
@@ -475,57 +519,57 @@ model ProductSku {
 }
 
 model Order {
-  id             String   @id @default(uuid())
-  legalEntityId  String
-  businessUnitId String
-  departmentId   String?
-  siteId         String?
-  customerId     String
-  orderNo        String
-  creatorUserId  String
-  ownedByMembershipId String
-  orderTemplateId String?
-  status         OrderStatus @default(DRAFT)
-  currency       String   @default("CNY")
-  productValueCents Int    @default(0)
-  shippingFeeCents Int     @default(0)
-  codAmountCents Int       @default(0)
-  paidAmountCents Int      @default(0)
-  logisticsChannel String?
-  recipientName   String?
-  recipientPhone  String?
-  recipientEmail  String?
+  id                    String      @id @default(uuid())
+  legalEntityId         String
+  businessUnitId        String
+  departmentId          String?
+  siteId                String?
+  customerId            String
+  orderNo               String
+  creatorUserId         String
+  ownedByMembershipId   String
+  orderTemplateId       String?
+  status                OrderStatus @default(DRAFT)
+  currency              String      @default("CNY")
+  productValueCents     Int         @default(0)
+  shippingFeeCents      Int         @default(0)
+  codAmountCents        Int         @default(0)
+  paidAmountCents       Int         @default(0)
+  logisticsChannel      String?
+  recipientName         String?
+  recipientPhone        String?
+  recipientEmail        String?
   emailValidationStatus String?
-  emailValidatedAt DateTime?
-  recipientCountryCode String?
-  recipientPostalCode String?
-  recipientRegion String?
-  recipientCity   String?
-  recipientAddress String?
-  packageWeightGrams Int?
-  paymentMethod   String?
-  customerWhatsapp String?
-  staffWhatsapp   String?
-  orderedAt       DateTime @default(now())
-  note           String?
-  exceptionNote  String?
-  customFields   Json?
-  templateSnapshot Json?
-  deliveredAt    DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  emailValidatedAt      DateTime?
+  recipientCountryCode  String?
+  recipientPostalCode   String?
+  recipientRegion       String?
+  recipientCity         String?
+  recipientAddress      String?
+  packageWeightGrams    Int?
+  paymentMethod         String?
+  customerWhatsapp      String?
+  staffWhatsapp         String?
+  orderedAt             DateTime    @default(now())
+  note                  String?
+  exceptionNote         String?
+  customFields          Json?
+  templateSnapshot      Json?
+  deliveredAt           DateTime?
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
 
-  legalEntity     LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  businessUnit    BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  department      Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  site            Site? @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  creatorUser      User     @relation("OrderCreator", fields: [creatorUserId], references: [id], onDelete: Restrict)
-  ownerMembership  Membership @relation("OrderOwner", fields: [ownedByMembershipId], references: [id], onDelete: Restrict)
-  orderTemplate    OrderTemplate? @relation(fields: [orderTemplateId], references: [id], onDelete: SetNull)
-  items           OrderItem[]
-  shipments       Shipment[]
-  expenses        Expense[]
+  legalEntity           LegalEntity            @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit          BusinessUnit           @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department            Department?            @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  site                  Site?                  @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  customer              Customer               @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  creatorUser           User                   @relation("OrderCreator", fields: [creatorUserId], references: [id], onDelete: Restrict)
+  ownerMembership       Membership             @relation("OrderOwner", fields: [ownedByMembershipId], references: [id], onDelete: Restrict)
+  orderTemplate         OrderTemplate?         @relation(fields: [orderTemplateId], references: [id], onDelete: SetNull)
+  items                 OrderItem[]
+  shipments             Shipment[]
+  expenses              Expense[]
   inventoryTransactions InventoryTransaction[]
   inventoryReservations InventoryReservation[]
 
@@ -549,7 +593,7 @@ model OrderTemplate {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  legalEntity  LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  legalEntity  LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
   businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
   orders       Order[]
 
@@ -558,15 +602,15 @@ model OrderTemplate {
 }
 
 model InventoryBalance {
-  id             String   @id @default(uuid())
-  businessUnitId String
-  siteId         String
-  skuId          String
-  onHandQuantity Int      @default(0)
-  reservedQuantity Int    @default(0)
-  version        Int      @default(0)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id               String   @id @default(uuid())
+  businessUnitId   String
+  siteId           String
+  skuId            String
+  onHandQuantity   Int      @default(0)
+  reservedQuantity Int      @default(0)
+  version          Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
   site         Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
@@ -625,7 +669,7 @@ model InventoryReservation {
 }
 
 model OrderItem {
-  id             String @id @default(uuid())
+  id             String  @id @default(uuid())
   orderId        String
   productId      String
   skuId          String?
@@ -634,46 +678,46 @@ model OrderItem {
   unitPriceCents Int
   subtotalCents  Int
 
-  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
-  sku       ProductSku? @relation(fields: [skuId], references: [id], onDelete: SetNull)
+  order   Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  sku     ProductSku? @relation(fields: [skuId], references: [id], onDelete: SetNull)
 
   @@index([orderId])
   @@index([productId])
 }
 
 model Shipment {
-  id             String   @id @default(uuid())
-  orderId        String
-  legalEntityId  String
-  businessUnitId String
-  siteId         String?
-  carrier        String?
-  trackingNo     String?
-  status         ShipmentStatus @default(PENDING)
-  shippedAt      DateTime?
-  deliveredAt    DateTime?
-  exceptionReason String?
-  exceptionSeverity LogisticsIssueSeverity?
-  workStatus     LogisticsWorkStatus @default(MONITORING)
-  ownerMembershipId String?
-  firstTrackedAt DateTime?
-  lastTrackedAt  DateTime?
+  id                  String                  @id @default(uuid())
+  orderId             String
+  legalEntityId       String
+  businessUnitId      String
+  siteId              String?
+  carrier             String?
+  trackingNo          String?
+  status              ShipmentStatus          @default(PENDING)
+  shippedAt           DateTime?
+  deliveredAt         DateTime?
+  exceptionReason     String?
+  exceptionSeverity   LogisticsIssueSeverity?
+  workStatus          LogisticsWorkStatus     @default(MONITORING)
+  ownerMembershipId   String?
+  firstTrackedAt      DateTime?
+  lastTrackedAt       DateTime?
   estimatedDeliveryAt DateTime?
-  nextFollowUpAt DateTime?
-  closedAt       DateTime?
-  closeReason    String?
-  memo           String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  nextFollowUpAt      DateTime?
+  closedAt            DateTime?
+  closeReason         String?
+  memo                String?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
 
-  order      Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  legalEntity LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  site       Site?       @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  ownerMembership Membership? @relation("ShipmentAftersalesOwner", fields: [ownerMembershipId], references: [id], onDelete: SetNull)
-  events     ShipmentEvent[]
-  followUps  LogisticsFollowUp[]
+  order           Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  legalEntity     LegalEntity         @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit    BusinessUnit        @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  site            Site?               @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  ownerMembership Membership?         @relation("ShipmentAftersalesOwner", fields: [ownerMembershipId], references: [id], onDelete: SetNull)
+  events          ShipmentEvent[]
+  followUps       LogisticsFollowUp[]
 
   @@index([orderId, status])
   @@index([businessUnitId, trackingNo])
@@ -682,26 +726,26 @@ model Shipment {
 }
 
 model ShipmentEvent {
-  id            String   @id @default(uuid())
-  shipmentId    String
-  occurredAt    DateTime @default(now())
-  eventType     String
-  statusMilestone String?
-  location      String?
-  source        String   @default("MANUAL")
-  externalEventKey String?
-  memo          String?
+  id                String   @id @default(uuid())
+  shipmentId        String
+  occurredAt        DateTime @default(now())
+  eventType         String
+  statusMilestone   String?
+  location          String?
+  source            String   @default("MANUAL")
+  externalEventKey  String?
+  memo              String?
   actorMembershipId String?
 
-  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  shipment        Shipment    @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
   actorMembership Membership? @relation("MembershipShipmentEvents", fields: [actorMembershipId], references: [id], onDelete: SetNull)
 
-  @@index([shipmentId, occurredAt])
   @@unique([shipmentId, source, externalEventKey])
+  @@index([shipmentId, occurredAt])
 }
 
 model LogisticsFollowUp {
-  id                String   @id @default(uuid())
+  id                String               @id @default(uuid())
   shipmentId        String
   businessUnitId    String
   actorUserId       String
@@ -711,153 +755,363 @@ model LogisticsFollowUp {
   toStatus          LogisticsWorkStatus?
   note              String?
   nextFollowUpAt    DateTime?
-  createdAt         DateTime @default(now())
+  createdAt         DateTime             @default(now())
 
-  shipment       Shipment   @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
-  businessUnit   BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
-  actorUser      User       @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
-  actorMembership Membership @relation(fields: [actorMembershipId], references: [id], onDelete: Restrict)
+  shipment        Shipment     @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  businessUnit    BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  actorUser       User         @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  actorMembership Membership   @relation(fields: [actorMembershipId], references: [id], onDelete: Restrict)
 
   @@index([shipmentId, createdAt])
   @@index([businessUnitId, toStatus, createdAt])
 }
 
 model Expense {
-  id            String   @id @default(uuid())
-  orderId       String?
-  legalEntityId String
+  id             String    @id @default(uuid())
+  orderId        String?
+  legalEntityId  String
   businessUnitId String
-  siteId        String?
-  actorUserId   String
-  category      String
-  amountCents   Int
-  paidAt        DateTime?
-  currency      String   @default("CNY")
-  note          String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  siteId         String?
+  actorUserId    String
+  category       String
+  amountCents    Int
+  paidAt         DateTime?
+  currency       String    @default("CNY")
+  note           String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  order       Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  legalEntity LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  order        Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  legalEntity  LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
   businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  site        Site?      @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  actorUser   User      @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  site         Site?        @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  actorUser    User         @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
 
   @@index([orderId, legalEntityId])
   @@index([businessUnitId, category])
 }
 
 model ApprovalRecord {
-  id            String   @id @default(uuid())
-  legalEntityId String
-  businessUnitId String
-  targetType    String
-  targetId      String
-  action        String
-  status        ApprovalStatus @default(PENDING)
+  id                      String         @id @default(uuid())
+  legalEntityId           String
+  businessUnitId          String
+  targetType              String
+  targetId                String
+  action                  String
+  status                  ApprovalStatus @default(PENDING)
   submittedByMembershipId String
-  approverMembershipId String?
-  reason        String?
-  comment       String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  approverMembershipId    String?
+  reason                  String?
+  comment                 String?
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
 
-  legalEntity LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  legalEntity  LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
   businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  submittedBy Membership @relation("SubmittedApprovals", fields: [submittedByMembershipId], references: [id], onDelete: Restrict)
-  approver   Membership? @relation("ApprovedApprovals", fields: [approverMembershipId], references: [id], onDelete: SetNull)
+  submittedBy  Membership   @relation("SubmittedApprovals", fields: [submittedByMembershipId], references: [id], onDelete: Restrict)
+  approver     Membership?  @relation("ApprovedApprovals", fields: [approverMembershipId], references: [id], onDelete: SetNull)
 
   @@index([businessUnitId, targetType, targetId])
 }
 
 model Attendance {
-  id            String   @id @default(uuid())
-  legalEntityId String
+  id             String         @id @default(uuid())
+  legalEntityId  String
   businessUnitId String
-  userId        String
-  membershipId  String
-  siteId        String?
+  userId         String
+  membershipId   String
+  siteId         String?
   attendanceDate DateTime
-  recordType    AttendanceType @default(CHECK_IN)
-  locationCode  String?
-  memo          String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  recordType     AttendanceType @default(CHECK_IN)
+  locationCode   String?
+  memo           String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
-  legalEntity   LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  businessUnit  BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  user          User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  membership    Membership @relation("MembershipAttendance", fields: [membershipId], references: [id], onDelete: Cascade)
-  site          Site? @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  legalEntity  LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  membership   Membership   @relation("MembershipAttendance", fields: [membershipId], references: [id], onDelete: Cascade)
+  site         Site?        @relation(fields: [siteId], references: [id], onDelete: SetNull)
 
   @@unique([businessUnitId, userId, attendanceDate, recordType])
   @@index([membershipId, attendanceDate])
 }
 
 model LeaveRequest {
-  id            String   @id @default(uuid())
-  legalEntityId String
-  businessUnitId String
-  membershipId  String
-  startDate     DateTime
-  endDate       DateTime
-  reason        String
-  status        LeaveStatus @default(PENDING)
+  id                   String      @id @default(uuid())
+  legalEntityId        String
+  businessUnitId       String
+  membershipId         String
+  startDate            DateTime
+  endDate              DateTime
+  reason               String
+  status               LeaveStatus @default(PENDING)
   approverMembershipId String?
-  rejectReason  String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  rejectReason         String?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
 
-  legalEntity LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  legalEntity  LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
   businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  membership  Membership @relation("LeaveRequester", fields: [membershipId], references: [id], onDelete: Cascade)
-  approver    Membership? @relation("LeaveApprover", fields: [approverMembershipId], references: [id], onDelete: SetNull)
+  membership   Membership   @relation("LeaveRequester", fields: [membershipId], references: [id], onDelete: Cascade)
+  approver     Membership?  @relation("LeaveApprover", fields: [approverMembershipId], references: [id], onDelete: SetNull)
 
   @@index([businessUnitId, status])
 }
 
 model Announcement {
-  id            String   @id @default(uuid())
-  legalEntityId String
+  id             String    @id @default(uuid())
+  legalEntityId  String
   businessUnitId String
-  siteId        String?
-  title         String
-  content       String
-  isActive      Boolean  @default(true)
-  publishedAt   DateTime?
-  expiredAt     DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  siteId         String?
+  title          String
+  content        String
+  isActive       Boolean   @default(true)
+  publishedAt    DateTime?
+  expiredAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  legalEntity LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  legalEntity  LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
   businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  site        Site?       @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  site         Site?        @relation(fields: [siteId], references: [id], onDelete: SetNull)
 
   @@index([businessUnitId, isActive])
 }
 
 model Document {
-  id            String   @id @default(uuid())
-  legalEntityId String
+  id             String   @id @default(uuid())
+  legalEntityId  String
   businessUnitId String
-  departmentId  String?
-  siteId        String?
-  ownerUserId   String
-  targetType    String
-  targetId      String?
-  title         String
-  fileName      String
-  fileType      String
-  storagePath   String
-  fileSizeBytes Int
-  checksum      String?
-  metadata      Json?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  departmentId   String?
+  siteId         String?
+  ownerUserId    String
+  targetType     String
+  targetId       String?
+  title          String
+  fileName       String
+  fileType       String
+  storagePath    String
+  fileSizeBytes  Int
+  checksum       String?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  legalEntity LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  legalEntity  LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
   businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  site       Site?       @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  ownerUser  User       @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  department   Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  site         Site?        @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  ownerUser    User         @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+}
+
+model ChannelConnection {
+  id             String    @id @default(uuid())
+  legalEntityId  String
+  businessUnitId String
+  departmentId   String?
+  providerKey    String
+  displayName    String
+  externalRef    String?
+  configuration  Json?
+  isActive       Boolean   @default(true)
+  lastSyncAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  legalEntity      LegalEntity       @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit     BusinessUnit      @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department       Department?       @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  identities       ContactIdentity[]
+  conversations    Conversation[]
+  syncCursors      SyncCursor[]
+  deliveryAttempts DeliveryAttempt[]
+
+  @@unique([businessUnitId, providerKey, externalRef])
+  @@index([businessUnitId, departmentId, isActive])
+}
+
+model ContactIdentity {
+  id                  String   @id @default(uuid())
+  businessUnitId      String
+  channelConnectionId String
+  providerContactKey  String
+  displayName         String?
+  normalizedAddress   String?
+  avatarUrl           String?
+  metadata            Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  businessUnit      BusinessUnit      @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  channelConnection ChannelConnection @relation(fields: [channelConnectionId], references: [id], onDelete: Cascade)
+  conversations     Conversation[]
+
+  @@unique([channelConnectionId, providerContactKey])
+  @@index([businessUnitId, normalizedAddress])
+}
+
+model Conversation {
+  id                  String             @id @default(uuid())
+  legalEntityId       String
+  businessUnitId      String
+  departmentId        String?
+  channelConnectionId String
+  contactIdentityId   String
+  providerThreadKey   String
+  subject             String?
+  preview             String?
+  status              ConversationStatus @default(OPEN)
+  priority            Int                @default(0)
+  unreadCount         Int                @default(0)
+  lastMessageAt       DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  legalEntity       LegalEntity                @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit      BusinessUnit               @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department        Department?                @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  channelConnection ChannelConnection          @relation(fields: [channelConnectionId], references: [id], onDelete: Cascade)
+  contactIdentity   ContactIdentity            @relation(fields: [contactIdentityId], references: [id], onDelete: Restrict)
+  messages          Message[]
+  assignments       ConversationAssignment[]
+  tags              ConversationTag[]
+  customerLinks     ConversationCustomerLink[]
+  auditEvents       InboxAuditEvent[]
+
+  @@unique([channelConnectionId, providerThreadKey])
+  @@index([businessUnitId, departmentId, status, lastMessageAt])
+}
+
+model Message {
+  id                 String                @id @default(uuid())
+  conversationId     String
+  providerMessageKey String
+  direction          MessageDirection
+  deliveryStatus     MessageDeliveryStatus @default(RECEIVED)
+  senderIdentity     String?
+  contentText        String?
+  contentType        String                @default("text")
+  occurredAt         DateTime
+  rawMetadata        Json?
+  createdAt          DateTime              @default(now())
+
+  conversation     Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  deliveryAttempts DeliveryAttempt[]
+
+  @@unique([conversationId, providerMessageKey])
+  @@index([conversationId, occurredAt])
+}
+
+model ConversationCustomerLink {
+  id             String   @id @default(uuid())
+  conversationId String
+  customerId     String
+  linkType       String   @default("CUSTOMER")
+  linkedAt       DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, customerId])
+}
+
+model ConversationAssignment {
+  id                     String    @id @default(uuid())
+  conversationId         String
+  assigneeMembershipId   String
+  assignedByMembershipId String
+  isActive               Boolean   @default(true)
+  assignedAt             DateTime  @default(now())
+  endedAt                DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  assignee     Membership   @relation("ConversationAssignee", fields: [assigneeMembershipId], references: [id], onDelete: Restrict)
+  assignedBy   Membership   @relation("ConversationAssigner", fields: [assignedByMembershipId], references: [id], onDelete: Restrict)
+
+  @@index([conversationId, isActive])
+  @@index([assigneeMembershipId, isActive])
+}
+
+model InboxTag {
+  id             String   @id @default(uuid())
+  businessUnitId String
+  name           String
+  color          String   @default("violet")
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  businessUnit  BusinessUnit      @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  conversations ConversationTag[]
+
+  @@unique([businessUnitId, name])
+}
+
+model ConversationTag {
+  conversationId String
+  tagId          String
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  tag          InboxTag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, tagId])
+}
+
+model DeliveryAttempt {
+  id                  String                @id @default(uuid())
+  channelConnectionId String
+  messageId           String?
+  operation           String
+  idempotencyKey      String
+  status              DeliveryAttemptStatus @default(PENDING)
+  attemptCount        Int                   @default(0)
+  nextRetryAt         DateTime?
+  lastErrorCode       String?
+  lastErrorMessage    String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  channelConnection ChannelConnection @relation(fields: [channelConnectionId], references: [id], onDelete: Cascade)
+  message           Message?          @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@unique([channelConnectionId, idempotencyKey])
+  @@index([status, nextRetryAt])
+}
+
+model SyncCursor {
+  id                  String    @id @default(uuid())
+  channelConnectionId String
+  cursorKey           String
+  cursorValue         String?
+  lockedAt            DateTime?
+  lastSuccessAt       DateTime?
+  lastErrorAt         DateTime?
+  lastErrorCode       String?
+  updatedAt           DateTime  @updatedAt
+
+  channelConnection ChannelConnection @relation(fields: [channelConnectionId], references: [id], onDelete: Cascade)
+
+  @@unique([channelConnectionId, cursorKey])
+}
+
+model InboxAuditEvent {
+  id                String   @id @default(uuid())
+  legalEntityId     String
+  businessUnitId    String
+  conversationId    String?
+  actorUserId       String?
+  actorMembershipId String?
+  eventType         String
+  details           Json?
+  createdAt         DateTime @default(now())
+
+  legalEntity     LegalEntity   @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit    BusinessUnit  @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  conversation    Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  actorUser       User?         @relation("InboxAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorMembership Membership?   @relation("InboxAuditMembership", fields: [actorMembershipId], references: [id], onDelete: SetNull)
+
+  @@index([businessUnitId, conversationId, createdAt])
 }
