@@ -89,6 +89,7 @@ model LegalEntity {
   auditLogs         AuditLog[]
   shipments         Shipment[]
   approvalRecords   ApprovalRecord[]
+  orderTemplates    OrderTemplate[]
 }
 
 model BusinessUnit {
@@ -120,6 +121,7 @@ model BusinessUnit {
   inventoryBalances InventoryBalance[]
   inventoryTransactions InventoryTransaction[]
   inventoryReservations InventoryReservation[]
+  orderTemplates       OrderTemplate[]
 
   @@unique([legalEntityId, code])
   @@index([legalEntityId])
@@ -462,14 +464,30 @@ model Order {
   orderNo        String
   creatorUserId  String
   ownedByMembershipId String
+  orderTemplateId String?
   status         OrderStatus @default(DRAFT)
   currency       String   @default("CNY")
   productValueCents Int    @default(0)
   shippingFeeCents Int     @default(0)
   codAmountCents Int       @default(0)
   paidAmountCents Int      @default(0)
+  logisticsChannel String?
+  recipientName   String?
+  recipientPhone  String?
+  recipientCountryCode String?
+  recipientPostalCode String?
+  recipientRegion String?
+  recipientCity   String?
+  recipientAddress String?
+  packageWeightGrams Int?
+  paymentMethod   String?
+  customerWhatsapp String?
+  staffWhatsapp   String?
+  orderedAt       DateTime @default(now())
   note           String?
   exceptionNote  String?
+  customFields   Json?
+  templateSnapshot Json?
   deliveredAt    DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -481,6 +499,7 @@ model Order {
   customer        Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
   creatorUser      User     @relation("OrderCreator", fields: [creatorUserId], references: [id], onDelete: Restrict)
   ownerMembership  Membership @relation("OrderOwner", fields: [ownedByMembershipId], references: [id], onDelete: Restrict)
+  orderTemplate    OrderTemplate? @relation(fields: [orderTemplateId], references: [id], onDelete: SetNull)
   items           OrderItem[]
   shipments       Shipment[]
   expenses        Expense[]
@@ -490,6 +509,28 @@ model Order {
   @@unique([businessUnitId, orderNo])
   @@index([legalEntityId, businessUnitId])
   @@index([customerId, status])
+  @@index([orderTemplateId])
+}
+
+model OrderTemplate {
+  id             String   @id @default(uuid())
+  legalEntityId  String
+  businessUnitId String
+  code           String
+  name           String
+  description    String?
+  configuration  Json
+  isDefault      Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  legalEntity  LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  orders       Order[]
+
+  @@unique([businessUnitId, code])
+  @@index([businessUnitId, isActive])
 }
 
 model InventoryBalance {

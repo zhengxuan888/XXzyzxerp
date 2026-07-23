@@ -52,6 +52,8 @@ const actionDefs: SeedAction[] = [
   { key: "sku.create", name: "SKU create", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "inventory.read", name: "Inventory read", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "inventory.adjust", name: "Inventory adjust", namespace: "erp", scope: "BUSINESS_UNIT" },
+  { key: "order_template.read", name: "Order template read", namespace: "erp", scope: "BUSINESS_UNIT" },
+  { key: "order_template.manage", name: "Order template manage", namespace: "erp", scope: "BUSINESS_UNIT" },
 
   { key: "order.read", name: "Order read", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "order.create", name: "Order create", namespace: "erp", scope: "BUSINESS_UNIT" },
@@ -191,6 +193,14 @@ const menuDefs = [
     path: "/admin/orders",
     requiredActionKey: "order.read",
     sortOrder: 120,
+    isActive: true,
+  },
+  {
+    key: "order-templates",
+    label: "订单模板",
+    path: "/admin/order-templates",
+    requiredActionKey: "order_template.read",
+    sortOrder: 118,
     isActive: true,
   },
   {
@@ -436,6 +446,8 @@ async function main() {
     "sku.create",
     "inventory.read",
     "inventory.adjust",
+    "order_template.read",
+    "order_template.manage",
     "order.read",
     "order.create",
     "order.update",
@@ -562,6 +574,112 @@ async function main() {
       },
     });
   }
+
+  const demoCustomer = await prisma.customer.upsert({
+    where: { businessUnitId_code: { businessUnitId: businessUnit.id, code: "DEMO-CUSTOMER-001" } },
+    update: {
+      name: "演示客户",
+      contactName: "王女士",
+      contactPhone: "13800000000",
+      address: "演示地址（非真实数据）",
+      isActive: true,
+    },
+    create: {
+      legalEntityId: legalEntity.id,
+      businessUnitId: businessUnit.id,
+      departmentId: rootDepartment.id,
+      code: "DEMO-CUSTOMER-001",
+      name: "演示客户",
+      contactName: "王女士",
+      contactPhone: "13800000000",
+      address: "演示地址（非真实数据）",
+    },
+  });
+
+  const demoProduct = await prisma.product.upsert({
+    where: { businessUnitId_code: { businessUnitId: businessUnit.id, code: "DEMO-PRODUCT-001" } },
+    update: { name: "演示商品", category: "演示分类", unit: "件", isActive: true },
+    create: {
+      legalEntityId: legalEntity.id,
+      businessUnitId: businessUnit.id,
+      code: "DEMO-PRODUCT-001",
+      name: "演示商品",
+      description: "仅用于本地 ERP 流程验收",
+      category: "演示分类",
+      unit: "件",
+    },
+  });
+
+  const demoSku = await prisma.productSku.upsert({
+    where: { productId_code: { productId: demoProduct.id, code: "DEMO-SKU-RED" } },
+    update: { barcode: "DEMO000001", isActive: true },
+    create: {
+      productId: demoProduct.id,
+      code: "DEMO-SKU-RED",
+      barcode: "DEMO000001",
+      attributes: { color: "红色", purpose: "本地演示" },
+    },
+  });
+
+  await prisma.orderTemplate.upsert({
+    where: { businessUnitId_code: { businessUnitId: businessUnit.id, code: "DEFAULT_COD" } },
+    update: {
+      name: "Facebook COD 标准订单",
+      description: "默认 COD 订单录入模板",
+      configuration: {
+        currency: "CNY",
+        defaultShippingFeeCents: 0,
+        defaultCodAmountCents: 0,
+        requireCodAmount: true,
+        requireCustomerPhone: true,
+        customFields: [
+          { key: "salesChannel", label: "销售渠道", type: "text", required: false },
+          { key: "customerRemark", label: "客户要求", type: "text", required: false },
+        ],
+      },
+      isDefault: true,
+      isActive: true,
+    },
+    create: {
+      legalEntityId: legalEntity.id,
+      businessUnitId: businessUnit.id,
+      code: "DEFAULT_COD",
+      name: "Facebook COD 标准订单",
+      description: "默认 COD 订单录入模板",
+      configuration: {
+        currency: "CNY",
+        defaultShippingFeeCents: 0,
+        defaultCodAmountCents: 0,
+        requireCodAmount: true,
+        requireCustomerPhone: true,
+        customFields: [
+          { key: "salesChannel", label: "销售渠道", type: "text", required: false },
+          { key: "customerRemark", label: "客户要求", type: "text", required: false },
+        ],
+      },
+      isDefault: true,
+    },
+  });
+
+  await prisma.inventoryBalance.upsert({
+    where: {
+      businessUnitId_siteId_skuId: {
+        businessUnitId: businessUnit.id,
+        siteId: site.id,
+        skuId: demoSku.id,
+      },
+    },
+    update: {},
+    create: {
+      businessUnitId: businessUnit.id,
+      siteId: site.id,
+      skuId: demoSku.id,
+      onHandQuantity: 100,
+      reservedQuantity: 0,
+    },
+  });
+
+  void demoCustomer;
 
   for (const action of actions) {
     await prisma.delegationRule.upsert({

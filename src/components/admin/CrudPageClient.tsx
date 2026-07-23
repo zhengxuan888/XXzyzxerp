@@ -32,6 +32,7 @@ export type CrudPageProps = {
   createFields: FieldSpec[];
   dataColumns: DataCell[];
   listTitle: string;
+  showCreate?: boolean;
 };
 
 const API_BASE = "/api/admin";
@@ -48,6 +49,7 @@ export default function CrudPage({
   createFields,
   dataColumns,
   listTitle,
+  showCreate = true,
 }: CrudPageProps) {
   const pathname = usePathname();
   const [error, setError] = useState<string | null>(null);
@@ -113,7 +115,7 @@ export default function CrudPage({
         <p className="text-xs text-gray-500">当前位置：{pathname}</p>
       </div>
 
-      <section className="rounded-lg border border-gray-200 p-4">
+      {showCreate && <section className="rounded-lg border border-gray-200 p-4">
         <h3 className="mb-3 text-sm font-medium text-gray-600">新增</h3>
         {!canCreate && <p className="text-sm text-gray-500">当前岗位没有新增权限。</p>}
         {canCreate ? (
@@ -152,7 +154,7 @@ export default function CrudPage({
             </div>
           </form>
         ) : null}
-      </section>
+      </section>}
 
       <section className="rounded-lg border border-gray-200 p-4">
         <h3 className="mb-3 text-sm font-medium text-gray-600">数据列表</h3>

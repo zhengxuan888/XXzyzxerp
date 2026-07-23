@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 
 import CrudPage from "@/components/admin/CrudPage";
+import OrderEntryForm from "@/components/admin/OrderEntryForm";
+import { parseOrderTemplateConfiguration } from "@/lib/order-template";
 import { formatMoneyCents } from "@/lib/money";
 import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
@@ -43,10 +45,10 @@ export default async function OrdersPage() {
   const products = await prisma.product.findMany({
     where: { isActive: true, businessUnitId: membership.businessUnitId },
     orderBy: { createdAt: "desc" },
-    select: { id: true, code: true, name: true },
+    select: { id: true, code: true, name: true, skus: { where: { isActive: true }, orderBy: { code: "asc" } } },
   });
 
-  const rows = await prisma.order.findMany({
+  const [rows, templates] = await Promise.all([prisma.order.findMany({
     where: { businessUnitId: membership.businessUnitId },
     orderBy: { createdAt: "desc" },
     include: {
@@ -54,13 +56,32 @@ export default async function OrdersPage() {
       creatorUser: { select: { username: true } },
       items: { select: { id: true, quantity: true, productName: true } },
     },
-  });
+  }), prisma.orderTemplate.findMany({
+    where: { businessUnitId: membership.businessUnitId, isActive: true },
+    orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+    select: { id: true, code: true, name: true, configuration: true, isDefault: true },
+  })]);
 
   return (
-    <CrudPage
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold text-gray-900">录入订单</h1>
+        <p className="mt-1 text-sm text-gray-500">选择模板后自动带出渠道、币种、运费和必填规则。</p>
+      </div>
+      <OrderEntryForm
+        canCreate={canCreate.allowed}
+        customers={customers}
+        products={products}
+        templates={templates.map((template) => ({
+          ...template,
+          configuration: parseOrderTemplateConfiguration(template.configuration),
+        }))}
+      />
+      <CrudPage
       apiBase="/api/mvp"
       resource="orders"
-      listTitle="Orders"
+      listTitle="订单列表"
+      showCreate={false}
       canCreate={canCreate.allowed}
       canDelete={canDelete.allowed}
       rows={rows}
@@ -80,6 +101,18 @@ export default async function OrdersPage() {
           required: true,
           type: "select",
           options: products.map((product) => ({ value: product.id, label: `${product.code} ${product.name}` })),
+        },
+        {
+          key: "skuId",
+          label: "SKU",
+          required: true,
+          type: "select",
+          options: products.flatMap((product) =>
+            product.skus.map((sku) => ({
+              value: sku.id,
+              label: `${product.code} / ${sku.code} · ${product.name}`,
+            })),
+          ),
         },
         { key: "productName", label: "Product Name", required: true },
         { key: "quantity", label: "Quantity", type: "number", required: true },
@@ -126,6 +159,7 @@ export default async function OrdersPage() {
           },
         },
       ]}
-    />
+      />
+    </div>
   );
 }

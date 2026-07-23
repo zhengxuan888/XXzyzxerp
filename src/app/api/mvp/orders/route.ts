@@ -1,6 +1,6 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 
-import { OrderStatus } from "@prisma/client";
+import { OrderStatus, Prisma } from "@prisma/client";
 
 import { requireAuthContext } from "@/lib/api-auth";
 import { checkPermission } from "@/lib/permission";
@@ -10,6 +10,7 @@ import { fail, ok, paginated, parsePagination } from "@/lib/api-response";
 import { finalizeOrderInventory, InventoryError, reserveOrderInventory } from "@/lib/inventory";
 import { canTransitionOrder } from "@/lib/order-state";
 import { normalizeMoneyCents } from "@/lib/money";
+import { parseOrderTemplateConfiguration, sanitizeOrderCustomValues } from "@/lib/order-template";
 
 type ParsedOrderItem = {
   productId: string;
@@ -151,6 +152,33 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "At least one order item is required." }, { status: 400 });
   }
 
+  const orderTemplate = typeof body.orderTemplateId === "string"
+    ? await prisma.orderTemplate.findFirst({
+        where: { id: body.orderTemplateId, businessUnitId: auth.membership.businessUnitId, isActive: true },
+      })
+    : await prisma.orderTemplate.findFirst({
+        where: { businessUnitId: auth.membership.businessUnitId, isActive: true, isDefault: true },
+      });
+  if (typeof body.orderTemplateId === "string" && !orderTemplate) {
+    return fail("INVALID_ORDER_TEMPLATE", "订单模板不属于当前业务板块或已停用。", 400);
+  }
+  const templateConfiguration = parseOrderTemplateConfiguration(orderTemplate?.configuration);
+  if (templateConfiguration.requireSku && items.some((item) => !item.skuId)) {
+    return fail("SKU_REQUIRED", "当前订单模板要求必须选择 SKU。", 400);
+  }
+  const recipientPhone = typeof body.recipientPhone === "string" ? body.recipientPhone.trim() : "";
+  const recipientAddress = typeof body.recipientAddress === "string" ? body.recipientAddress.trim() : "";
+  if (templateConfiguration.requireRecipientPhone && !recipientPhone) {
+    return fail("RECIPIENT_PHONE_REQUIRED", "当前订单模板要求填写收件人电话。", 400);
+  }
+  if (templateConfiguration.requireRecipientAddress && !recipientAddress) {
+    return fail("RECIPIENT_ADDRESS_REQUIRED", "当前订单模板要求填写详细地址。", 400);
+  }
+  const customFields = sanitizeOrderCustomValues(body.customFields, templateConfiguration.customFields);
+  if (customFields.missing.length > 0) {
+    return fail("CUSTOM_FIELDS_REQUIRED", `请填写：${customFields.missing.join("、")}`, 400);
+  }
+
   const customer = await prisma.customer.findFirst({
     where: { id: body.customerId, businessUnitId: auth.membership.businessUnitId },
     select: { id: true },
@@ -190,10 +218,19 @@ export async function POST(request: NextRequest) {
   let codAmount = 0;
   let shippingFee = 0;
   try {
-    codAmount = body.codAmountCents == null ? 0 : normalizeMoneyCents(body.codAmountCents);
-    shippingFee = body.shippingFeeCents == null ? 0 : normalizeMoneyCents(body.shippingFeeCents);
+    codAmount = body.codAmountCents == null ? templateConfiguration.defaultCodAmountCents : normalizeMoneyCents(body.codAmountCents);
+    shippingFee = body.shippingFeeCents == null ? templateConfiguration.defaultShippingFeeCents : normalizeMoneyCents(body.shippingFeeCents);
   } catch {
     return fail("INVALID_MONEY_CENTS", "Money fields must be non-negative safe integers in minor currency units.", 400);
+  }
+  if (templateConfiguration.requireCodAmount && codAmount <= 0) {
+    return fail("COD_AMOUNT_REQUIRED", "当前订单模板要求 COD 金额必须大于 0。", 400);
+  }
+  const orderedAt = typeof body.orderedAt === "string" ? new Date(body.orderedAt) : new Date();
+  if (Number.isNaN(orderedAt.getTime())) return fail("INVALID_ORDER_DATE", "订单日期格式不正确。", 400);
+  const packageWeightGrams = Number(body.packageWeightGrams ?? 0);
+  if (!Number.isSafeInteger(packageWeightGrams) || packageWeightGrams < 0) {
+    return fail("INVALID_PACKAGE_WEIGHT", "包裹重量格式不正确。", 400);
   }
 
   const productValue = items.reduce((sum: number, item: ParsedOrderItem) => sum + item.quantity * item.unitPriceCents, 0);
@@ -212,14 +249,36 @@ export async function POST(request: NextRequest) {
         orderNo,
         creatorUserId: auth.userId,
         ownedByMembershipId: auth.membership.id,
+        orderTemplateId: orderTemplate?.id,
         status: "DRAFT",
-        currency: typeof body.currency === "string" ? body.currency : "CNY",
+        currency: typeof body.currency === "string" ? body.currency.trim().toUpperCase().slice(0, 3) : templateConfiguration.currency,
         productValueCents: productValue,
         shippingFeeCents: shippingFee,
         codAmountCents: codAmount,
         paidAmountCents: 0,
+        logisticsChannel: typeof body.logisticsChannel === "string" ? body.logisticsChannel.trim().slice(0, 50) : templateConfiguration.logisticsChannel,
+        recipientName: typeof body.recipientName === "string" ? body.recipientName.trim().slice(0, 100) : null,
+        recipientPhone: recipientPhone || null,
+        recipientCountryCode: typeof body.recipientCountryCode === "string" ? body.recipientCountryCode.trim().toUpperCase().slice(0, 3) : null,
+        recipientPostalCode: typeof body.recipientPostalCode === "string" ? body.recipientPostalCode.trim().slice(0, 30) : null,
+        recipientRegion: typeof body.recipientRegion === "string" ? body.recipientRegion.trim().slice(0, 100) : null,
+        recipientCity: typeof body.recipientCity === "string" ? body.recipientCity.trim().slice(0, 100) : null,
+        recipientAddress: recipientAddress || null,
+        packageWeightGrams,
+        paymentMethod: typeof body.paymentMethod === "string" ? body.paymentMethod.trim().slice(0, 30) : templateConfiguration.paymentMethod,
+        customerWhatsapp: typeof body.customerWhatsapp === "string" ? body.customerWhatsapp.trim().slice(0, 50) : null,
+        staffWhatsapp: typeof body.staffWhatsapp === "string" ? body.staffWhatsapp.trim().slice(0, 50) : null,
+        orderedAt,
         note: typeof body.note === "string" ? body.note : null,
         exceptionNote: typeof body.exceptionNote === "string" ? body.exceptionNote : null,
+        customFields: customFields.values as Prisma.InputJsonValue,
+        templateSnapshot: orderTemplate ? {
+          templateId: orderTemplate.id,
+          code: orderTemplate.code,
+          name: orderTemplate.name,
+          configuration: templateConfiguration,
+          capturedAt: new Date().toISOString(),
+        } as Prisma.InputJsonValue : undefined,
         items: {
           create: items.map((item: ParsedOrderItem) => ({
             productId: item.productId,
