@@ -1,36 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 择优臻选 ERP V2
 
-## Getting Started
+Facebook COD 业务板块的全新 ERP V2。组织、Membership、角色、动作、Scope、菜单和临时授权均由数据库配置，不依赖角色名或业务板块名称判断。
 
-First, run the development server:
+## 本地运行
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
+要求 Node.js 20+、pnpm 10+、PostgreSQL 16。推荐使用 Docker：
+
+```powershell
+Copy-Item .env.example .env
+docker compose up -d
+pnpm install
+pnpm run prisma:generate
+pnpm run prisma:migrate:dev
+pnpm run db:seed
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+打开 `http://localhost:3000/login`。Seed 默认演示账号为 `founder`，密码来自 `SEED_FOUNDER_PASSWORD`；未设置时仅本地使用 `ChangeMe#2026`，任何共享或正式环境必须替换。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 质量门禁
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```powershell
+pnpm lint
+pnpm ts-check
+pnpm test
+pnpm run prisma:validate
+pnpm build
+```
 
-## Learn More
+## 安全边界
 
-To learn more about Next.js, take a look at the following resources:
+- 所有业务 API 从已验签 Session 的当前 Membership 推导组织上下文，不信任请求体中的组织 ID。
+- 敏感接口同时校验 Action、Scope 和 Membership；前端菜单隐藏不视为鉴权。
+- Access Grant 必须满足 Delegation Rule，撤销或到期后菜单和 API 同时失效。
+- 金额以最小货币单位整数保存；库存使用数据库事务、条件更新和幂等流水，禁止负库存与静默跳过。
+- `.env`、真实密码、Token、Session、旧生产数据不得提交。
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 发布与回滚
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+构建产物应绑定 Git 提交哈希并作为不可变版本发布。切换版本前执行迁移备份和健康检查；应用回滚切换到上一不可变版本。数据库迁移必须优先采用向前兼容的 expand/contract 策略，不依赖自动降级脚本。发布后若客户端仍加载旧资源，先确认入口 HTML 未被长缓存，再按版本清理 CDN 缓存。
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+当前任务不授权生产部署、push 或旧系统清理。

@@ -1,0 +1,129 @@
+import { redirect } from "next/navigation";
+
+import CrudPage from "@/components/admin/CrudPage";
+import { prisma } from "@/lib/prisma";
+import { getSessionFromCookie } from "@/lib/session";
+import { getActiveMembershipById } from "@/lib/auth";
+import { checkPermission } from "@/lib/permission";
+
+export default async function MembershipsPage() {
+  const session = await getSessionFromCookie();
+  if (!session?.activeMembershipId) redirect("/login");
+  const membership = await getActiveMembershipById(session.activeMembershipId);
+  if (!membership) redirect("/login");
+
+  const [canRead, canCreate, canDelete] = await Promise.all([
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "membership.read",
+      targetBusinessUnitId: membership.businessUnitId,
+    }),
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "membership.create",
+      targetBusinessUnitId: membership.businessUnitId,
+    }),
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "membership.delete",
+      targetBusinessUnitId: membership.businessUnitId,
+    }),
+  ]);
+  if (!canRead.allowed) redirect("/admin");
+
+  const [rows, users, legalEntities, businessUnits, roles, departments, sites] = await Promise.all([
+    prisma.membership.findMany({ orderBy: { createdAt: "desc" }, include: { user: true, role: true, businessUnit: true, department: true, site: true } }),
+    prisma.user.findMany({ orderBy: { username: "asc" } }),
+    prisma.legalEntity.findMany({ orderBy: { name: "asc" } }),
+    prisma.businessUnit.findMany({ orderBy: { name: "asc" } }),
+    prisma.role.findMany({ orderBy: { name: "asc" } }),
+    prisma.department.findMany({ orderBy: { name: "asc" } }),
+    prisma.site.findMany({ orderBy: { code: "asc" } }),
+  ]);
+
+  return (
+    <CrudPage
+      resource="memberships"
+      listTitle="Memberships"
+      canCreate={canCreate.allowed}
+      canDelete={canDelete.allowed}
+      rows={rows}
+      createFields={[
+        {
+          key: "userId",
+          label: "User",
+          type: "select",
+          required: true,
+          options: users.map((user) => ({ value: user.id, label: `${user.username} (${user.fullName})` })),
+        },
+        {
+          key: "legalEntityId",
+          label: "Legal Entity",
+          type: "select",
+          required: true,
+          options: legalEntities.map((entity) => ({ value: entity.id, label: entity.name })),
+        },
+        {
+          key: "businessUnitId",
+          label: "Business Unit",
+          type: "select",
+          required: true,
+          options: businessUnits.map((unit) => ({ value: unit.id, label: unit.name })),
+        },
+        {
+          key: "roleId",
+          label: "Role",
+          type: "select",
+          required: true,
+          options: roles.map((role) => ({ value: role.id, label: role.name })),
+        },
+        {
+          key: "departmentId",
+          label: "Department (optional)",
+          type: "select",
+          options: departments.map((department) => ({ value: department.id, label: `${department.code} - ${department.name}` })),
+        },
+        {
+          key: "siteId",
+          label: "Site (optional)",
+          type: "select",
+          options: sites.map((site) => ({ value: site.id, label: site.name })),
+        },
+        {
+          key: "scope",
+          label: "Scope",
+          type: "select",
+          required: true,
+          options: [
+            { value: "ALL", label: "ALL" },
+            { value: "BUSINESS_UNIT", label: "BUSINESS_UNIT" },
+            { value: "DEPARTMENT", label: "DEPARTMENT" },
+            { value: "SITE", label: "SITE" },
+          ],
+        },
+      ]}
+      dataColumns={[
+        {
+          key: "user",
+          label: "User",
+          render: (row) => ((row.user as { username?: string } | undefined)?.username ?? "-"),
+        },
+        {
+          key: "businessUnit",
+          label: "Business Unit",
+          render: (row) => ((row.businessUnit as { name?: string } | undefined)?.name ?? "-"),
+        },
+        { key: "role", label: "Role", render: (row) => ((row.role as { name?: string } | undefined)?.name ?? "-") },
+        {
+          key: "department",
+          label: "Department",
+          render: (row) => ((row.department as { name?: string } | undefined)?.name ?? "-"),
+        },
+        { key: "scope", label: "Scope" },
+      ]}
+    />
+  );
+}

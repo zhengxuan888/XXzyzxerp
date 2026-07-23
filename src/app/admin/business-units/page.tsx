@@ -1,0 +1,71 @@
+import { redirect } from "next/navigation";
+
+import CrudPage from "@/components/admin/CrudPage";
+import { prisma } from "@/lib/prisma";
+import { getSessionFromCookie } from "@/lib/session";
+import { getActiveMembershipById } from "@/lib/auth";
+import { checkPermission } from "@/lib/permission";
+
+export default async function BusinessUnitsPage() {
+  const session = await getSessionFromCookie();
+  if (!session?.activeMembershipId) redirect("/login");
+  const membership = await getActiveMembershipById(session.activeMembershipId);
+  if (!membership) redirect("/login");
+
+  const [canRead, canCreate, canDelete] = await Promise.all([
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "business_unit.read",
+      targetBusinessUnitId: membership.businessUnitId,
+    }),
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "business_unit.create",
+      targetBusinessUnitId: membership.businessUnitId,
+    }),
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "business_unit.delete",
+      targetBusinessUnitId: membership.businessUnitId,
+    }),
+  ]);
+  if (!canRead.allowed) redirect("/admin");
+
+  const [rows, legalEntities] = await Promise.all([
+    prisma.businessUnit.findMany({ orderBy: { createdAt: "desc" }, include: { legalEntity: true } }),
+    prisma.legalEntity.findMany({ orderBy: { name: "asc" } }),
+  ]);
+
+  return (
+    <CrudPage
+      resource="business-units"
+      listTitle="Business Units"
+      canCreate={canCreate.allowed}
+      canDelete={canDelete.allowed}
+      rows={rows}
+      createFields={[
+        { key: "code", label: "Code", required: true },
+        { key: "name", label: "Name", required: true },
+        {
+          key: "legalEntityId",
+          label: "Legal entity",
+          type: "select",
+          required: true,
+          options: legalEntities.map((legal) => ({ value: legal.id, label: legal.name })),
+        },
+      ]}
+      dataColumns={[
+        { key: "code", label: "Code" },
+        { key: "name", label: "Name" },
+        {
+          key: "legalEntity",
+          label: "Legal entity",
+          render: (row) => ((row.legalEntity as { name?: string } | undefined)?.name ?? "-"),
+        },
+      ]}
+    />
+  );
+}
