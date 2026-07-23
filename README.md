@@ -16,6 +16,20 @@ pnpm run db:seed
 pnpm dev
 ```
 
+上线准备与本地 dry-run：
+
+```powershell
+pnpm run config:check:local
+pnpm run deploy:dry-run
+```
+
+预发布配置以 `.env.staging.example` 为键名模板，真实值只能在服务器或 Secret Manager 注入。相关门禁见：
+
+- `docs/STAGING_DEPLOYMENT_RUNBOOK.md`
+- `docs/BACKUP_ROLLBACK_RUNBOOK.md`
+- `docs/GO_LIVE_CHECKLIST.md`
+- `docs/DEPLOYMENT_DRY_RUN_REPORT.md`
+
 打开 `http://localhost:3000/login`。Seed 默认演示账号为 `founder`，密码来自 `SEED_FOUNDER_PASSWORD`；未设置时仅本地使用 `ChangeMe#2026`，任何共享或正式环境必须替换。
 
 ## 质量门禁
