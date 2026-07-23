@@ -573,6 +573,17 @@ async function main() {
       isActive: true,
     },
   });
+  const restrictedUser = await prisma.user.upsert({
+    where: { username: "测试员工_中文" },
+    update: { fullName: "受限演示员工", isActive: true, passwordHash: founderPassword },
+    create: {
+      username: "测试员工_中文",
+      email: "restricted.employee@local.erp",
+      fullName: "受限演示员工",
+      passwordHash: founderPassword,
+      isActive: true,
+    },
+  });
 
   const existingFounderMembership = await prisma.membership.findFirst({
     where: {
@@ -595,6 +606,24 @@ async function main() {
         isActive: true,
         scope: "ALL",
         startedAt: new Date(),
+      },
+    });
+  }
+  const existingRestrictedMembership = await prisma.membership.findFirst({
+    where: { userId: restrictedUser.id, businessUnitId: businessUnit.id, roleId: roleStaff.id, isPrimary: true },
+  });
+  if (!existingRestrictedMembership) {
+    await prisma.membership.create({
+      data: {
+        userId: restrictedUser.id,
+        legalEntityId: legalEntity.id,
+        businessUnitId: businessUnit.id,
+        departmentId: rootDepartment.id,
+        siteId: site.id,
+        roleId: roleStaff.id,
+        isPrimary: true,
+        isActive: true,
+        scope: "SELF",
       },
     });
   }

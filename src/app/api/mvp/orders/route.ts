@@ -94,9 +94,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "FORBIDDEN", reasons: canRead.reasons }, { status: 403 });
   }
 
-  const canSeeAll = canRead.reasons.includes("SCOPE_ALL") || canRead.reasons.includes("SCOPE_ALL_OK");
   const pagination = parsePagination(request);
-  const where = canSeeAll ? {} : { businessUnitId: auth.membership.businessUnitId };
+  const status = request.nextUrl.searchParams.get("status")?.trim().toUpperCase();
+  const query = request.nextUrl.searchParams.get("q")?.trim();
+  const where: Prisma.OrderWhereInput = {
+    businessUnitId: auth.membership.businessUnitId,
+    ...(status ? { status: status as never } : {}),
+    ...(query
+      ? {
+          OR: [
+            { orderNo: { contains: query, mode: "insensitive" } },
+            { recipientName: { contains: query, mode: "insensitive" } },
+            { recipientPhone: { contains: query } },
+          ],
+        }
+      : {}),
+  };
   const [rows, total] = await prisma.$transaction([
     prisma.order.findMany({
       where,

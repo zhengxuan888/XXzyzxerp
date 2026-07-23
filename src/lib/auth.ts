@@ -3,8 +3,16 @@ import jwt, { type JwtPayload } from "jsonwebtoken";
 import { prisma } from "@/lib/prisma";
 
 export const SESSION_COOKIE = "erpv2_session";
-const SESSION_SECRET = process.env.SESSION_SECRET || "erp_v2_dev_secret_replace_in_prod";
 const SESSION_TTL_SECONDS = Number(process.env.SESSION_TTL_SECONDS ?? "28800"); // 8 hours
+
+function getSessionSecret() {
+  const configured = process.env.SESSION_SECRET;
+  if (configured) return configured;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("SESSION_SECRET_REQUIRED_IN_PRODUCTION");
+  }
+  return "erp_v2_local_development_only";
+}
 
 export type SessionPayload = {
   userId: string;
@@ -31,7 +39,7 @@ export async function issueSessionToken(payload: SessionPayload) {
   return new Promise<string>((resolve, reject) => {
     jwt.sign(
       { ...payload },
-      SESSION_SECRET,
+      getSessionSecret(),
       { algorithm: "HS256", expiresIn: SESSION_TTL_SECONDS },
       (error, token) => {
         if (error || !token) {
@@ -48,7 +56,7 @@ export async function parseSessionFromToken(token?: string): Promise<SessionPayl
   if (!token) return null;
 
   return new Promise((resolve) => {
-    jwt.verify(token, SESSION_SECRET, (error, decoded) => {
+    jwt.verify(token, getSessionSecret(), (error, decoded) => {
       if (error || !decoded) {
         resolve(null);
         return;

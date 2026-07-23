@@ -4,6 +4,8 @@ import { requireAuthContext } from "@/lib/api-auth";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
+import { fail, paginated, parsePagination } from "@/lib/api-response";
+import { normalizeMoneyCents } from "@/lib/money";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuthContext(request);
@@ -17,13 +19,20 @@ export async function GET(request: NextRequest) {
   });
   if (!canRead.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: canRead.reasons }, { status: 403 });
 
-  const canSeeAll = canRead.reasons.includes("SCOPE_ALL") || canRead.reasons.includes("SCOPE_ALL_OK");
-  const rows = await prisma.expense.findMany({
-    where: canSeeAll ? {} : { businessUnitId: auth.membership.businessUnitId },
-    include: { actorUser: { select: { username: true } }, order: { select: { orderNo: true } } },
-    orderBy: { createdAt: "desc" },
-  });
-  return NextResponse.json(rows);
+  const pagination = parsePagination(request);
+  const category = request.nextUrl.searchParams.get("category")?.trim();
+  const where = { businessUnitId: auth.membership.businessUnitId, ...(category ? { category } : {}) };
+  const [rows, total] = await prisma.$transaction([
+    prisma.expense.findMany({
+      where,
+      include: { actorUser: { select: { username: true } }, order: { select: { orderNo: true } } },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: pagination.skip,
+      take: pagination.take,
+    }),
+    prisma.expense.count({ where }),
+  ]);
+  return paginated(rows, total, pagination);
 }
 
 export async function POST(request: NextRequest) {
@@ -39,8 +48,14 @@ export async function POST(request: NextRequest) {
   if (!canCreate.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: canCreate.reasons }, { status: 403 });
 
   const body = await request.json().catch(() => null);
-  if (!body || typeof body.category !== "string" || typeof body.amountCents !== "number") {
+  if (!body || typeof body.category !== "string") {
     return NextResponse.json({ error: "category and amountCents are required." }, { status: 400 });
+  }
+  let amountCents: number;
+  try {
+    amountCents = normalizeMoneyCents(body.amountCents);
+  } catch {
+    return fail("INVALID_MONEY_CENTS", "amountCents 必须是非负安全整数。", 400);
   }
 
   const orderId = typeof body.orderId === "string" ? body.orderId : null;
@@ -57,7 +72,7 @@ export async function POST(request: NextRequest) {
       siteId: auth.membership.siteId,
       actorUserId: auth.userId,
       category: String(body.category),
-      amountCents: Math.max(0, Math.floor(body.amountCents)),
+      amountCents,
       paidAt: typeof body.paidAt === "string" ? new Date(body.paidAt) : null,
       currency: typeof body.currency === "string" ? body.currency : "CNY",
       note: typeof body.note === "string" ? body.note : null,

@@ -8,7 +8,48 @@ export async function syncChannelConnection(connectionId: string, adapter: Chann
   const cursor = await prisma.syncCursor.findUnique({
     where: { channelConnectionId_cursorKey: { channelConnectionId: connection.id, cursorKey: "messages" } },
   });
-  const batch = await adapter.pull(cursor?.cursorValue);
+  const batchAttemptKey = `pull:${cursor?.cursorValue ?? "initial"}`;
+  const existingBatch = await prisma.deliveryAttempt.findUnique({
+    where: { channelConnectionId_idempotencyKey: { channelConnectionId: connection.id, idempotencyKey: batchAttemptKey } },
+  });
+  if (existingBatch?.status === "SUCCEEDED") {
+    return { inserted: 0, nextCursor: cursor?.cursorValue ?? "initial" };
+  }
+  const batchAttempt = await prisma.deliveryAttempt.upsert({
+    where: { channelConnectionId_idempotencyKey: { channelConnectionId: connection.id, idempotencyKey: batchAttemptKey } },
+    update: { status: "PROCESSING", attemptCount: { increment: 1 }, lastErrorCode: null, lastErrorMessage: null },
+    create: {
+      channelConnectionId: connection.id,
+      operation: "PULL_BATCH",
+      idempotencyKey: batchAttemptKey,
+      status: "PROCESSING",
+      attemptCount: 1,
+    },
+  });
+  let batch: Awaited<ReturnType<ChannelProviderAdapter["pull"]>>;
+  try {
+    batch = await adapter.pull(cursor?.cursorValue);
+  } catch (error) {
+    const message = error instanceof Error ? error.message.slice(0, 500) : "Unknown provider failure";
+    const nextRetryAt = new Date(Date.now() + 60_000);
+    await prisma.$transaction([
+      prisma.deliveryAttempt.update({
+        where: { id: batchAttempt.id },
+        data: { status: "RETRYABLE", nextRetryAt, lastErrorCode: "PROVIDER_PULL_FAILED", lastErrorMessage: message },
+      }),
+      prisma.syncCursor.upsert({
+        where: { channelConnectionId_cursorKey: { channelConnectionId: connection.id, cursorKey: "messages" } },
+        update: { lastErrorAt: new Date(), lastErrorCode: "PROVIDER_PULL_FAILED" },
+        create: {
+          channelConnectionId: connection.id,
+          cursorKey: "messages",
+          lastErrorAt: new Date(),
+          lastErrorCode: "PROVIDER_PULL_FAILED",
+        },
+      }),
+    ]);
+    throw error;
+  }
   let inserted = 0;
 
   for (const incoming of batch.messages) {
@@ -117,5 +158,6 @@ export async function syncChannelConnection(connectionId: string, adapter: Chann
     },
   });
   await prisma.channelConnection.update({ where: { id: connection.id }, data: { lastSyncAt: new Date() } });
+  await prisma.deliveryAttempt.update({ where: { id: batchAttempt.id }, data: { status: "SUCCEEDED", nextRetryAt: null } });
   return { inserted, nextCursor: batch.nextCursor };
 }

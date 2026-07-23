@@ -23,6 +23,7 @@ type InboxData = {
   tags: Array<{ id: string; name: string; color: string }>;
   customers: Array<{ id: string; code: string; name: string }>;
   connections: Array<{ id: string; providerKey: string; displayName: string; lastSyncAt: string | null }>;
+  meta: { page: number; pageSize: number; total: number; pageCount: number };
 };
 
 const statusLabel: Record<string, string> = { OPEN: "待处理", PENDING: "跟进中", RESOLVED: "已解决", CLOSED: "已关闭" };

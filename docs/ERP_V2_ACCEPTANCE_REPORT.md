@@ -1,0 +1,118 @@
+# ERP V2 全量验收与加固报告
+
+日期：2026-07-24
+范围：Facebook COD ERP V2 Full MVP
+证据来源：`COZE_LEGACY_BUG_ANALYSIS.md`、`EMPLOYEE_FEEDBACK_REQUIREMENTS.md`、当前源码、PostgreSQL 本地库、Vitest 与 Playwright。
+边界：未连接真实渠道、未导入旧生产数据、未部署、未 Push。
+
+## 结论
+
+本轮关闭了两个会直接影响上线的基础问题：
+
+1. 中文用户名被写入 HTTP Header，导致请求在 Proxy 阶段发生 ByteString 异常并返回 500。
+2. 部分 `ALL` Scope 列表 API 会忽略当前业务上下文并跨业务板块读取数据。
+
+修复后，中文账号可正常登录和访问；受限账号的菜单、页面直链和 API 同时拒绝。客户、商品、订单、库存、物流、费用和统一收件箱采用服务端分页、当前业务板块过滤及稳定唯一二级排序。
+
+## Gate 与证据
+
+| Gate | 自动化证据 | 结果 |
+|---|---|---:|
+| 中文用户名登录 | JWT 中文编码单测；`测试员工_中文` Playwright 登录 | 通过 |
+| Session 签发/验签 | 正常 Token 与篡改 Token 单测 | 通过 |
+| 生产 Session Secret | 生产环境缺失 `SESSION_SECRET` 时主动失败 | 通过 |
+| 无权限菜单 | 受限账号不存在统一收件箱菜单 | 通过 |
+| 页面详情直链 | 受限账号访问 `/admin/inbox` 重定向工作台 | 通过 |
+| API 无权限拒绝 | 受限账号 `/api/mvp/inbox` 返回 403 | 通过 |
+| 业务板块隔离 | 核心业务 API 强制使用当前 Membership 的 `businessUnitId` | 通过 |
+| 部门隔离 | Permission 与 Inbox Scope 单测覆盖同板块跨部门拒绝 | 通过 |
+| Access Grant | 生效开放、撤销/到期关闭、超范围转授权拒绝单测 | 通过 |
+| 客户分页/搜索 | 统一 `{ok,data,meta}`、`createdAt + id`、`q` | 通过 |
+| 商品分页/搜索 | 统一 `{ok,data,meta}`、`createdAt + id`、`q` | 通过 |
+| 订单分页/筛选 | 当前板块、`createdAt + id`、`q/status` | 通过 |
+| 库存分页 | 当前板块、`updatedAt + id` | 通过 |
+| 物流分页/筛选 | 当前板块、`createdAt + id`、`q/status` | 通过 |
+| 费用分页/筛选 | 当前板块、`createdAt + id`、`category` | 通过 |
+| 收件箱分页/筛选 | 当前板块/部门 Scope、`lastMessageAt + id`、`status` | 通过 |
+| 分页重复 | 核心 API 第 1/2 页 ID 不重复 Playwright | 通过 |
+| 金额精度 | 非负安全整数单测；费用小数分值 API 返回 400 | 通过 |
+| 库存防负 | PostgreSQL 条件扣减；超量扣减返回 409 | 通过 |
+| 库存幂等 | 相同 idempotency key 返回同一流水且只加一次库存 | 通过 |
+| 订单状态机 | happy path、非法跳转和终态回退单测 | 通过 |
+| 库存预占/释放 | SKU、数量、缺余额、不足和预留状态单测 | 通过 |
+| 物流状态 | 事件类型、异常原因、时间和状态映射单测 | 通过 |
+| 消息去重 | PostgreSQL 集成测试：重复消息只保留一条 | 通过 |
+| 消息失败重试 | Provider 失败写 `RETRYABLE`、`nextRetryAt` 和游标错误 | 通过 |
+| 非法分派 | 不同部门分派拒绝单测；API 再验目标 Membership | 通过 |
+| 收件箱审计 | 同步、状态、分派、标签和客户关联写 `InboxAuditEvent` | 通过 |
+| 空/加载/错误 | 通用列表空状态；收件箱加载态与模拟 503 错误态 Playwright | 通过 |
+| 移动端 | 登录、订单录入、统一收件箱无页面级水平溢出 | 通过 |
+| 图片失败 | 当前 Full MVP 无业务图片上传/预览页面，仅有文档元数据 | 不适用，见剩余风险 |
+
+## 本轮修复
+
+### 1. 中文用户名 Header 崩溃
+
+旧行为：Proxy 把 `session.username` 写入 `x-username`。中文字符不能直接转换为 Header ByteString，所有受保护请求返回 500。
+修复：彻底移除显示名 Header；服务端身份只使用已验签 Session、稳定 `userId` 和 `membershipId`。用户名继续作为 JWT 数据和 UI 展示字段。
+回归：中文账号登录、菜单、API 403 和页面直链测试通过。
+
+### 2. 当前业务上下文泄漏
+
+旧行为：客户、商品、订单、物流、费用在 `ALL` Scope 时使用空过滤或全表过滤，可能把不同业务板块混进同一列表。
+修复：普通业务列表和订单详情始终绑定当前 Membership 的 `businessUnitId`。跨板块汇总必须另建独立 Action 和接口，本轮没有开放。
+
+### 3. 列表契约不统一
+
+旧行为：客户、商品、费用返回裸数组且无服务端分页；部分列表只有单字段排序。
+修复：核心七类列表统一分页元数据，增加唯一 ID 二级排序和必要筛选；最大分页大小受服务端限制。
+
+### 4. 费用金额静默取整
+
+旧行为：费用接口对小数 `amountCents` 使用 `Math.floor`，会静默改变资金事实。
+修复：复用 `normalizeMoneyCents`，只接受非负安全整数，不合法输入返回 `INVALID_MONEY_CENTS`。
+
+### 5. Provider 拉取失败无重试证据
+
+旧行为：Adapter 在返回消息前失败时，不会创建 DeliveryAttempt 或更新 SyncCursor。
+修复：每批拉取增加幂等 Batch Attempt；失败记录 `RETRYABLE`、错误码、摘要、下一次重试时间和游标错误状态。
+
+## 测试命令
+
+```powershell
+pnpm run db:seed
+pnpm run validate
+pnpm run test:e2e
+pnpm run build
+pnpm exec prisma migrate status
+git diff --check
+```
+
+最终数字以本报告提交前最后一次完整运行输出为准。
+
+最终执行结果：
+
+- Vitest：11 个测试文件、30 项测试通过，其中包含真实 PostgreSQL 消息幂等与失败重试集成测试。
+- Playwright Chromium：10 项测试通过。
+- TypeScript、ESLint、Prisma validate：通过。
+- Next.js production build：通过，47 个页面/API 路由生成成功。
+- Prisma migrate status：5 个迁移全部为最新状态。
+
+## 剩余风险
+
+1. 当前没有真实图片上传、压缩、预览和失败重试页面，因此图片 Gate 不能伪报通过；附件模块上线前必须新增类型/大小校验、对象存储、失败占位和浏览器测试。
+2. 售前“可看订单但不可看物流单号/金额”等字段级权限尚未形成完整独立 Action 矩阵；当前无订单读取权限的账号被整体拒绝。正式拆分岗位前必须完成字段级 DTO。
+3. 通用后台中公告、文档、审批、考勤、请假仍保留较早的裸数组响应；本轮按要求优先统一客户、商品、订单、库存、物流、费用和收件箱。
+4. 真实物流商、真实消息渠道、附件存储和邮件 SMTP 都未接入，因此只验证本地契约和错误处理，不代表第三方可靠性已通过。
+5. 库存已有真实 PostgreSQL 幂等与负库存测试，但尚缺双连接高并发压测和故障注入。
+6. 部署原子切换、CDN 缓存失效、数据库备份恢复和生产监控只能在预发布环境验证，本地构建不能替代。
+
+## 上线前门禁
+
+- 使用全新高强度 `SESSION_SECRET`，禁止使用本地演示密码。
+- 为销售、核单、仓库、售后、财务分别建立演示账号并逐角色验收字段级 DTO。
+- 完成附件/图片安全与失败状态。
+- 在预发布 PostgreSQL 执行并发库存、迁移、备份恢复和回滚演练。
+- 建立不可变构建版本、健康检查、审计告警和权限缓存失效监控。
+- 真实渠道必须完成 Webhook 验签、Token 轮换、限流、数据保留和隐私审批。
+- 全部 Gate 通过后，由创始人单独授权 Push 和部署；本报告不构成生产部署授权。

@@ -50,8 +50,8 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
   const auth = await requireAuthContext(request);
   if (!auth) return NextResponse.json({ error: "Unauthenticated." }, { status: 401 });
 
-  const row = await prisma.order.findUnique({
-    where: { id },
+  const row = await prisma.order.findFirst({
+    where: { id, businessUnitId: auth.membership.businessUnitId },
     include: {
       customer: true,
       creatorUser: { select: { username: true, fullName: true } },

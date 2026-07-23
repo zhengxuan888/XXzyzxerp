@@ -3,10 +3,10 @@ import { expect, test } from "@playwright/test";
 const username = "founder";
 const password = process.env.SEED_FOUNDER_PASSWORD || "ChangeMe#2026";
 
-async function login(page: import("@playwright/test").Page) {
+async function login(page: import("@playwright/test").Page, account = username, accountPassword = password) {
   await page.goto("/login");
-  await page.getByLabel("用户名", { exact: true }).fill(username);
-  await page.getByLabel("密码", { exact: true }).fill(password);
+  await page.getByLabel("用户名", { exact: true }).fill(account);
+  await page.getByLabel("密码", { exact: true }).fill(accountPassword);
   await page.getByRole("button", { name: "进入工作台" }).click();
   await expect(page).toHaveURL(/\/admin$/);
 }
@@ -43,7 +43,7 @@ test("统一收件箱可完成 Demo 消息、状态和客户关联闭环", async
   await expect(page.getByRole("heading", { name: "统一收件箱" })).toBeVisible();
   await expect(page.getByText("演示咨询客户").first()).toBeVisible();
   await page.getByRole("button", { name: "拉取演示消息" }).click();
-  await expect(page.getByRole("article").getByText("可以帮我确认预计送达时间吗？")).toBeVisible();
+  await expect(page.getByRole("article").getByText("可以帮我确认预计送达时间吗？").last()).toBeVisible();
   await page.getByLabel("处理状态").selectOption("PENDING");
   await expect(page.getByText("跟进中").first()).toBeVisible();
   await page.getByLabel("关联客户/线索").selectOption({ index: 1 });
@@ -55,6 +55,92 @@ test("统一收件箱移动端无页面级水平溢出", async ({ page }) => {
   await login(page);
   await page.goto("/admin/inbox");
   await expect(page.getByRole("heading", { name: "统一收件箱" })).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+  expect(overflow).toBe(false);
+});
+
+test("中文用户名可登录，受限账号的菜单、直链和 API 同时拒绝", async ({ page }) => {
+  await login(page, "测试员工_中文", password);
+  await expect(page.getByRole("link", { name: "统一收件箱" })).toHaveCount(0);
+  const apiStatus = await page.evaluate(async () => (await fetch("/api/mvp/inbox")).status);
+  expect(apiStatus).toBe(403);
+  await page.goto("/admin/inbox");
+  await expect(page).toHaveURL(/\/admin$/);
+});
+
+test("核心列表 API 使用统一分页结构且分页间不重复", async ({ page }) => {
+  await login(page);
+  for (const endpoint of ["customers", "products", "orders", "inventory", "shipments", "expenses"]) {
+    const result = await page.evaluate(async (path) => {
+      const first = await fetch(`/api/mvp/${path}?page=1&pageSize=1`).then((response) => response.json());
+      const second = await fetch(`/api/mvp/${path}?page=2&pageSize=1`).then((response) => response.json());
+      return { first, second };
+    }, endpoint);
+    expect(result.first.ok).toBe(true);
+    expect(result.first.meta).toEqual(expect.objectContaining({ page: 1, pageSize: 1 }));
+    const firstId = result.first.data[0]?.id;
+    const secondId = result.second.data[0]?.id;
+    if (firstId && secondId) expect(firstId).not.toBe(secondId);
+  }
+  const inbox = await page.evaluate(async () => fetch("/api/mvp/inbox?page=1&pageSize=1").then((response) => response.json()));
+  expect(inbox.ok).toBe(true);
+  expect(inbox.data.meta).toEqual(expect.objectContaining({ page: 1, pageSize: 1 }));
+});
+
+test("库存防负数、幂等调整和金额整数门禁", async ({ page }) => {
+  await login(page);
+  const before = await page.evaluate(async () => fetch("/api/mvp/inventory?page=1&pageSize=100").then((response) => response.json()));
+  const balance = before.data[0];
+  expect(balance).toBeTruthy();
+  const negativeStatus = await page.evaluate(async ({ siteId, skuId }) => {
+    const response = await fetch("/api/mvp/inventory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ siteId, skuId, quantityDelta: -999999999, idempotencyKey: `negative-${crypto.randomUUID()}` }),
+    });
+    return response.status;
+  }, { siteId: balance.siteId, skuId: balance.skuId });
+  expect(negativeStatus).toBe(409);
+
+  const idempotencyKey = `acceptance-${Date.now()}-${Math.random()}`;
+  const adjustments = await page.evaluate(async ({ siteId, skuId, idempotencyKey }) => {
+    const body = JSON.stringify({ siteId, skuId, quantityDelta: 1, idempotencyKey });
+    const first = await fetch("/api/mvp/inventory", { method: "POST", headers: { "Content-Type": "application/json" }, body }).then((response) => response.json());
+    const second = await fetch("/api/mvp/inventory", { method: "POST", headers: { "Content-Type": "application/json" }, body }).then((response) => response.json());
+    return { first, second };
+  }, { siteId: balance.siteId, skuId: balance.skuId, idempotencyKey });
+  expect(adjustments.first.data.id).toBe(adjustments.second.data.id);
+
+  const after = await page.evaluate(async () => fetch("/api/mvp/inventory?page=1&pageSize=100").then((response) => response.json()));
+  const updated = after.data.find((item: { id: string }) => item.id === balance.id);
+  expect(updated.onHandQuantity).toBe(balance.onHandQuantity + 1);
+
+  const invalidMoneyStatus = await page.evaluate(async () => {
+    const response = await fetch("/api/mvp/expenses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category: "验收", amountCents: 10.5 }),
+    });
+    return response.status;
+  });
+  expect(invalidMoneyStatus).toBe(400);
+});
+
+test("统一收件箱错误状态可见且不会显示空白页", async ({ page }) => {
+  await login(page);
+  await page.route("**/api/mvp/inbox", async (route) => {
+    await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "SIMULATED_OFFLINE" }) });
+  });
+  await page.goto("/admin/inbox");
+  await expect(page.getByText("SIMULATED_OFFLINE", { exact: true })).toBeVisible();
+  await expect(page.getByText("正在加载会话…")).toBeVisible();
+});
+
+test("移动端订单录入核心页面无页面级水平溢出", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page);
+  await page.goto("/admin/orders");
+  await expect(page.getByRole("heading", { name: "录入订单" })).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   expect(overflow).toBe(false);
 });

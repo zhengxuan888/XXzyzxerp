@@ -4,6 +4,7 @@ import { requireAuthContext } from "@/lib/api-auth";
 import { checkPermission } from "@/lib/permission";
 import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
+import { paginated, parsePagination } from "@/lib/api-response";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuthContext(request);
@@ -21,15 +22,26 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "FORBIDDEN", reasons: decision.reasons }, { status: 403 });
   }
 
-  const canSeeAll = decision.reasons.includes("SCOPE_ALL") || decision.reasons.includes("SCOPE_ALL_OK");
-  const rows = await prisma.customer.findMany({
-    where: canSeeAll ? { isActive: true } : { isActive: true, businessUnitId: auth.membership.businessUnitId },
-    orderBy: { createdAt: "desc" },
-    include: {
-      legalEntity: { select: { code: true, name: true } },
-    },
-  });
-  return NextResponse.json(rows);
+  const pagination = parsePagination(request);
+  const query = request.nextUrl.searchParams.get("q")?.trim();
+  const where = {
+    isActive: true,
+    businessUnitId: auth.membership.businessUnitId,
+    ...(query
+      ? { OR: [{ code: { contains: query, mode: "insensitive" as const } }, { name: { contains: query, mode: "insensitive" as const } }] }
+      : {}),
+  };
+  const [rows, total] = await prisma.$transaction([
+    prisma.customer.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: pagination.skip,
+      take: pagination.take,
+      include: { legalEntity: { select: { code: true, name: true } } },
+    }),
+    prisma.customer.count({ where }),
+  ]);
+  return paginated(rows, total, pagination);
 }
 
 export async function POST(request: NextRequest) {

@@ -35,7 +35,6 @@ export async function proxy(request: NextRequest) {
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-user-id", session.userId);
-  requestHeaders.set("x-username", session.username);
   if (session.activeMembershipId) {
     requestHeaders.set("x-membership-id", session.activeMembershipId);
   }

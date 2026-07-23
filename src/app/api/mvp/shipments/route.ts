@@ -5,6 +5,7 @@ import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
 import { fail, ok, paginated, parsePagination } from "@/lib/api-response";
+import { Prisma } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuthContext(request);
@@ -18,9 +19,22 @@ export async function GET(request: NextRequest) {
   });
   if (!canRead.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: canRead.reasons }, { status: 403 });
 
-  const canSeeAll = canRead.reasons.includes("SCOPE_ALL") || canRead.reasons.includes("SCOPE_ALL_OK");
   const pagination = parsePagination(request);
-  const where = canSeeAll ? {} : { businessUnitId: auth.membership.businessUnitId };
+  const status = request.nextUrl.searchParams.get("status")?.trim().toUpperCase();
+  const query = request.nextUrl.searchParams.get("q")?.trim();
+  const where: Prisma.ShipmentWhereInput = {
+    businessUnitId: auth.membership.businessUnitId,
+    ...(status ? { status: status as never } : {}),
+    ...(query
+      ? {
+          OR: [
+            { trackingNo: { contains: query, mode: "insensitive" } },
+            { carrier: { contains: query, mode: "insensitive" } },
+            { order: { orderNo: { contains: query, mode: "insensitive" } } },
+          ],
+        }
+      : {}),
+  };
   const [rows, total] = await prisma.$transaction([
     prisma.shipment.findMany({
       where,

@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { inboxScopeWhere, canAssignToDepartment } from "@/lib/inbox/scope";
 import { DemoInboxAdapter } from "@/lib/inbox/demo-adapter";
 import { syncChannelConnection } from "@/lib/inbox/sync";
+import { parsePagination } from "@/lib/api-response";
 
 async function authorize(request: NextRequest, actionKey: string) {
   const auth = await requireAuthContext(request);
@@ -31,22 +32,29 @@ export async function GET(request: NextRequest) {
     departmentId: access.auth.membership.departmentId,
     permissionReasons: access.decision.reasons,
   });
-  const conversations = await prisma.conversation.findMany({
-    where,
-    orderBy: [{ lastMessageAt: "desc" }, { id: "asc" }],
-    take: 100,
-    include: {
-      channelConnection: { select: { providerKey: true, displayName: true } },
-      contactIdentity: { select: { displayName: true, normalizedAddress: true } },
-      messages: { orderBy: [{ occurredAt: "asc" }, { id: "asc" }], take: 100 },
-      assignments: {
-        where: { isActive: true },
-        include: { assignee: { include: { user: { select: { fullName: true } } } } },
+  const pagination = parsePagination(request, 100);
+  const status = request.nextUrl.searchParams.get("status")?.trim().toUpperCase();
+  const scopedWhere = { ...where, ...(status ? { status: status as never } : {}) };
+  const [conversations, total] = await prisma.$transaction([
+    prisma.conversation.findMany({
+      where: scopedWhere,
+      orderBy: [{ lastMessageAt: "desc" }, { id: "asc" }],
+      skip: pagination.skip,
+      take: pagination.take,
+      include: {
+        channelConnection: { select: { providerKey: true, displayName: true } },
+        contactIdentity: { select: { displayName: true, normalizedAddress: true } },
+        messages: { orderBy: [{ occurredAt: "asc" }, { id: "asc" }], take: 100 },
+        assignments: {
+          where: { isActive: true },
+          include: { assignee: { include: { user: { select: { fullName: true } } } } },
+        },
+        tags: { include: { tag: true } },
+        customerLinks: { include: { customer: { select: { id: true, code: true, name: true } } } },
       },
-      tags: { include: { tag: true } },
-      customerLinks: { include: { customer: { select: { id: true, code: true, name: true } } } },
-    },
-  });
+    }),
+    prisma.conversation.count({ where: scopedWhere }),
+  ]);
   const [memberships, tags, customers, connections] = await Promise.all([
     prisma.membership.findMany({
       where: {
@@ -63,7 +71,22 @@ export async function GET(request: NextRequest) {
     prisma.customer.findMany({ where: { businessUnitId: access.auth.membership.businessUnitId, isActive: true } }),
     prisma.channelConnection.findMany({ where: { ...where, isActive: true } }),
   ]);
-  return NextResponse.json({ ok: true, data: { conversations, memberships, tags, customers, connections } });
+  return NextResponse.json({
+    ok: true,
+    data: {
+      conversations,
+      memberships,
+      tags,
+      customers,
+      connections,
+      meta: {
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        total,
+        pageCount: Math.ceil(total / pagination.pageSize),
+      },
+    },
+  });
 }
 
 export async function POST(request: NextRequest) {
