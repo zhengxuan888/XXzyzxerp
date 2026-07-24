@@ -20,30 +20,16 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
         ? { status: { in: ["PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY"] } }
         : {};
 
-  const [canRead, canCreate] = await Promise.all([
-    checkPermission({
-      userId: session.userId,
-      membershipId: membership.id,
-      actionKey: "shipment.read",
-      targetBusinessUnitId: membership.businessUnitId,
-    }),
-    checkPermission({
-      userId: session.userId,
-      membershipId: membership.id,
-      actionKey: "shipment.create",
-      targetBusinessUnitId: membership.businessUnitId,
-    }),
-  ]);
+  const canRead = await checkPermission({
+    userId: session.userId,
+    membershipId: membership.id,
+    actionKey: "shipment.read",
+    targetBusinessUnitId: membership.businessUnitId,
+  });
   if (!canRead.allowed) redirect("/admin");
 
-  const orders = await prisma.order.findMany({
-    where: { businessUnitId: membership.businessUnitId, status: "WAITING_SHIPMENT" },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, orderNo: true },
-  });
-
   const rows = await prisma.shipment.findMany({
-    where: { businessUnitId: membership.businessUnitId, ...queueWhere },
+    where: { businessUnitId: membership.businessUnitId, status: { not: "PENDING" }, ...queueWhere },
     include: { order: { select: { orderNo: true } } },
     orderBy: { createdAt: "desc" },
   });
@@ -54,21 +40,10 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
       resource="shipments"
       listTitle="Shipments"
       detailPath="/admin/shipments"
-      canCreate={canCreate.allowed}
+      canCreate={false}
       canDelete={false}
       rows={rows}
-      createFields={[
-        {
-          key: "orderId",
-          label: "Order",
-          required: true,
-          type: "select",
-          options: orders.map((order) => ({ value: order.id, label: order.orderNo })),
-        },
-        { key: "carrier", label: "Carrier" },
-        { key: "trackingNo", label: "Tracking No" },
-        { key: "memo", label: "Remark" },
-      ]}
+      createFields={[]}
       dataColumns={[
         { key: "trackingNo", label: "Tracking No" },
         {

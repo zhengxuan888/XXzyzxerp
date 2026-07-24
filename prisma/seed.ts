@@ -215,6 +215,22 @@ const menuDefs = [
     isActive: true,
   },
   {
+    key: "order-review",
+    label: "核单工作台",
+    path: "/admin/order-review",
+    requiredActionKey: "order.review",
+    sortOrder: 122,
+    isActive: true,
+  },
+  {
+    key: "shipping-workbench",
+    label: "待发货工作台",
+    path: "/admin/shipping",
+    requiredActionKey: "shipment.create",
+    sortOrder: 125,
+    isActive: true,
+  },
+  {
     key: "order-templates",
     label: "订单模板",
     path: "/admin/order-templates",
