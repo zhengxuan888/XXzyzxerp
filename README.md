@@ -29,6 +29,7 @@ pnpm run deploy:dry-run
 - `docs/BACKUP_ROLLBACK_RUNBOOK.md`
 - `docs/GO_LIVE_CHECKLIST.md`
 - `docs/DEPLOYMENT_DRY_RUN_REPORT.md`
+- `docs/LEGACY_ERP_FUNCTION_INVENTORY_AND_V2_REQUIREMENTS.md`
 
 打开 `http://localhost:3000/login`。Seed 默认演示账号为 `founder`，密码来自 `SEED_FOUNDER_PASSWORD`；未设置时仅本地使用 `ChangeMe#2026`，任何共享或正式环境必须替换。
 
