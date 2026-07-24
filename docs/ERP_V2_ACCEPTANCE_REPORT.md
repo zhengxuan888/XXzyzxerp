@@ -1,7 +1,7 @@
 # ERP V2 全量验收与加固报告
 
 日期：2026-07-24
-范围：Facebook COD ERP V2 Full MVP
+范围：择优臻选公司级 ERP V2 Full MVP；当前以 Facebook COD 首个业务板块验证通用组织隔离能力
 证据来源：`COZE_LEGACY_BUG_ANALYSIS.md`、`EMPLOYEE_FEEDBACK_REQUIREMENTS.md`、当前源码、PostgreSQL 本地库、Vitest 与 Playwright。
 边界：未连接真实渠道、未导入旧生产数据、未部署、未 Push。
 

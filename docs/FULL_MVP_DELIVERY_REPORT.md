@@ -4,7 +4,7 @@
 
 项目：`zyzxerp-v2`
 
-边界：Facebook COD 部门 ERP V2；未连接旧生产库、未导入旧数据、未部署、未 push。
+边界：择优臻选公司级 ERP V2；Facebook COD 为首个落地板块。未连接旧生产库、未导入旧数据、未部署、未 push。
 
 ## 当前结论
 

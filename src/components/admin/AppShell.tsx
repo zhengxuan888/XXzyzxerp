@@ -49,7 +49,7 @@ function isActive(pathname: string, path: string) {
 
 export default function AppShell({
   menuItems,
-  brand = "Facebook COD ERP",
+  brand = "择优臻选 ERP",
   userName,
   memberships = [],
   activeMembershipId,

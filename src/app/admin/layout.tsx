@@ -38,7 +38,7 @@ export default async function AdminLayout({
   return (
     <AppShell
       menuItems={rootItems}
-      brand="Facebook COD ERP"
+      brand="择优臻选 ERP"
       userName={`${session.username} · ${membership.role?.name ?? "未分配角色"}`}
       memberships={membershipOptions}
       activeMembershipId={membership.id}

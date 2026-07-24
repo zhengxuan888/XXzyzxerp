@@ -42,7 +42,7 @@ export default function LoginPage() {
           <span className="grid size-11 place-items-center rounded-2xl bg-gradient-to-br from-violet-500 to-cyan-400 text-base font-black">ZC</span>
           <div>
             <strong className="block text-base">择优臻选</strong>
-            <span className="text-xs text-slate-400">Facebook COD 业务运营系统</span>
+            <span className="text-xs text-slate-400">公司运营管理系统</span>
           </div>
         </div>
 
@@ -55,7 +55,7 @@ export default function LoginPage() {
             <span className="mt-2 block bg-gradient-to-r from-violet-300 to-cyan-300 bg-clip-text text-transparent">在一个工作台完成</span>
           </h1>
           <p className="mt-6 max-w-lg text-base leading-7 text-slate-300">
-            面向 Facebook COD 团队的日常运营系统，根据岗位自动呈现待办、菜单与可操作范围。
+            面向公司各业务板块与部门的日常运营系统，根据当前业务上下文和岗位自动呈现待办、菜单与可操作范围。
           </p>
         </div>
 
@@ -68,7 +68,7 @@ export default function LoginPage() {
             <span className="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-violet-600 to-cyan-500 text-sm font-black text-white">ZC</span>
             <div>
               <strong className="block text-sm">择优臻选</strong>
-              <span className="text-xs text-slate-500">Facebook COD ERP</span>
+              <span className="text-xs text-slate-500">择优臻选 ERP</span>
             </div>
           </div>
 

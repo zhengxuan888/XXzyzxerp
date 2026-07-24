@@ -3,10 +3,10 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Facebook COD ERP",
-    template: "%s · Facebook COD ERP",
+    default: "择优臻选 ERP",
+    template: "%s · 择优臻选 ERP",
   },
-  description: "择优臻选 Facebook COD 业务运营系统",
+  description: "择优臻选公司运营管理系统",
 };
 
 export default function RootLayout({

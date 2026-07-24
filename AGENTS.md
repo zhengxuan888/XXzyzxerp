@@ -6,7 +6,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## ZC 公司总控入口
 
-- 本项目是“择优臻选”Facebook COD业务板块的ERP V2，不是集团统一ERP。
+- 本项目是“择优臻选”公司级 ERP V2，可配置支持多个公司、业务板块和部门。Facebook COD 只是首个落地板块，不是系统边界。
 - 公司总控目录：`C:\Users\86150\Documents\New project`。
 - “臻策”“ZC”“zc”均表示调用公司级 AI Chief of Staff。
 - 开始公司级协调时，按需读取公司总控 `AGENTS.md`、`Knowledge/COMPANY_PROFILE.md` 及 `Projects/ERP/`。
