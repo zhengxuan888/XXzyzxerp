@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useState } from "react";
+import { zh } from "@/lib/i18n";
 
 type WorkflowAction = "submit" | "approve" | "reject" | "void" | "ship";
 
@@ -16,7 +17,7 @@ type Props = {
 };
 
 const actionLabel = {
-  submit: "提交",
+  submit: "提交核单",
   approve: "核单通过",
   reject: "核单退回",
   void: "作废",
@@ -70,7 +71,7 @@ export default function OrderWorkflowActions({ orderId, currentStatus, permissio
   return (
     <section className="rounded border border-gray-200 p-4">
       <h2 className="font-medium">订单流程</h2>
-      <p className="mt-1 text-sm text-gray-500">当前状态：{currentStatus}</p>
+      <p className="mt-1 text-sm text-gray-500">当前状态：{zh(currentStatus)}</p>
       {available.length === 0 ? (
         <p className="mt-4 text-sm text-gray-500">当前状态下暂无可执行动作。</p>
       ) : (

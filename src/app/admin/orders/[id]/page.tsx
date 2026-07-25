@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { format } from "date-fns";
 
 import OrderWorkflowActions from "@/components/admin/OrderWorkflowActions";
+import AttachmentPanel from "@/components/admin/AttachmentPanel";
 import { formatMoneyCents } from "@/lib/money";
 import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
@@ -40,7 +41,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const allowed = await assertOrderReadScope({ membership, userId: session.userId, orderId: order.id });
   if (!allowed) redirect("/admin");
 
-  const [canSubmit, canReview, canShip, canCancel] = await Promise.all([
+  const [canSubmit, canReview, canShip, canCancel, canReadAttachments, canCreateAttachments, canDeleteAttachments] = await Promise.all([
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
@@ -64,6 +65,27 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       membershipId: membership.id,
       actionKey: "order.status.update",
       targetBusinessUnitId: membership.businessUnitId,
+    }),
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "attachment.read",
+      targetBusinessUnitId: membership.businessUnitId,
+      targetDepartmentId: order.departmentId,
+    }),
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "attachment.create",
+      targetBusinessUnitId: membership.businessUnitId,
+      targetDepartmentId: order.departmentId,
+    }),
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "attachment.delete",
+      targetBusinessUnitId: membership.businessUnitId,
+      targetDepartmentId: order.departmentId,
     }),
   ]);
 
@@ -123,6 +145,16 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           }}
         />
       </div>
+
+      {canReadAttachments.allowed && (
+        <AttachmentPanel
+          targetType="ORDER"
+          targetId={order.id}
+          canUpload={canCreateAttachments.allowed && order.status === "DRAFT"}
+          canDelete={canDeleteAttachments.allowed && order.status === "DRAFT"}
+          title="客户沟通凭证（提交核单前必传）"
+        />
+      )}
 
       <section className="rounded border border-gray-200 p-4">
         <h2 className="mb-3 font-medium">物流信息</h2>

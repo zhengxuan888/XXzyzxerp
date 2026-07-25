@@ -1,7 +1,7 @@
 import type { AuthContext } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 
-export const attachmentTargets = ["PRODUCT", "CONVERSATION", "SHIPMENT"] as const;
+export const attachmentTargets = ["PRODUCT", "ORDER", "CONVERSATION", "SHIPMENT"] as const;
 export type AttachmentTargetType = (typeof attachmentTargets)[number];
 
 export async function resolveAttachmentTarget(auth: AuthContext, targetType: string, targetId: string) {
@@ -12,6 +12,23 @@ export async function resolveAttachmentTarget(auth: AuthContext, targetType: str
     });
     return product
       ? { targetType: "PRODUCT" as const, targetId: product.id, businessUnitId: product.businessUnitId, departmentId: auth.membership.departmentId }
+      : null;
+  }
+  if (targetType === "ORDER") {
+    const order = await prisma.order.findFirst({
+      where: {
+        id: targetId,
+        businessUnitId: auth.membership.businessUnitId,
+      },
+      select: { id: true, businessUnitId: true, departmentId: true },
+    });
+    return order
+      ? {
+          targetType: "ORDER" as const,
+          targetId: order.id,
+          businessUnitId: order.businessUnitId,
+          departmentId: order.departmentId ?? auth.membership.departmentId,
+        }
       : null;
   }
   if (targetType === "CONVERSATION") {

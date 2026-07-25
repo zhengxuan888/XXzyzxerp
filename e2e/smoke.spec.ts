@@ -75,18 +75,18 @@ test("中文用户名可登录，受限账号的菜单、直链和 API 同时拒
 test("核心列表 API 使用统一分页结构且分页间不重复", async ({ page }) => {
   await login(page);
   for (const endpoint of ["customers", "products", "orders", "inventory", "shipments", "expenses"]) {
-    const result = await page.evaluate(async (path) => {
-      const first = await fetch(`/api/mvp/${path}?page=1&pageSize=1`).then((response) => response.json());
-      const second = await fetch(`/api/mvp/${path}?page=2&pageSize=1`).then((response) => response.json());
-      return { first, second };
-    }, endpoint);
+    const [first, second] = await Promise.all([
+      page.request.get(`/api/mvp/${endpoint}?page=1&pageSize=1`).then((response) => response.json()),
+      page.request.get(`/api/mvp/${endpoint}?page=2&pageSize=1`).then((response) => response.json()),
+    ]);
+    const result = { first, second };
     expect(result.first.ok).toBe(true);
     expect(result.first.meta).toEqual(expect.objectContaining({ page: 1, pageSize: 1 }));
     const firstId = result.first.data[0]?.id;
     const secondId = result.second.data[0]?.id;
     if (firstId && secondId) expect(firstId).not.toBe(secondId);
   }
-  const inbox = await page.evaluate(async () => fetch("/api/mvp/inbox?page=1&pageSize=1").then((response) => response.json()));
+  const inbox = await page.request.get("/api/mvp/inbox?page=1&pageSize=1").then((response) => response.json());
   expect(inbox.ok).toBe(true);
   expect(inbox.data.meta).toEqual(expect.objectContaining({ page: 1, pageSize: 1 }));
 });
@@ -147,6 +147,66 @@ test("移动端订单录入核心页面无页面级水平溢出", async ({ page 
   await expect(page.getByRole("heading", { name: "录入订单" })).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   expect(overflow).toBe(false);
+});
+
+test("订单提交核单前强制上传客户沟通凭证", async ({ page }) => {
+  await login(page);
+  const [customers, products, templates] = await Promise.all([
+    page.request.get("/api/mvp/customers?page=1&pageSize=1").then((response) => response.json()),
+    page.request.get("/api/mvp/products?page=1&pageSize=1").then((response) => response.json()),
+    page.request.get("/api/mvp/order-templates").then((response) => response.json()),
+  ]);
+  const customer = customers.data[0];
+  const product = products.data[0];
+  const sku = product.skus[0];
+  const template = templates.data[0];
+  const createResponse = await page.request.post("/api/mvp/orders", {
+    data: {
+      orderTemplateId: template.id,
+      customerId: customer.id,
+      productId: product.id,
+      skuId: sku.id,
+      productName: product.name,
+      quantity: 1,
+      unitPriceCents: 100,
+      codAmountCents: 100,
+      shippingFeeCents: 0,
+      currency: "CNY",
+      recipientName: "本地验收客户",
+      recipientPhone: "10000000000",
+      recipientEmail: "acceptance@example.com",
+      recipientAddress: "本地验收地址",
+      paymentMethod: "COD",
+    },
+  });
+  expect(createResponse.status(), await createResponse.text()).toBe(201);
+  const createdOrder = (await createResponse.json()).data;
+
+  const blockedSubmit = await page.request.post(`/api/mvp/orders/${createdOrder.id}/actions`, {
+    data: { action: "submit" },
+  });
+  expect(blockedSubmit.status()).toBe(409);
+  expect(await blockedSubmit.json()).toEqual(expect.objectContaining({
+    error: expect.objectContaining({ code: "ORDER_COMMUNICATION_PROOF_REQUIRED" }),
+  }));
+
+  const proof = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nWQAAAAASUVORK5CYII=", "base64");
+  const proofResponse = await page.request.post("/api/mvp/attachments", {
+    multipart: {
+      targetType: "ORDER",
+      targetId: createdOrder.id,
+      file: { name: "客户沟通凭证.png", mimeType: "image/png", buffer: proof },
+    },
+  });
+  expect(proofResponse.status(), await proofResponse.text()).toBe(201);
+
+  const submitted = await page.request.post(`/api/mvp/orders/${createdOrder.id}/actions`, {
+    data: { action: "submit" },
+  });
+  expect(submitted.status(), await submitted.text()).toBe(200);
+  await page.goto(`/admin/orders/${createdOrder.id}`);
+  await expect(page.getByRole("heading", { name: "客户沟通凭证（提交核单前必传）" })).toBeVisible();
+  await expect(page.getByAltText("客户沟通凭证.png")).toBeVisible();
 });
 
 test("商品图片完成安全上传、预览、404 占位与删除", async ({ page }) => {

@@ -90,6 +90,17 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       }
 
       if (action === "submit") {
+        const communicationProofCount = await tx.attachment.count({
+          where: {
+            businessUnitId: current.businessUnitId,
+            targetType: "ORDER",
+            targetId: current.id,
+            status: "ACTIVE",
+          },
+        });
+        if (communicationProofCount < 1) {
+          throw new Error("ORDER_COMMUNICATION_PROOF_REQUIRED");
+        }
         await reserveOrderInventory(
           tx,
           {
@@ -243,6 +254,13 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     }
     if (error instanceof Error && error.message === "SHIPMENT_PROOF_REQUIRED") {
       return fail("SHIPMENT_PROOF_REQUIRED", "请先上传发货凭证（图片/PDF）", 409);
+    }
+    if (error instanceof Error && error.message === "ORDER_COMMUNICATION_PROOF_REQUIRED") {
+      return fail(
+        "ORDER_COMMUNICATION_PROOF_REQUIRED",
+        "提交核单前必须上传客户沟通凭证（图片、PDF 或视频）。",
+        409,
+      );
     }
     if (error instanceof Error && error.message === "SHIPMENT_FIELDS_REQUIRED") {
       return fail("SHIPMENT_FIELDS_REQUIRED", "请填写承运商与物流单号", 400);

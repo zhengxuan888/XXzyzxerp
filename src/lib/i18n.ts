@@ -36,7 +36,7 @@ export const ZH: Record<string, string> = {
   "Rejected Reason": "拒绝原因",
   "Review Note": "核单备注",
   DRAFT: "草稿",
-  SUBMITTED: "提交",
+  SUBMITTED: "审核中",
   WAITING_SHIPMENT: "待发货",
   SHIPPED: "已发货",
   DELIVERED: "已送达",

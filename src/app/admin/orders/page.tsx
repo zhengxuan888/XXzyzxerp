@@ -108,7 +108,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         createFields={[
           {
             key: "customerId",
-            label: "Customer",
+            label: "客户",
             required: true,
             type: "select",
             options: customers.map((customer) => ({ value: customer.id, label: `${customer.code} ${customer.name}` })),
@@ -133,24 +133,24 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               })),
             ),
           },
-          { key: "productName", label: "Product Name", required: true },
-          { key: "quantity", label: "Quantity", type: "number", required: true },
-          { key: "unitPriceCents", label: "Unit Price (Cents)", type: "number", required: true },
-          { key: "codAmountCents", label: "COD Amount (Cents)", type: "number", required: false },
-          { key: "shippingFeeCents", label: "Shipping Fee (Cents)", type: "number", required: false },
-          { key: "note", label: "Order Note", required: false },
+          { key: "productName", label: "商品名称", required: true },
+          { key: "quantity", label: "数量", type: "number", required: true },
+          { key: "unitPriceCents", label: "商品金额（分）", type: "number", required: true },
+          { key: "codAmountCents", label: "COD 金额（分）", type: "number", required: false },
+          { key: "shippingFeeCents", label: "运费（分）", type: "number", required: false },
+          { key: "note", label: "订单备注", required: false },
         ]}
         dataColumns={[
-          { key: "orderNo", label: "Order No." },
+          { key: "orderNo", label: "订单号" },
           {
             key: "customer",
-            label: "Customer",
+            label: "客户",
             render: (row) => {
               const customer = row.customer as { code?: string; name?: string } | undefined;
               return customer ? `${customer.code ?? ""} ${customer.name ?? ""}` : "";
             },
           },
-          { key: "status", label: "Status" },
+          { key: "status", label: "订单状态" },
           {
             key: "shipStatusLabel",
             label: "运输状态",
@@ -164,7 +164,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           },
           {
             key: "amount",
-            label: "Amount",
+            label: "订单金额",
             render: (row) => {
               const rowAny = row as unknown as { productValueCents?: number; shippingFeeCents?: number; currency?: string };
               const productValue = rowAny.productValueCents ?? 0;
@@ -174,15 +174,15 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           },
           {
             key: "items",
-            label: "Items",
+            label: "商品",
             render: (row) => {
               const items = row.items as { id?: string; quantity?: number; productName?: string }[] | undefined;
-              return items?.length ? `${items.length} items` : "0";
+              return items?.length ? `${items.length} 件` : "0 件";
             },
           },
           {
             key: "creator",
-            label: "Creator",
+            label: "录单员工",
             render: (row) => {
               const creator = row.creatorUser as { username?: string } | undefined;
               return creator?.username ?? "-";
