@@ -307,6 +307,44 @@ const menuDefs = [
   },
 ];
 
+const menuGroupDefs = [
+  { key: "group-sales", label: "销售与订单", path: "/admin/orders", icon: "ShoppingCart", sortOrder: 10 },
+  { key: "group-logistics", label: "物流与售后", path: "/admin/shipping", icon: "Truck", sortOrder: 20 },
+  { key: "group-customer", label: "客户与消息", path: "/admin/customers", icon: "MessagesSquare", sortOrder: 30 },
+  { key: "group-product", label: "商品与库存", path: "/admin/products", icon: "Package", sortOrder: 40 },
+  { key: "group-finance", label: "财务与审批", path: "/admin/expenses", icon: "WalletCards", sortOrder: 50 },
+  { key: "group-hr", label: "人事与行政", path: "/admin/attendance", icon: "UsersRound", sortOrder: 60 },
+  { key: "group-organization", label: "组织与权限", path: "/admin/users", icon: "ShieldCheck", sortOrder: 70 },
+  { key: "group-system", label: "系统配置", path: "/admin/menus", icon: "Settings2", sortOrder: 80 },
+] as const;
+
+const menuGroupByKey: Record<string, (typeof menuGroupDefs)[number]["key"]> = {
+  orders: "group-sales",
+  "order-review": "group-sales",
+  "order-templates": "group-sales",
+  "shipping-workbench": "group-logistics",
+  shipments: "group-logistics",
+  customers: "group-customer",
+  "unified-inbox": "group-customer",
+  products: "group-product",
+  inventory: "group-product",
+  expenses: "group-finance",
+  approvals: "group-finance",
+  attendance: "group-hr",
+  "leave-requests": "group-hr",
+  announcements: "group-hr",
+  documents: "group-hr",
+  organizations: "group-organization",
+  "business-units": "group-organization",
+  departments: "group-organization",
+  sites: "group-organization",
+  users: "group-organization",
+  memberships: "group-organization",
+  roles: "group-organization",
+  "access-grants": "group-organization",
+  menus: "group-system",
+};
+
 async function main() {
   const legalEntity = await prisma.legalEntity.upsert({
     where: { code: "SAMPLE_LEGAL_ENTITY" },
@@ -378,7 +416,18 @@ async function main() {
   const actions = await prisma.action.findMany();
   const actionSeedMap = new Map(actionDefs.map((action) => [action.key, action]));
 
+  const groupIds = new Map<string, string>();
+  for (const group of menuGroupDefs) {
+    const row = await prisma.menu.upsert({
+      where: { key: group.key },
+      update: { label: group.label, path: group.path, icon: group.icon, sortOrder: group.sortOrder, isActive: true },
+      create: { ...group, isActive: true },
+    });
+    groupIds.set(group.key, row.id);
+  }
+
   for (const menu of menuDefs) {
+    const parentId = menu.key === "dashboard" ? null : groupIds.get(menuGroupByKey[menu.key]) ?? null;
     await prisma.menu.upsert({
       where: { key: menu.key },
       update: {
@@ -387,6 +436,7 @@ async function main() {
         requiredActionKey: menu.requiredActionKey,
         sortOrder: menu.sortOrder,
         isActive: menu.isActive,
+        parentId,
       },
       create: {
         key: menu.key,
@@ -395,6 +445,7 @@ async function main() {
         requiredActionKey: menu.requiredActionKey,
         sortOrder: menu.sortOrder,
         isActive: menu.isActive,
+        parentId,
       },
     });
   }

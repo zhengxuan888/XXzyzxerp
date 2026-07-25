@@ -70,7 +70,7 @@ export async function getMembershipAwareMenus(opts: {
     requiredActionKey: string | null;
   };
 
-  const items: PermissionSource[] = menus
+  const initiallyVisible = menus
     .map(
       (item): MenuPermissionView => ({
         id: item.id,
@@ -88,6 +88,27 @@ export async function getMembershipAwareMenus(opts: {
         (roleMenuIds.has(item.id) || Boolean(item.requiredActionKey && grantActions.has(item.requiredActionKey))) &&
         (!item.requiredActionKey || allowed.has(item.requiredActionKey)),
     )
+    .map((item) => ({
+      id: item.id,
+      key: item.key,
+      label: item.label,
+      path: item.path,
+      icon: item.icon,
+      parentId: item.parentId,
+      sortOrder: item.sortOrder,
+    }));
+
+  const visibleIds = new Set(initiallyVisible.map((item) => item.id));
+  const menuById = new Map(menus.map((item) => [item.id, item]));
+  for (const item of initiallyVisible) {
+    let parentId = item.parentId;
+    while (parentId) {
+      visibleIds.add(parentId);
+      parentId = menuById.get(parentId)?.parentId ?? null;
+    }
+  }
+  const items: PermissionSource[] = menus
+    .filter((item) => visibleIds.has(item.id))
     .map((item) => ({
       id: item.id,
       key: item.key,

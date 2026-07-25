@@ -3,6 +3,7 @@
 import {
   Bell,
   Building2,
+  ChevronRight,
   ChevronDown,
   CircleUserRound,
   LayoutDashboard,
@@ -11,7 +12,14 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Search,
+  Settings2,
   ShieldCheck,
+  ShoppingCart,
+  Truck,
+  MessagesSquare,
+  Package,
+  WalletCards,
+  UsersRound,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -25,6 +33,7 @@ type MenuItem = {
   label: string;
   path: string;
   icon?: string | null;
+  children?: MenuItem[];
 };
 
 type MembershipOption = {
@@ -47,6 +56,23 @@ function isActive(pathname: string, path: string) {
   return pathname === path || pathname.startsWith(`${path}/`);
 }
 
+const navIcons = {
+  ShoppingCart,
+  Truck,
+  MessagesSquare,
+  Package,
+  WalletCards,
+  UsersRound,
+  ShieldCheck,
+  Settings2,
+} as const;
+
+function MenuIcon({ name, active }: { name?: string | null; active?: boolean }) {
+  const Icon = name && name in navIcons ? navIcons[name as keyof typeof navIcons] : null;
+  if (Icon) return <Icon size={18} />;
+  return <span className={`size-1.5 rounded-full ${active ? "bg-white" : "bg-slate-300 group-hover:bg-violet-500"}`} />;
+}
+
 export default function AppShell({
   menuItems,
   brand = "择优臻选 ERP",
@@ -58,6 +84,7 @@ export default function AppShell({
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   const navigation = [
     { id: "dashboard", label: "工作台", path: "/admin" },
@@ -148,6 +175,61 @@ export default function AppShell({
             <ul className="space-y-1">
               {navigation.map((item) => {
                 const active = isActive(pathname, item.path);
+                const hasChildren = Boolean(item.children?.length);
+                const childActive = item.children?.some((child) => isActive(pathname, child.path)) ?? false;
+                const expanded = openGroups[item.id] ?? childActive;
+                if (hasChildren) {
+                  return (
+                    <li key={item.id} className="pt-1">
+                      <button
+                        type="button"
+                        title={collapsed ? zh(item.label) : undefined}
+                        aria-expanded={expanded}
+                        onClick={() => {
+                          if (collapsed) {
+                            setCollapsed(false);
+                            setOpenGroups((value) => ({ ...value, [item.id]: true }));
+                          } else {
+                            setOpenGroups((value) => ({ ...value, [item.id]: !expanded }));
+                          }
+                        }}
+                        className={`group flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-sm font-semibold transition ${
+                          childActive ? "bg-violet-50 text-violet-700" : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"
+                        }`}
+                      >
+                        <span className="grid size-5 shrink-0 place-items-center"><MenuIcon name={item.icon} /></span>
+                        {!collapsed && (
+                          <>
+                            <span className="min-w-0 flex-1 truncate text-left">{zh(item.label)}</span>
+                            <ChevronRight size={15} className={`transition-transform ${expanded ? "rotate-90" : ""}`} />
+                          </>
+                        )}
+                      </button>
+                      {!collapsed && expanded && (
+                        <ul className="ml-5 mt-1 space-y-0.5 border-l border-slate-200 pl-3">
+                          {item.children!.map((child) => {
+                            const activeChild = isActive(pathname, child.path);
+                            return (
+                              <li key={child.id}>
+                                <Link
+                                  href={child.path}
+                                  onClick={() => setMobileOpen(false)}
+                                  className={`flex min-h-9 items-center rounded-lg px-3 text-sm transition ${
+                                    activeChild
+                                      ? "bg-violet-600 font-semibold text-white shadow-sm shadow-violet-200"
+                                      : "text-slate-500 hover:bg-slate-100 hover:text-slate-950"
+                                  }`}
+                                >
+                                  <span className="truncate">{zh(child.label)}</span>
+                                </Link>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </li>
+                  );
+                }
                 return (
                   <li key={item.id}>
                     <Link
@@ -161,7 +243,7 @@ export default function AppShell({
                       }`}
                     >
                       <span className="grid size-5 shrink-0 place-items-center">
-                        {item.path === "/admin" ? <LayoutDashboard size={18} /> : <span className={`size-1.5 rounded-full ${active ? "bg-white" : "bg-slate-300 group-hover:bg-violet-500"}`} />}
+                        {item.path === "/admin" ? <LayoutDashboard size={18} /> : <MenuIcon name={item.icon} active={active} />}
                       </span>
                       {!collapsed && <span className="truncate">{zh(item.label)}</span>}
                     </Link>

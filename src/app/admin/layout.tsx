@@ -20,7 +20,12 @@ export default async function AdminLayout({
   }
 
   const menuMap = await getMembershipAwareMenus({ membershipId: membership.id, userId: session.userId });
-  const rootItems = menuMap.get(null) ?? [];
+  type MenuNode = (typeof menuMap extends Map<string | null, infer T> ? T extends Array<infer U> ? U : never : never) & {
+    children?: MenuNode[];
+  };
+  const buildTree = (parentId: string | null): MenuNode[] =>
+    (menuMap.get(parentId) ?? []).map((item) => ({ ...item, children: buildTree(item.id) }));
+  const rootItems = buildTree(null);
   const availableMemberships = await prisma.membership.findMany({
     where: {
       userId: session.userId,
