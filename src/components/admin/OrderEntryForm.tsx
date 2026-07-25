@@ -5,6 +5,7 @@ import { CalendarDays, Check, CircleCheck, CircleHelp, CircleX, LoaderCircle, Ma
 import type { OrderTemplateConfiguration } from "@/lib/order-template";
 
 type Option = { id: string; code: string; name: string };
+type CustomerOption = Option & { orderCount: number; lastOrderedAt: string | null };
 type ProductOption = Option & { skus: { id: string; code: string }[] };
 type TemplateOption = Option & { configuration: OrderTemplateConfiguration; isDefault: boolean };
 
@@ -14,15 +15,17 @@ export default function OrderEntryForm({
   templates,
   canCreate,
 }: {
-  customers: Option[];
+  customers: CustomerOption[];
   products: ProductOption[];
   templates: TemplateOption[];
   canCreate: boolean;
 }) {
   const defaultTemplate = templates.find((item) => item.isDefault) ?? templates[0];
   const [templateId, setTemplateId] = useState(defaultTemplate?.id ?? "");
+  const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [selectedProductId, setSelectedProductId] = useState(products[0]?.id ?? "");
   const selectedProduct = products.find((item) => item.id === selectedProductId);
+  const selectedCustomer = customers.find((item) => item.id === selectedCustomerId);
   const [productName, setProductName] = useState(selectedProduct?.name ?? "");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -153,10 +156,19 @@ export default function OrderEntryForm({
 
         <Section title="订单信息">
           <Field label="客户" required>
-            <select name="customerId" required className={input}>
+            <select name="customerId" required className={input} value={selectedCustomerId} onChange={(event) => setSelectedCustomerId(event.target.value)}>
               <option value="">选择客户</option>
-              {customers.map((item) => <option key={item.id} value={item.id}>{item.code} 路 {item.name}</option>)}
+              {customers.map((item) => <option key={item.id} value={item.id}>{item.code} / {item.name}</option>)}
             </select>
+            {selectedCustomer && (
+              <p className={`mt-2 rounded-lg px-3 py-2 text-xs ${
+                selectedCustomer.orderCount > 0 ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-700"
+              }`}>
+                {selectedCustomer.orderCount > 0
+                  ? `历史客户：当前可见范围内已下单 ${selectedCustomer.orderCount} 次，最近下单 ${selectedCustomer.lastOrderedAt ? new Date(selectedCustomer.lastOrderedAt).toLocaleString("zh-CN") : "-"}。`
+                  : "当前可见范围内没有历史订单，可按新客户继续录入。"}
+              </p>
+            )}
           </Field>
           <Field label="产品搜索">
             <input

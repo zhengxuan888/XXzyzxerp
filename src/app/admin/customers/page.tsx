@@ -45,33 +45,33 @@ export default async function CustomersPage() {
     <CrudPage
       apiBase="/api/mvp"
       resource="customers"
-      listTitle="Customers"
+      listTitle="客户档案"
       canCreate={canCreate.allowed}
       canDelete={canDelete.allowed}
       rows={rows}
       createFields={[
-        { key: "code", label: "Customer Code", required: true },
-        { key: "name", label: "Customer Name", required: true },
-        { key: "contactName", label: "Contact Name" },
-        { key: "contactPhone", label: "Phone" },
-        { key: "contactEmail", label: "Email", type: "email" },
-        { key: "taxId", label: "Tax ID" },
-        { key: "address", label: "Address" },
+        { key: "code", label: "客户编号", required: true },
+        { key: "name", label: "客户名称", required: true },
+        { key: "contactName", label: "联系人" },
+        { key: "contactPhone", label: "联系电话" },
+        { key: "contactEmail", label: "邮箱", type: "email" },
+        { key: "taxId", label: "税号" },
+        { key: "address", label: "地址" },
       ]}
       dataColumns={[
-        { key: "code", label: "Code" },
-        { key: "name", label: "Name" },
+        { key: "code", label: "客户编号" },
+        { key: "name", label: "客户名称" },
         {
           key: "legalEntity",
-          label: "Legal Entity",
+          label: "所属公司",
           render: (row) => {
             const legalEntity = row.legalEntity as { code?: string; name?: string } | undefined;
             if (!legalEntity) return "-";
             return `${legalEntity.code ?? ""} ${legalEntity.name ?? ""}`.trim();
           },
         },
-        { key: "contactPhone", label: "Phone" },
-        { key: "contactEmail", label: "Email" },
+        { key: "contactPhone", label: "联系电话" },
+        { key: "contactEmail", label: "邮箱" },
       ]}
     />
   );

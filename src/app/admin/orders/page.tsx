@@ -60,6 +60,13 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
   const baseWhere = { businessUnitId: membership.businessUnitId, ...(status ? { status } : {}) };
   const scopedWhere = withOrderReadScope(baseWhere, orderReadScope, membership, session.userId);
+  const customerHistory = await prisma.order.groupBy({
+    by: ["customerId"],
+    where: scopedWhere as Record<string, unknown>,
+    _count: { _all: true },
+    _max: { orderedAt: true },
+  });
+  const historyByCustomer = new Map(customerHistory.map((item) => [item.customerId, item]));
 
   const [rows, templates] = await Promise.all([
     prisma.order.findMany({
@@ -88,7 +95,14 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       </div>
       <OrderEntryForm
         canCreate={canCreate.allowed}
-        customers={customers}
+        customers={customers.map((customer) => {
+          const history = historyByCustomer.get(customer.id);
+          return {
+            ...customer,
+            orderCount: history?._count._all ?? 0,
+            lastOrderedAt: history?._max.orderedAt?.toISOString() ?? null,
+          };
+        })}
         products={products}
         templates={templates.map((template) => ({
           ...template,
