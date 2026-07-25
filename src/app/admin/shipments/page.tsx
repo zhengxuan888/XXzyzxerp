@@ -168,6 +168,7 @@ export default async function ShipmentsPage({
       detailPath={detailPath}
       canCreate={false}
       canDelete={false}
+      showCreate={false}
       rowClassName={(row) => {
         if (row.urgency === "critical") return "bg-rose-50/40";
         if (row.urgency === "high") return "bg-amber-50/50";
@@ -176,29 +177,29 @@ export default async function ShipmentsPage({
       rows={withDerived}
       createFields={[]}
       dataColumns={[
-        { key: "trackingNo", label: "Tracking No" },
-        { key: "priorityTag", label: "Priority" },
-        { key: "latestEvent", label: "Last Event" },
-        { key: "latestMemo", label: "Last Memo" },
-        { key: "latestTime", label: "Last Occurred" },
-        { key: "dueStatus", label: "Follow-up" },
-        { key: "overdueHoursLabel", label: "Overdue Window" },
-        { key: "urgencyLabel", label: "Urgency" },
-        { key: "isOverdueLabel", label: "Overdue" },
-        { key: "followUpAt", label: "Follow-up At" },
+        { key: "trackingNo", label: "物流单号" },
+        { key: "priorityTag", label: "优先级" },
+        { key: "latestEvent", label: "最新轨迹" },
+        { key: "latestMemo", label: "轨迹说明" },
+        { key: "latestTime", label: "轨迹时间" },
+        { key: "dueStatus", label: "联系提醒" },
+        { key: "overdueHoursLabel", label: "跟进时限" },
+        { key: "urgencyLabel", label: "紧急程度" },
+        { key: "isOverdueLabel", label: "是否超期" },
+        { key: "followUpAt", label: "下次跟进" },
         {
           key: "order",
-          label: "Order",
+          label: "订单号",
           render: (row) => {
             const value = row.order as { orderNo?: string } | undefined;
             return value?.orderNo ?? "-";
           },
         },
-        { key: "carrier", label: "Carrier" },
-        { key: "status", label: "Status" },
+        { key: "carrier", label: "物流商" },
+        { key: "status", label: "运输状态" },
         {
           key: "createdAt",
-          label: "Created",
+          label: "创建时间",
           render: (row) => {
             const value = row.createdAt;
             const createdAt = typeof value === "string" ? new Date(value) : value;

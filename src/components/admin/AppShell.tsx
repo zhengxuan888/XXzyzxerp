@@ -23,8 +23,8 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { zh } from "@/lib/i18n";
 
@@ -73,6 +73,16 @@ function MenuIcon({ name, active }: { name?: string | null; active?: boolean }) 
   return <span className={`size-1.5 rounded-full ${active ? "bg-white" : "bg-slate-300 group-hover:bg-violet-500"}`} />;
 }
 
+type SearchableMenu = MenuItem & { groupLabel?: string };
+
+function flattenNavigation(items: MenuItem[]): SearchableMenu[] {
+  return items.flatMap((item) =>
+    item.children?.length
+      ? item.children.map((child) => ({ ...child, groupLabel: item.label }))
+      : [item],
+  );
+}
+
 export default function AppShell({
   menuItems,
   brand = "择优臻选 ERP",
@@ -82,15 +92,89 @@ export default function AppShell({
   children,
 }: AppShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchKeyword, setSearchKeyword] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const navigation = [
+  const navigation = useMemo(() => [
     { id: "dashboard", label: "工作台", path: "/admin" },
     ...menuItems.filter((item) => item.path !== "/admin"),
-  ];
+  ], [menuItems]);
   const activeMembership = memberships.find((item) => item.id === activeMembershipId);
+  const storageSuffix = activeMembershipId ?? "default";
+  const searchableMenus = useMemo(() => flattenNavigation(navigation), [navigation]);
+  const searchResults = useMemo(() => {
+    const keyword = searchKeyword.trim().toLocaleLowerCase("zh-CN");
+    if (!keyword) return searchableMenus.slice(0, 8);
+    return searchableMenus.filter((item) =>
+      `${zh(item.label)} ${item.groupLabel ? zh(item.groupLabel) : ""}`.toLocaleLowerCase("zh-CN").includes(keyword),
+    ).slice(0, 10);
+  }, [searchKeyword, searchableMenus]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        setCollapsed(window.localStorage.getItem(`erp-nav-collapsed:${storageSuffix}`) === "1");
+        const savedGroups = window.localStorage.getItem(`erp-nav-groups:${storageSuffix}`);
+        if (savedGroups) setOpenGroups(JSON.parse(savedGroups) as Record<string, boolean>);
+      } catch {
+        // 浏览器禁用本地存储时继续使用默认导航状态。
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [storageSuffix]);
+
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        openSearch();
+      }
+      if (event.key === "Escape") setSearchOpen(false);
+    }
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, []);
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    window.setTimeout(() => searchInputRef.current?.focus(), 0);
+  }, [searchOpen]);
+
+  function openSearch() {
+    setSearchKeyword("");
+    setSearchOpen(true);
+  }
+
+  function updateCollapsed(value: boolean) {
+    setCollapsed(value);
+    try {
+      window.localStorage.setItem(`erp-nav-collapsed:${storageSuffix}`, value ? "1" : "0");
+    } catch {
+      // 存储失败不影响导航。
+    }
+  }
+
+  function updateGroup(groupId: string, expanded: boolean) {
+    setOpenGroups((current) => {
+      const next = { ...current, [groupId]: expanded };
+      try {
+        window.localStorage.setItem(`erp-nav-groups:${storageSuffix}`, JSON.stringify(next));
+      } catch {
+        // 存储失败不影响导航。
+      }
+      return next;
+    });
+  }
+
+  function goToMenu(item: SearchableMenu) {
+    setSearchOpen(false);
+    router.push(item.path);
+  }
 
   return (
     <div className="min-h-screen bg-[var(--surface-muted)] text-slate-900">
@@ -116,11 +200,15 @@ export default function AppShell({
           </Link>
 
           <div className="ml-auto hidden max-w-md flex-1 items-center lg:flex">
-            <div className="ml-8 flex h-10 w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-slate-400">
+            <button
+              type="button"
+              onClick={openSearch}
+              className="ml-8 flex h-10 w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-slate-400 transition hover:border-violet-300 hover:bg-white hover:text-slate-600 focus:outline-none focus:ring-4 focus:ring-violet-100"
+            >
               <Search size={16} />
-              <span className="text-xs">搜索订单、客户、物流单号</span>
+              <span className="text-xs">快速查找功能</span>
               <kbd className="ml-auto rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-400">Ctrl K</kbd>
-            </div>
+            </button>
           </div>
 
           <div className="ml-auto flex items-center gap-1 lg:ml-4">
@@ -130,6 +218,14 @@ export default function AppShell({
                 {activeMembership?.label ?? "当前业务板块"}
               </span>
             </div>
+            <button
+              type="button"
+              aria-label="快速查找功能"
+              onClick={openSearch}
+              className="grid size-10 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 lg:hidden"
+            >
+              <Search size={18} />
+            </button>
             <button type="button" aria-label="通知" className="relative grid size-10 place-items-center rounded-xl text-slate-500 hover:bg-slate-100">
               <Bell size={18} />
               <span className="absolute right-2 top-2 size-1.5 rounded-full bg-rose-500" />
@@ -150,6 +246,65 @@ export default function AppShell({
         />
       )}
 
+      {searchOpen && (
+        <div
+          className="fixed inset-0 z-[70] flex items-start justify-center bg-slate-950/35 px-4 pt-[12vh] backdrop-blur-sm"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSearchOpen(false);
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label="快速查找功能"
+            className="w-full max-w-xl overflow-hidden rounded-2xl border border-white/60 bg-white shadow-2xl shadow-slate-950/20"
+          >
+            <label className="flex h-14 items-center gap-3 border-b border-slate-200 px-4">
+              <Search size={19} className="text-violet-600" />
+              <input
+                ref={searchInputRef}
+                value={searchKeyword}
+                onChange={(event) => setSearchKeyword(event.target.value)}
+                className="min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                placeholder="输入功能名称，例如：核单、物流、员工"
+                aria-label="搜索功能"
+              />
+              <kbd className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] text-slate-400">ESC</kbd>
+            </label>
+            <div className="max-h-[55vh] overflow-y-auto p-2">
+              {searchResults.length ? (
+                <ul className="space-y-1">
+                  {searchResults.map((item) => (
+                    <li key={item.id}>
+                      <button
+                        type="button"
+                        onClick={() => goToMenu(item)}
+                        className="group flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left hover:bg-violet-50 focus:bg-violet-50 focus:outline-none"
+                      >
+                        <span className="grid size-8 place-items-center rounded-lg bg-slate-100 text-slate-500 group-hover:bg-violet-100 group-hover:text-violet-700">
+                          {item.path === "/admin" ? <LayoutDashboard size={16} /> : <Search size={15} />}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <strong className="block truncate text-sm text-slate-800">{zh(item.label)}</strong>
+                          <span className="block truncate text-xs text-slate-400">{item.groupLabel ? `${zh(item.groupLabel)} · ` : ""}{item.path}</span>
+                        </span>
+                        <span className="text-xs text-slate-300">打开</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="px-4 py-10 text-center">
+                  <p className="text-sm font-medium text-slate-700">没有找到匹配功能</p>
+                  <p className="mt-1 text-xs text-slate-400">只会显示当前账号拥有权限的菜单。</p>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
+
       <aside
         className={`fixed bottom-0 left-0 top-16 z-50 border-r border-slate-200 bg-white transition-all duration-200 ${
           collapsed ? "w-[76px]" : "w-64"
@@ -161,7 +316,7 @@ export default function AppShell({
             <button
               type="button"
               aria-label={collapsed ? "展开导航" : "收起导航"}
-              onClick={() => setCollapsed((value) => !value)}
+              onClick={() => updateCollapsed(!collapsed)}
               className="hidden size-9 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 lg:grid"
             >
               {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
@@ -187,10 +342,10 @@ export default function AppShell({
                         aria-expanded={expanded}
                         onClick={() => {
                           if (collapsed) {
-                            setCollapsed(false);
-                            setOpenGroups((value) => ({ ...value, [item.id]: true }));
+                            updateCollapsed(false);
+                            updateGroup(item.id, true);
                           } else {
-                            setOpenGroups((value) => ({ ...value, [item.id]: !expanded }));
+                            updateGroup(item.id, !expanded);
                           }
                         }}
                         className={`group flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-sm font-semibold transition ${

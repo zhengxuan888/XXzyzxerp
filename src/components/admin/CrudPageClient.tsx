@@ -261,7 +261,11 @@ export default function CrudPage({
                     String(row.isOverdue ?? "").toUpperCase() === "YES" || String(row.isOverdue ?? "").toUpperCase() === "TRUE"
                       ? "bg-rose-50/30"
                       : "";
-                  const highlightClass = rowClassName ? rowClassName(row) : fallbackClass;
+                  const highlightClass = typeof row.__rowClassName === "string"
+                    ? row.__rowClassName
+                    : rowClassName
+                      ? rowClassName(row)
+                      : fallbackClass;
                   return (
                     <tr key={id} className={`group hover:bg-violet-50/30 ${highlightClass}`}>
                       {dataColumns.map((column) => (

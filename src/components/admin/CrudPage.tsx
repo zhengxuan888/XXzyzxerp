@@ -15,15 +15,18 @@ export default function CrudPage(props: CrudPageProps) {
   const clientColumns: DataCell[] = props.dataColumns.map(({ key, label }) => ({ key, label }));
   const clientRows: DataRow[] = props.rows.map((row) => {
     const prepared: DataRow = { ...row };
+    if (props.rowClassName) prepared.__rowClassName = props.rowClassName(row);
     for (const column of props.dataColumns) {
       if (column.render) prepared[column.key] = column.render(row);
     }
     return prepared;
   });
+  const { rowClassName: _serverRowClassName, ...clientProps } = props;
+  void _serverRowClassName;
 
   return (
     <CrudPageClient
-      {...props}
+      {...clientProps}
       rows={clientRows}
       dataColumns={clientColumns}
     />
