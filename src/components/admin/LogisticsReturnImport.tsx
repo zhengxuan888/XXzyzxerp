@@ -19,9 +19,9 @@ function splitAliases(raw: string) {
 
 export default function LogisticsReturnImport() {
   const [file, setFile] = useState<File | null>(null);
-  const [orderNoHeader, setOrderNoHeader] = useState("orderNo,orderNo,订单号");
-  const [trackingNoHeader, setTrackingNoHeader] = useState("trackingNo,trackingNo,物流单号");
-  const [carrierHeader, setCarrierHeader] = useState("carrier,carrier,承运商");
+  const [orderNoHeader, setOrderNoHeader] = useState("orderNo,订单号,客户订单号");
+  const [trackingNoHeader, setTrackingNoHeader] = useState("trackingNo,物流单号,运单号");
+  const [carrierHeader, setCarrierHeader] = useState("carrier,承运商,物流商");
   const [rows, setRows] = useState<PreviewRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -70,7 +70,9 @@ export default function LogisticsReturnImport() {
             <FileSpreadsheet size={18} />
             <strong>物流回传单号</strong>
           </div>
-          <p className="mt-1 text-sm text-slate-500">上传物流返回的表格进行单号回填。支持自定义列名映射（逗号分隔）。</p>
+          <p className="mt-1 text-sm text-slate-500">
+            上传物流商返回的 XLSX，按订单号自动匹配并回填运单号。回填后仍需上传出货凭证并确认发货。
+          </p>
         </div>
         <div className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-3">
           <label className="text-xs">

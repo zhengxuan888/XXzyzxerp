@@ -39,13 +39,15 @@ export default async function ShippingWorkbenchPage() {
     <div className="space-y-6">
       <header>
         <h1 className="text-2xl font-bold text-slate-950">待发货工作台</h1>
-        <p className="mt-1 text-sm text-slate-500">物流单号回填后仍是待发货；上传出货凭证并确认发货后，才进入物流追踪。</p>
+        <p className="mt-1 text-sm text-slate-500">
+          批量或手动回填物流单号；回填后仍是待发货，上传出货凭证并确认发货后才进入物流追踪。
+        </p>
       </header>
       <LogisticsReturnImport />
       <CrudPage
         apiBase="/api/mvp"
         resource="shipments"
-        listTitle="已回填物流单号，等待确认发货"
+        listTitle="已回填物流单号，等待上传凭证并确认发货"
         detailPath="/admin/orders"
         canCreate
         canDelete={false}
@@ -53,14 +55,14 @@ export default async function ShippingWorkbenchPage() {
         createFields={[
           {
             key: "orderId",
-            label: "订单",
+            label: "已核单订单",
             required: true,
             type: "select",
             options: orders.map((order) => ({ value: order.id, label: order.orderNo })),
           },
-          { key: "carrier", label: "承运商/运输方式", required: true },
+          { key: "carrier", label: "物流商 / 运输方式", required: true },
           { key: "trackingNo", label: "物流单号", required: true },
-          { key: "memo", label: "备注" },
+          { key: "memo", label: "回填备注" },
         ]}
         dataColumns={[
           {
@@ -74,8 +76,8 @@ export default async function ShippingWorkbenchPage() {
             render: (row) => (row.order as { creatorUser?: { username?: string } } | undefined)?.creatorUser?.username ?? "-",
           },
           { key: "trackingNo", label: "物流单号" },
-          { key: "carrier", label: "运输方式" },
-          { key: "status", label: "状态" },
+          { key: "carrier", label: "物流商 / 运输方式" },
+          { key: "status", label: "发货状态" },
         ]}
       />
     </div>

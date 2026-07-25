@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
   });
   if (!order) return NextResponse.json({ error: "Order not found." }, { status: 404 });
   if (order.status !== "WAITING_SHIPMENT") {
-    return fail("ORDER_NOT_READY_TO_SHIP", "只有已核单并进入待发货状态的订单才能创建物流单。", 409);
+    return fail("ORDER_NOT_READY_TO_SHIP", "只有核单通过并进入待发货状态的订单才能回填物流单号。", 409);
   }
 
   const canCreate = await checkPermission({
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
   const trackingNo = typeof body.trackingNo === "string" ? body.trackingNo.trim() : "";
   const carrier = typeof body.carrier === "string" ? body.carrier.trim() : "";
   if (!trackingNo || !carrier) {
-    return fail("SHIPMENT_FIELDS_REQUIRED", "承运商和物流单号必填。", 400);
+    return fail("SHIPMENT_FIELDS_REQUIRED", "物流商和物流单号必填。", 400);
   }
   const duplicate = await prisma.shipment.findFirst({
     where: { businessUnitId: order.businessUnitId, trackingNo },
