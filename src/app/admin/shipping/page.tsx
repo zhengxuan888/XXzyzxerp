@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import CrudPage from "@/components/admin/CrudPage";
 import LogisticsReturnImport from "@/components/admin/LogisticsReturnImport";
+import LogisticsTemplateManager from "@/components/admin/LogisticsTemplateManager";
 import { getActiveMembershipById } from "@/lib/auth";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
@@ -20,7 +21,7 @@ export default async function ShippingWorkbenchPage() {
   });
   if (!permission.allowed) redirect("/admin");
 
-  const [orders, pendingShipments] = await Promise.all([
+  const [orders, pendingShipments, logisticsTemplates, templateRead, templateManage, templateExport] = await Promise.all([
     prisma.order.findMany({
       where: { businessUnitId: membership.businessUnitId, status: "WAITING_SHIPMENT" },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -33,6 +34,14 @@ export default async function ShippingWorkbenchPage() {
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     }),
+    prisma.logisticsProviderTemplate.findMany({
+      where: { businessUnitId: membership.businessUnitId, isActive: true },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+      select: { id: true, code: true, name: true, carrierName: true },
+    }),
+    checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "logistics_template.read", targetBusinessUnitId: membership.businessUnitId }),
+    checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "logistics_template.manage", targetBusinessUnitId: membership.businessUnitId }),
+    checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "logistics_template.export", targetBusinessUnitId: membership.businessUnitId }),
   ]);
 
   return (
@@ -43,6 +52,14 @@ export default async function ShippingWorkbenchPage() {
           批量或手动回填物流单号；回填后仍是待发货，上传出货凭证并确认发货后才进入物流追踪。
         </p>
       </header>
+      {templateRead.allowed && (
+        <LogisticsTemplateManager
+          templates={logisticsTemplates}
+          waitingOrderCount={orders.length}
+          canManage={templateManage.allowed}
+          canExport={templateExport.allowed}
+        />
+      )}
       <LogisticsReturnImport />
       <CrudPage
         apiBase="/api/mvp"

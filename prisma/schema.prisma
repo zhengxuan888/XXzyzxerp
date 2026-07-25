@@ -141,6 +141,7 @@ model LegalEntity {
   shipments          Shipment[]
   approvalRecords    ApprovalRecord[]
   orderTemplates     OrderTemplate[]
+  logisticsTemplates LogisticsProviderTemplate[]
   channelConnections ChannelConnection[]
   conversations      Conversation[]
   inboxAuditEvents   InboxAuditEvent[]
@@ -177,6 +178,7 @@ model BusinessUnit {
   inventoryTransactions InventoryTransaction[]
   inventoryReservations InventoryReservation[]
   orderTemplates        OrderTemplate[]
+  logisticsTemplates    LogisticsProviderTemplate[]
   logisticsFollowUps    LogisticsFollowUp[]
   channelConnections    ChannelConnection[]
   contactIdentities     ContactIdentity[]
@@ -607,6 +609,25 @@ model OrderTemplate {
   legalEntity  LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
   businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
   orders       Order[]
+
+  @@unique([businessUnitId, code])
+  @@index([businessUnitId, isActive])
+}
+
+model LogisticsProviderTemplate {
+  id             String   @id @default(uuid())
+  legalEntityId  String
+  businessUnitId String
+  code           String
+  name           String
+  carrierName    String
+  configuration  Json
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  legalEntity  LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
 
   @@unique([businessUnitId, code])
   @@index([businessUnitId, isActive])
