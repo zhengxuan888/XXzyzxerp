@@ -1,24 +1,18 @@
 ﻿import { redirect } from "next/navigation";
 
-import CrudPage from "@/components/admin/CrudPage";
+import LogisticsTrackingWorkbench from "@/components/admin/LogisticsTrackingWorkbench";
 import type { Prisma } from "@prisma/client";
 import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
 import { checkPermission } from "@/lib/permission";
 import { HIGH_PRIORITY_SHIPMENT_EVENTS, shipmentEventMeta } from "@/lib/logistics";
 import { prisma } from "@/lib/prisma";
+import { formatMoneyCents } from "@/lib/money";
 
 type ShipmentQueue = "high_priority" | "needs_attention" | "in_transit" | "all";
 type Urgency = "critical" | "high" | "normal";
 
 const NOW_TS = Date.now();
-
-function queueLabel(queue: ShipmentQueue) {
-  if (queue === "high_priority") return "高优先级待办";
-  if (queue === "needs_attention") return "需要关注";
-  if (queue === "in_transit") return "运输中";
-  return "物流列表";
-}
 
 function classifyOverdue(latestFollowAt: Date | null) {
   if (!latestFollowAt) {
@@ -53,7 +47,7 @@ function classifyOverdue(latestFollowAt: Date | null) {
   };
 }
 
-function classifyUrgency(overdue: boolean, highPriority: boolean, followAt: Date | null) {
+function classifyUrgency(overdue: boolean, highPriority: boolean, followAt: Date | null): Urgency {
   if (overdue) return "critical";
   if (highPriority) return "high";
   if (followAt && followAt.getTime() <= NOW_TS + 60 * 60 * 1000) return "high";
@@ -110,11 +104,29 @@ export default async function ShipmentsPage({
   const rows = await prisma.shipment.findMany({
     where: { businessUnitId: membership.businessUnitId, status: { not: "PENDING" }, ...queueWhere },
     include: {
-      order: { select: { orderNo: true } },
+      order: {
+        select: {
+          id: true,
+          orderNo: true,
+          recipientName: true,
+          recipientPhone: true,
+          recipientEmail: true,
+          customerWhatsapp: true,
+          codAmountCents: true,
+          currency: true,
+          customer: { select: { name: true } },
+          creatorUser: { select: { username: true, fullName: true } },
+          items: { select: { productName: true, quantity: true }, orderBy: { id: "asc" } },
+        },
+      },
       events: {
-        orderBy: { occurredAt: "desc" },
-        take: 1,
-        select: { eventType: true, memo: true, occurredAt: true },
+        orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+        take: 30,
+        include: {
+          annotation: {
+            include: { handledByMembership: { include: { user: { select: { username: true, fullName: true } } } } },
+          },
+        },
       },
       followUps: {
         orderBy: { createdAt: "desc" },
@@ -158,55 +170,37 @@ export default async function ShipmentsPage({
       return new Date(b.createdAt as Date).getTime() - new Date(a.createdAt as Date).getTime();
     });
 
-  const detailPath = "/admin/shipments";
-
   return (
-    <CrudPage
-      apiBase="/api/mvp"
-      resource="shipments"
-      listTitle={overdueOnly ? `${queueLabel(queue)}（仅超期）` : queueLabel(queue)}
-      detailPath={detailPath}
-      canCreate={false}
-      canDelete={false}
-      showCreate={false}
-      rowClassName={(row) => {
-        if (row.urgency === "critical") return "bg-rose-50/40";
-        if (row.urgency === "high") return "bg-amber-50/50";
-        return "";
-      }}
-      rows={withDerived}
-      createFields={[]}
-      dataColumns={[
-        { key: "trackingNo", label: "物流单号" },
-        { key: "priorityTag", label: "优先级" },
-        { key: "latestEvent", label: "最新轨迹" },
-        { key: "latestMemo", label: "轨迹说明" },
-        { key: "latestTime", label: "轨迹时间" },
-        { key: "dueStatus", label: "联系提醒" },
-        { key: "overdueHoursLabel", label: "跟进时限" },
-        { key: "urgencyLabel", label: "紧急程度" },
-        { key: "isOverdueLabel", label: "是否超期" },
-        { key: "followUpAt", label: "下次跟进" },
-        {
-          key: "order",
-          label: "订单号",
-          render: (row) => {
-            const value = row.order as { orderNo?: string } | undefined;
-            return value?.orderNo ?? "-";
-          },
+    <LogisticsTrackingWorkbench
+      rows={withDerived.map((row) => ({
+        id: row.id,
+        trackingNo: row.trackingNo,
+        carrier: row.carrier,
+        status: row.status,
+        urgency: row.urgency,
+        urgencyLabel: row.urgencyLabel,
+        priorityTag: row.priorityTag,
+        dueStatus: row.dueStatus,
+        order: {
+          ...row.order,
+          codAmountLabel: formatMoneyCents(row.order.codAmountCents, row.order.currency),
         },
-        { key: "carrier", label: "物流商" },
-        { key: "status", label: "运输状态" },
-        {
-          key: "createdAt",
-          label: "创建时间",
-          render: (row) => {
-            const value = row.createdAt;
-            const createdAt = typeof value === "string" ? new Date(value) : value;
-            return createdAt ? createdAt.toLocaleString("zh-CN") : "-";
-          },
-        },
-      ]}
+        events: row.events.map((event) => ({
+          id: event.id,
+          occurredAt: event.occurredAt.toISOString(),
+          eventType: event.eventType,
+          statusMilestone: event.statusMilestone,
+          location: event.location,
+          memo: event.memo,
+          annotation: event.annotation ? {
+            note: event.annotation.note,
+            tags: event.annotation.tags,
+            isHandled: event.annotation.isHandled,
+            handledAt: event.annotation.handledAt?.toISOString() ?? null,
+            handledByMembership: event.annotation.handledByMembership,
+          } : null,
+        })),
+      }))}
     />
   );
 }

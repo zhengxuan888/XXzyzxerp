@@ -180,6 +180,7 @@ model BusinessUnit {
   orderTemplates        OrderTemplate[]
   logisticsTemplates    LogisticsProviderTemplate[]
   logisticsFollowUps    LogisticsFollowUp[]
+  logisticsEventAnnotations LogisticsEventAnnotation[]
   channelConnections    ChannelConnection[]
   contactIdentities     ContactIdentity[]
   conversations         Conversation[]
@@ -388,6 +389,7 @@ model Membership {
   shipmentEvents              ShipmentEvent[]          @relation("MembershipShipmentEvents")
   ownedShipments              Shipment[]               @relation("ShipmentAftersalesOwner")
   logisticsFollowUps          LogisticsFollowUp[]
+  handledLogisticsAnnotations LogisticsEventAnnotation[] @relation("LogisticsAnnotationHandler")
   inventoryTransactions       InventoryTransaction[]
   assignedConversations       ConversationAssignment[] @relation("ConversationAssignee")
   conversationAssignmentsMade ConversationAssignment[] @relation("ConversationAssigner")
@@ -750,6 +752,7 @@ model Shipment {
   ownerMembership Membership?         @relation("ShipmentAftersalesOwner", fields: [ownerMembershipId], references: [id], onDelete: SetNull)
   events          ShipmentEvent[]
   followUps       LogisticsFollowUp[]
+  eventAnnotations LogisticsEventAnnotation[]
 
   @@index([orderId, status])
   @@index([businessUnitId, trackingNo])
@@ -771,9 +774,32 @@ model ShipmentEvent {
 
   shipment        Shipment    @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
   actorMembership Membership? @relation("MembershipShipmentEvents", fields: [actorMembershipId], references: [id], onDelete: SetNull)
+  annotation      LogisticsEventAnnotation?
 
   @@unique([shipmentId, source, externalEventKey])
   @@index([shipmentId, occurredAt])
+}
+
+model LogisticsEventAnnotation {
+  id                    String    @id @default(uuid())
+  shipmentId            String
+  shipmentEventId       String    @unique
+  businessUnitId        String
+  note                  String?
+  tags                  String[]  @default([])
+  isHandled             Boolean   @default(false)
+  handledAt             DateTime?
+  handledByMembershipId String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  shipment           Shipment      @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  shipmentEvent      ShipmentEvent @relation(fields: [shipmentEventId], references: [id], onDelete: Cascade)
+  businessUnit       BusinessUnit  @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  handledByMembership Membership?  @relation("LogisticsAnnotationHandler", fields: [handledByMembershipId], references: [id], onDelete: SetNull)
+
+  @@index([businessUnitId, isHandled, updatedAt])
+  @@index([shipmentId, updatedAt])
 }
 
 model LogisticsFollowUp {
