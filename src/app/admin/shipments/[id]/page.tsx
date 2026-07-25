@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, CalendarClock, MapPin, PackageCheck, Route, Truck } from "lucide-react";
+import type { ReactNode } from "react";
 
 import ShipmentEventForm from "@/components/admin/ShipmentEventForm";
 import LogisticsFollowUpForm from "@/components/admin/LogisticsFollowUpForm";
+import AttachmentPanel from "@/components/admin/AttachmentPanel";
 import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
 import { checkPermission } from "@/lib/permission";
@@ -25,6 +27,14 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
   });
   if (!canRead.allowed) redirect("/admin");
 
+  const canUpload = await checkPermission({
+    userId: session.userId,
+    membershipId: membership.id,
+    actionKey: "shipment.create",
+    targetBusinessUnitId: membership.businessUnitId,
+    targetDepartmentId: membership.departmentId,
+  });
+
   const shipment = await prisma.shipment.findFirst({
     where: {
       id,
@@ -35,7 +45,8 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
       events: { orderBy: { occurredAt: "desc" } },
       followUps: {
         orderBy: { createdAt: "desc" },
-        include: { actorUser: { select: { fullName: true, username: true } } },
+        include: { actorUser: { select: { fullName: true, username: true } },
+        },
       },
     },
   });
@@ -44,14 +55,14 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
   return (
     <div className="space-y-5">
       <Link href="/admin/shipments" className="inline-flex items-center gap-1 text-sm font-medium text-slate-500 hover:text-violet-700">
-        <ArrowLeft size={16} /> 返回发货与物流
+        <ArrowLeft size={16} /> 返回物流跟踪
       </Link>
 
       <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">物流跟单售后</span>
+              <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">物流订单</span>
               <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">{zh(shipment.status)}</span>
               <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">{zh(shipment.workStatus)}</span>
             </div>
@@ -70,10 +81,10 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="font-bold text-slate-900">物流轨迹</h2>
-          <p className="mt-1 text-xs text-slate-500">从快递发出开始持续跟踪，异常轨迹应同步进入售后处理。</p>
+          <p className="mt-1 text-xs text-slate-500">按时间顺序展示每条物流事件，支持人工补录与后续处理。</p>
           <ul className="relative mt-5 space-y-0 text-sm text-slate-700">
             {shipment.events.length === 0 ? (
-              <li className="rounded-xl bg-slate-50 p-4 text-slate-500">暂无物流轨迹。</li>
+              <li className="rounded-xl bg-slate-50 p-4 text-slate-500">暂无物流轨迹</li>
             ) : (
               shipment.events.map((item) => (
                 <li key={item.id} className="relative ml-3 border-l border-slate-200 pb-5 pl-6 last:border-transparent last:pb-0">
@@ -85,7 +96,7 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
                       <p className="font-semibold text-slate-900">{zh(item.eventType)}</p>
                       <time className="text-xs text-slate-400">{new Date(item.occurredAt).toLocaleString("zh-CN")}</time>
                     </div>
-                    <p className="mt-1 text-slate-600">{item.memo || "无补充说明"}</p>
+                    <p className="mt-1 text-slate-600">{item.memo || "无说明"}</p>
                     {item.location && <p className="mt-1 flex items-center gap-1 text-xs text-slate-400"><MapPin size={12} />{item.location}</p>}
                   </div>
                 </li>
@@ -93,16 +104,17 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
             )}
           </ul>
         </div>
-
         <ShipmentEventForm shipmentId={shipment.id} />
       </section>
 
+      <AttachmentPanel targetType="SHIPMENT" targetId={shipment.id} canUpload={canUpload.allowed} canDelete={canUpload.allowed} title="出货凭证与资料" />
+
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="font-bold text-slate-900">跟单售后记录</h2>
-          <p className="mt-1 text-xs text-slate-500">所有人工判断、客户沟通和下一步安排均保留记录。</p>
+          <h2 className="font-bold text-slate-900">跟进记录</h2>
+          <p className="mt-1 text-xs text-slate-500">用于记录异常处理、等待客户反馈与下一步动作。</p>
           {shipment.followUps.length === 0 ? (
-            <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">暂无人工跟进记录。</p>
+            <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">暂无跟进记录。</p>
           ) : (
             <ul className="mt-4 space-y-3 text-sm">
               {shipment.followUps.map((item) => (
@@ -112,9 +124,7 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
                     <time className="text-xs text-slate-400">{new Date(item.createdAt).toLocaleString("zh-CN")}</time>
                   </div>
                   <p className="leading-6 text-slate-700">{item.note || "-"}</p>
-                  <p className="mt-2 text-xs text-slate-500">
-                    记录人：{item.actorUser.fullName || item.actorUser.username}
-                  </p>
+                  <p className="mt-2 text-xs text-slate-500">记录人：{item.actorUser.fullName || item.actorUser.username}</p>
                 </li>
               ))}
             </ul>
@@ -126,7 +136,7 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
   );
 }
 
-function Info({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function Info({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
     <div className="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
       <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-white text-violet-600 shadow-sm">{icon}</span>

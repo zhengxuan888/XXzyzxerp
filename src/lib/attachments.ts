@@ -1,7 +1,7 @@
 import type { AuthContext } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 
-export const attachmentTargets = ["PRODUCT", "CONVERSATION"] as const;
+export const attachmentTargets = ["PRODUCT", "CONVERSATION", "SHIPMENT"] as const;
 export type AttachmentTargetType = (typeof attachmentTargets)[number];
 
 export async function resolveAttachmentTarget(auth: AuthContext, targetType: string, targetId: string) {
@@ -24,6 +24,32 @@ export async function resolveAttachmentTarget(auth: AuthContext, targetType: str
     });
     return conversation
       ? { targetType: "CONVERSATION" as const, targetId: conversation.id, businessUnitId: conversation.businessUnitId, departmentId: conversation.departmentId }
+      : null;
+  }
+  if (targetType === "SHIPMENT") {
+    const shipment = await prisma.shipment.findFirst({
+      where: {
+        id: targetId,
+        businessUnitId: auth.membership.businessUnitId,
+      },
+      select: {
+        id: true,
+        status: true,
+        businessUnitId: true,
+        siteId: true,
+      },
+    });
+    if (!shipment || shipment.status === "CANCELLED" || shipment.status === "CLOSED") return null;
+    const site = shipment.siteId
+      ? await prisma.site.findFirst({ where: { id: shipment.siteId, businessUnitId: auth.membership.businessUnitId }, select: { departmentId: true } })
+      : null;
+    return shipment
+      ? {
+          targetType: "SHIPMENT" as const,
+          targetId: shipment.id,
+          businessUnitId: shipment.businessUnitId,
+          departmentId: site?.departmentId ?? auth.membership.departmentId,
+        }
       : null;
   }
   return null;

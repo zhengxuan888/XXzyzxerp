@@ -1,16 +1,6 @@
-"use client";
+﻿"use client";
 
-import {
-  ChevronLeft,
-  ChevronRight,
-  Eye,
-  FileSearch,
-  LoaderCircle,
-  Plus,
-  Search,
-  Trash2,
-  X,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, FileSearch, LoaderCircle, Plus, Search, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState, type FormEvent } from "react";
 
@@ -44,6 +34,7 @@ export type CrudPageProps = {
   createFields: FieldSpec[];
   dataColumns: DataCell[];
   listTitle: string;
+  rowClassName?: (row: DataRow) => string;
   showCreate?: boolean;
   detailPath?: string;
 };
@@ -70,6 +61,7 @@ function StatusPill({ value }: { value: DataCellValue }) {
         : /PENDING|SUBMITTED|WAITING|NEEDS_ATTENTION/.test(normalized)
           ? "bg-amber-50 text-amber-700 ring-amber-200"
           : "bg-slate-100 text-slate-700 ring-slate-200";
+
   return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${tone}`}>{text || "-"}</span>;
 }
 
@@ -83,6 +75,7 @@ export default function CrudPage({
   createFields,
   dataColumns,
   listTitle,
+  rowClassName,
   showCreate = true,
   detailPath,
 }: CrudPageProps) {
@@ -98,9 +91,13 @@ export default function CrudPage({
     const term = keyword.trim().toLowerCase();
     if (!term) return rows;
     return rows.filter((row) =>
-      dataColumns.some((column) => displayValue(row[column.key]).toLowerCase().includes(term)),
+      dataColumns.some((column) => {
+        const rendered = column.render ? column.render(row) : displayValue(row[column.key]);
+        return rendered.toLowerCase().includes(term);
+      }),
     );
   }, [dataColumns, keyword, rows]);
+
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
   const visibleRows = filteredRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
@@ -132,7 +129,7 @@ export default function CrudPage({
       });
       const result = await response.json().catch(() => null);
       if (!response.ok) {
-        setError(result?.error?.message || result?.error || "创建失败，请检查填写内容");
+        setError(result?.error?.message || result?.error || "保存失败，请稍后重试");
         return;
       }
       window.location.reload();
@@ -145,7 +142,7 @@ export default function CrudPage({
 
   async function handleDelete(id: string) {
     if (!canDelete) return;
-    if (!window.confirm("确定删除这条记录吗？此操作可能无法恢复。")) return;
+    if (!window.confirm("确定删除该记录吗？删除后无法恢复。")) return;
 
     setLoadingDelete(id);
     setError(null);
@@ -176,7 +173,7 @@ export default function CrudPage({
               <h2 className="text-lg font-bold text-slate-950">{zh(listTitle)}</h2>
               <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{filteredRows.length}</span>
             </div>
-            <p className="mt-1 text-xs text-slate-500">支持搜索、查看详情和按权限执行操作</p>
+            <p className="mt-1 text-xs text-slate-500">支持搜索、筛选和分页。</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <label className="flex h-10 min-w-64 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 focus-within:border-violet-400 focus-within:bg-white focus-within:ring-4 focus-within:ring-violet-100">
@@ -191,7 +188,7 @@ export default function CrudPage({
                 placeholder="搜索当前列表"
                 aria-label="搜索当前列表"
               />
-              {keyword && <button type="button" aria-label="清除搜索" onClick={() => setKeyword("")}><X size={14} className="text-slate-400" /></button>}
+              {keyword && <button type="button" aria-label="清除搜索" onClick={() => setKeyword("")}>{"✕"}</button>}
             </label>
             {showCreate && canCreate && (
               <button
@@ -199,14 +196,14 @@ export default function CrudPage({
                 onClick={() => setShowForm((value) => !value)}
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white shadow-sm shadow-violet-200 hover:bg-violet-700"
               >
-                <Plus size={17} /> 新增
+                <Plus size={17} /> 新建
               </button>
             )}
           </div>
         </div>
 
         {showCreate && !canCreate && (
-          <p className="border-b border-slate-200 bg-amber-50 px-5 py-3 text-sm text-amber-800">当前岗位没有新增权限。</p>
+          <p className="border-b border-slate-200 bg-amber-50 px-5 py-3 text-sm text-amber-800">当前模块缺少创建权限。</p>
         )}
 
         {showCreate && canCreate && showForm && (
@@ -231,7 +228,7 @@ export default function CrudPage({
                 type="submit"
               >
                 {loadingCreate && <LoaderCircle size={16} className="animate-spin" />}
-                {loadingCreate ? "正在保存..." : "保存"}
+                {loadingCreate ? "保存中..." : "保存"}
               </button>
               <button type="button" onClick={() => setShowForm(false)} className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 hover:bg-slate-50">取消</button>
             </div>
@@ -244,8 +241,8 @@ export default function CrudPage({
           <div className="grid min-h-64 place-items-center p-8 text-center">
             <div>
               <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-slate-100 text-slate-400"><FileSearch size={22} /></span>
-              <h3 className="mt-3 text-sm font-semibold text-slate-800">{keyword ? "没有匹配结果" : "暂无数据"}</h3>
-              <p className="mt-1 text-xs text-slate-500">{keyword ? "请尝试其他关键词" : "有新记录后会显示在这里"}</p>
+              <h3 className="mt-3 text-sm font-semibold text-slate-800">{keyword ? "未匹配到任何结果" : "当前无记录"}</h3>
+              <p className="mt-1 text-xs text-slate-500">{keyword ? "请检查筛选条件" : "请先创建记录。"}</p>
             </div>
           </div>
         ) : (
@@ -260,16 +257,21 @@ export default function CrudPage({
               <tbody className="divide-y divide-slate-100">
                 {visibleRows.map((row) => {
                   const id = String(row[rowId]);
+                  const fallbackClass =
+                    String(row.isOverdue ?? "").toUpperCase() === "YES" || String(row.isOverdue ?? "").toUpperCase() === "TRUE"
+                      ? "bg-rose-50/30"
+                      : "";
+                  const highlightClass = rowClassName ? rowClassName(row) : fallbackClass;
                   return (
-                    <tr key={id} className="group hover:bg-violet-50/30">
+                    <tr key={id} className={`group hover:bg-violet-50/30 ${highlightClass}`}>
                       {dataColumns.map((column) => (
                         <td key={`${id}-${column.key}`} className="max-w-80 whitespace-nowrap px-4 py-3 text-slate-700">
-                          {/status/i.test(column.key) ? <StatusPill value={row[column.key]} /> : <span className="block truncate">{displayValue(row[column.key]) || "-"}</span>}
+                          {column.render ? <span className="block truncate">{column.render(row) || "-"}</span> : /status/i.test(column.key) ? <StatusPill value={row[column.key]} /> : <span className="block truncate">{displayValue(row[column.key]) || "-"}</span>}
                         </td>
                       ))}
                       <td className="sticky right-0 whitespace-nowrap bg-white px-4 py-3 text-right group-hover:bg-[#fbfaff]">
                         {detailPath && (
-                          <Link className="mr-1 inline-flex size-8 items-center justify-center rounded-lg text-violet-600 hover:bg-violet-100" href={`${detailPath}/${id}`} title="查看详情">
+                          <Link className="mr-1 inline-flex size-8 items-center justify-center rounded-lg text-violet-600 hover:bg-violet-100" href={`${detailPath}/${id}`}>
                             <Eye size={16} />
                           </Link>
                         )}
@@ -293,10 +295,26 @@ export default function CrudPage({
         )}
 
         <footer className="flex flex-col gap-3 border-t border-slate-200 px-4 py-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-          <span>第 {safePage} / {pageCount} 页，共 {filteredRows.length} 条</span>
+          <span>{safePage} / {pageCount} 页，共 {filteredRows.length} 条</span>
           <div className="flex items-center gap-1">
-            <button type="button" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={safePage === 1} className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white disabled:opacity-40" aria-label="上一页"><ChevronLeft size={15} /></button>
-            <button type="button" onClick={() => setPage((value) => Math.min(pageCount, value + 1))} disabled={safePage === pageCount} className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white disabled:opacity-40" aria-label="下一页"><ChevronRight size={15} /></button>
+            <button
+              type="button"
+              onClick={() => setPage((value) => Math.max(1, value - 1))}
+              disabled={safePage === 1}
+              className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white disabled:opacity-40"
+              aria-label="上一页"
+            >
+              <ChevronLeft size={15} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage((value) => Math.min(pageCount, value + 1))}
+              disabled={safePage === pageCount}
+              className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white disabled:opacity-40"
+              aria-label="下一页"
+            >
+              <ChevronRight size={15} />
+            </button>
           </div>
         </footer>
       </section>

@@ -1,10 +1,10 @@
-import { NextRequest } from "next/server";
+﻿import { NextRequest } from "next/server";
 import type { Prisma } from "@prisma/client";
 
 import { fail, ok } from "@/lib/api-response";
 import { requireAuthContext } from "@/lib/api-auth";
 import { writeAuditLog } from "@/lib/audit";
-import { parseLogisticsReturnWorkbook, trackingNumberProblem } from "@/lib/logistics-return-import";
+import { type ReturnWorkbookAliases, parseLogisticsReturnWorkbook, trackingNumberProblem } from "@/lib/logistics-return-import";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 
@@ -21,34 +21,59 @@ type PreviewRow = {
   message: string;
 };
 
+function parseAliases(raw: FormDataEntryValue | null): ReturnWorkbookAliases {
+  if (typeof raw !== "string" || !raw.trim()) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {};
+    return parsed as ReturnWorkbookAliases;
+  } catch {
+    throw fail("INVALID_ALIAS_PAYLOAD", "映射参数解析失败", 400);
+  }
+}
+
 export async function POST(request: NextRequest) {
   const auth = await requireAuthContext(request);
   if (!auth) return fail("UNAUTHENTICATED", "请先登录。", 401);
+
   const permission = await checkPermission({
     userId: auth.userId,
     membershipId: auth.membership.id,
     actionKey: "shipment.create",
     targetBusinessUnitId: auth.membership.businessUnitId,
   });
-  if (!permission.allowed) return fail("FORBIDDEN", "当前岗位没有导入物流单号的权限。", 403);
+  if (!permission.allowed) {
+    return fail("FORBIDDEN", "当前角色没有权限导入物流单号", 403);
+  }
 
   const form = await request.formData();
   const file = form.get("file");
   const commit = form.get("commit") === "true";
-  if (!(file instanceof File)) return fail("FILE_REQUIRED", "请选择物流商回传的 XLSX 文件。", 400);
+  const aliases = parseAliases(form.get("aliases"));
+
+  if (!(file instanceof File)) return fail("FILE_REQUIRED", "请先选择用于回传的 XLSX 文件。", 400);
   if (!file.name.toLowerCase().endsWith(".xlsx")) {
-    return fail("XLSX_REQUIRED", "仅支持 .xlsx 文件，请不要直接修改旧版 .xls 的后缀。", 400);
+    return fail("XLSX_REQUIRED", "只支持 .xlsx 文件。", 400);
   }
-  if (file.size > 10 * 1024 * 1024) return fail("FILE_TOO_LARGE", "回传表不能超过 10MB。", 400);
+  if (file.size > 10 * 1024 * 1024) {
+    return fail("FILE_TOO_LARGE", "文件大小不能超过 10MB。", 400);
+  }
 
   let inputRows;
   try {
-    inputRows = await parseLogisticsReturnWorkbook(Buffer.from(await file.arrayBuffer()));
+    inputRows = await parseLogisticsReturnWorkbook(Buffer.from(await file.arrayBuffer()), aliases);
   } catch (error) {
     const code = error instanceof Error ? error.message : "WORKBOOK_INVALID";
-    return fail(code, code === "REQUIRED_COLUMNS_MISSING" ? "找不到原单号或物流单号列。" : "无法解析该工作簿。", 400);
+    return fail(
+      code,
+      code === "REQUIRED_COLUMNS_MISSING" ? "未识别到订单号或物流单号列" : "无法解析文件内容",
+      400,
+    );
   }
-  if (inputRows.length > 5000) return fail("TOO_MANY_ROWS", "单次最多导入 5000 行。", 400);
+
+  if (inputRows.length > 5000) {
+    return fail("TOO_MANY_ROWS", "一次导入不超过5000行。", 400);
+  }
 
   const orderNumbers = [...new Set(inputRows.map((row) => row.orderNo).filter(Boolean))];
   const orders = await prisma.order.findMany({
@@ -65,6 +90,7 @@ export async function POST(request: NextRequest) {
     },
   });
   const orderByNo = new Map(orders.map((order) => [order.orderNo, order]));
+
   const trackingCounts = new Map<string, number>();
   for (const row of inputRows) {
     if (row.trackingNo) trackingCounts.set(row.trackingNo, (trackingCounts.get(row.trackingNo) ?? 0) + 1);
@@ -81,26 +107,30 @@ export async function POST(request: NextRequest) {
   const preview: PreviewRow[] = inputRows.map((row) => {
     const order = orderByNo.get(row.orderNo);
     const problem = trackingNumberProblem(row.trackingNo);
-    if (!order) return { ...row, employee: null, orderId: null, shipmentId: null, result: "REJECTED", message: "当前业务板块内找不到原单号" };
+    if (!order) {
+      return { ...row, employee: null, orderId: null, shipmentId: null, result: "REJECTED", message: "未找到订单号。" };
+    }
     const latest = order.shipments[0];
     if (order.status !== "WAITING_SHIPMENT") {
-      return { ...row, employee: order.creatorUser.username, orderId: order.id, shipmentId: latest?.id ?? null, result: "REJECTED", message: `订单状态为 ${order.status}，不是待发货` };
+      return { ...row, employee: order.creatorUser.username, orderId: order.id, shipmentId: latest?.id ?? null, result: "REJECTED", message: `订单状态为 ${order.status}，不允许回填。` };
     }
-    if (problem) return { ...row, employee: order.creatorUser.username, orderId: order.id, shipmentId: latest?.id ?? null, result: "REJECTED", message: problem };
+    if (problem) {
+      return { ...row, employee: order.creatorUser.username, orderId: order.id, shipmentId: latest?.id ?? null, result: "REJECTED", message: problem };
+    }
     if ((trackingCounts.get(row.trackingNo) ?? 0) > 1) {
-      return { ...row, employee: order.creatorUser.username, orderId: order.id, shipmentId: latest?.id ?? null, result: "REJECTED", message: "回传表内物流单号重复" };
+      return { ...row, employee: order.creatorUser.username, orderId: order.id, shipmentId: latest?.id ?? null, result: "REJECTED", message: "物流单号重复。" };
     }
     const occupied = existingByTracking.get(row.trackingNo);
     if (occupied && occupied.orderId !== order.id) {
-      return { ...row, employee: order.creatorUser.username, orderId: order.id, shipmentId: latest?.id ?? null, result: "REJECTED", message: "物流单号已被其他订单使用" };
+      return { ...row, employee: order.creatorUser.username, orderId: order.id, shipmentId: latest?.id ?? null, result: "REJECTED", message: "物流单号已被其他订单使用。" };
     }
     if (latest?.trackingNo === row.trackingNo) {
-      return { ...row, employee: order.creatorUser.username, orderId: order.id, shipmentId: latest.id, result: "WARNING", message: "该订单已经是相同物流单号，无需重复回填" };
+      return { ...row, employee: order.creatorUser.username, orderId: order.id, shipmentId: latest.id, result: "WARNING", message: "该订单已存在相同物流单号，无需重复回填。" };
     }
     if (latest?.trackingNo && latest.trackingNo !== row.trackingNo) {
-      return { ...row, employee: order.creatorUser.username, orderId: order.id, shipmentId: latest.id, result: "REJECTED", message: "订单已有其他物流单号，请人工核对后单独修改" };
+      return { ...row, employee: order.creatorUser.username, orderId: order.id, shipmentId: latest.id, result: "REJECTED", message: "订单已有其他物流单号，请管理员审核后单独处理。" };
     }
-    return { ...row, employee: order.creatorUser.username, orderId: order.id, shipmentId: latest?.id ?? null, result: "READY", message: "可回填" };
+    return { ...row, employee: order.creatorUser.username, orderId: order.id, shipmentId: latest?.id ?? null, result: "READY", message: "可回填。" };
   });
 
   if (!commit) {
@@ -121,9 +151,9 @@ export async function POST(request: NextRequest) {
     for (const row of readyRows) {
       const order = orderByNo.get(row.orderNo)!;
       const data = {
-        carrier: row.carrier || "待确认",
+        carrier: row.carrier || "物流商",
         trackingNo: row.trackingNo,
-        memo: `由物流商回传表 ${file.name} 自动匹配回填`,
+        memo: `回传单号 ${row.trackingNo} 由文件 ${file.name} 回填`,
       };
       const shipment = row.shipmentId
         ? await tx.shipment.update({ where: { id: row.shipmentId }, data })
@@ -137,6 +167,7 @@ export async function POST(request: NextRequest) {
               ...data,
             },
           });
+
       await tx.shipmentEvent.create({
         data: {
           shipmentId: shipment.id,
@@ -144,7 +175,7 @@ export async function POST(request: NextRequest) {
           statusMilestone: "PENDING",
           source: "PROVIDER_RETURN_IMPORT",
           externalEventKey: `return-import:${order.id}:${row.trackingNo}`,
-          memo: `回传表第 ${row.rowNumber} 行自动匹配，尚未确认发货`,
+          memo: `文件回填 第${row.rowNumber}行，物流单号 ${row.trackingNo}`,
           actorMembershipId: auth.membership.id,
         },
       });
@@ -170,5 +201,6 @@ export async function POST(request: NextRequest) {
       orderIds: imported.map((row) => row.orderId),
     } satisfies Prisma.InputJsonObject,
   });
+
   return ok({ imported, rows: preview, summary: { total: preview.length, imported: imported.length } });
 }

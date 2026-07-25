@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 
 import type { OrderStatus, Prisma } from "@prisma/client";
 
@@ -10,15 +10,22 @@ import { canTransitionOrder } from "@/lib/order-state";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 
-type WorkflowAction = "submit" | "approve" | "reject" | "ship";
+type WorkflowAction = "submit" | "approve" | "reject" | "void" | "ship";
 
-const ACTION_CONFIG: Record<
-  WorkflowAction,
-  { permission: string; from: readonly OrderStatus[]; to: OrderStatus }
-> = {
+type WorkflowResult = {
+  order: {
+    id: string;
+    status: OrderStatus;
+    businessUnitId: string;
+  };
+  shipmentId: string | null;
+};
+
+const ACTION_CONFIG: Record<WorkflowAction, { permission: string; from: readonly OrderStatus[]; to: OrderStatus }> = {
   submit: { permission: "order.submit", from: ["DRAFT"], to: "SUBMITTED" },
   approve: { permission: "order.review", from: ["SUBMITTED"], to: "WAITING_SHIPMENT" },
   reject: { permission: "order.review", from: ["SUBMITTED"], to: "DRAFT" },
+  void: { permission: "order.status.update", from: ["SUBMITTED", "WAITING_SHIPMENT", "EXCEPTION"], to: "CANCELLED" },
   ship: { permission: "order.ship", from: ["WAITING_SHIPMENT"], to: "SHIPPED" },
 };
 
@@ -29,17 +36,17 @@ function parseAction(value: unknown): WorkflowAction | null {
 export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const { id } = await props.params;
   const auth = await requireAuthContext(request);
-  if (!auth) return fail("UNAUTHENTICATED", "请先登录。", 401);
+  if (!auth) return fail("UNAUTHENTICATED", "请先登录", 401);
 
   const body = await request.json().catch(() => null);
   const action = parseAction(body?.action);
-  if (!action) return fail("INVALID_WORKFLOW_ACTION", "不支持的订单操作。", 400);
+  if (!action) return fail("INVALID_WORKFLOW_ACTION", "无效的订单动作", 400);
 
   const order = await prisma.order.findFirst({
     where: { id, businessUnitId: auth.membership.businessUnitId },
     include: { items: { select: { skuId: true, quantity: true } } },
   });
-  if (!order) return fail("ORDER_NOT_FOUND", "订单不存在或不属于当前业务板块。", 404);
+  if (!order) return fail("ORDER_NOT_FOUND", "订单不存在或无权限", 404);
 
   const config = ACTION_CONFIG[action];
   const permission = await checkPermission({
@@ -51,160 +58,159 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     targetSiteId: order.siteId,
   });
   if (!permission.allowed) {
-    return NextResponse.json({ ok: false, error: { code: "FORBIDDEN", message: "当前岗位没有执行此操作的权限。" } }, { status: 403 });
+    return fail("FORBIDDEN", "当前角色无权执行此操作", 403);
   }
 
   if (!config.from.includes(order.status) || !canTransitionOrder(order.status, config.to)) {
     return fail(
       "INVALID_ORDER_TRANSITION",
-      `订单当前状态为 ${order.status}，不能执行 ${action}。`,
+      `订单当前状态为 ${order.status}，不允许执行 ${action}`,
       409,
       { currentStatus: order.status, expectedStatus: config.from },
     );
   }
 
   const note = typeof body?.note === "string" ? body.note.trim().slice(0, 1000) : "";
-  if (action === "reject" && !note) {
-    return fail("REVIEW_NOTE_REQUIRED", "核单驳回时必须填写原因。", 400);
+  if ((action === "reject" || action === "void") && !note) {
+    return fail("REVIEW_NOTE_REQUIRED", "请填写原因", 400);
   }
 
-  const carrier = typeof body?.carrier === "string" ? body.carrier.trim().slice(0, 100) : "";
-  const trackingNo = typeof body?.trackingNo === "string" ? body.trackingNo.trim().slice(0, 100) : "";
-  if (action === "ship" && (!carrier || !trackingNo)) {
-    return fail("SHIPMENT_FIELDS_REQUIRED", "发货时必须填写承运商和物流单号。", 400);
-  }
   if ((action === "submit" || action === "ship") && !auth.membership.siteId) {
-    return fail("SITE_REQUIRED", "当前岗位必须关联仓库/站点后才能操作库存和发货。", 409);
+    return fail("SITE_REQUIRED", "当前用户未绑定站点，无法执行此操作", 409);
   }
 
   try {
-    const result = await prisma.$transaction(
-      async (tx) => {
-        const current = await tx.order.findFirst({
-          where: { id: order.id, businessUnitId: auth.membership.businessUnitId },
-          include: { items: { select: { skuId: true, quantity: true } } },
+    const result = await prisma.$transaction<WorkflowResult>(async (tx) => {
+      const current = await tx.order.findFirst({
+        where: { id: order.id, businessUnitId: auth.membership.businessUnitId },
+        include: { items: { select: { skuId: true, quantity: true } } },
+      });
+      if (!current || current.status !== order.status) {
+        throw new Error("ORDER_CONCURRENTLY_CHANGED");
+      }
+
+      if (action === "submit") {
+        await reserveOrderInventory(
+          tx,
+          {
+            userId: auth.userId,
+            membershipId: auth.membership.id,
+            businessUnitId: auth.membership.businessUnitId,
+            siteId: auth.membership.siteId!,
+          },
+          current,
+        );
+      }
+
+      if (action === "reject" || action === "void") {
+        await finalizeOrderInventory(
+          tx,
+          {
+            userId: auth.userId,
+            membershipId: auth.membership.id,
+            businessUnitId: auth.membership.businessUnitId,
+            siteId: auth.membership.siteId ?? current.siteId ?? "",
+          },
+          current.id,
+          "RELEASE",
+        );
+      }
+
+      let shipmentId: string | null = null;
+      if (action === "ship") {
+        const pendingShipment = await tx.shipment.findFirst({
+          where: { orderId: current.id, status: "PENDING" },
+          orderBy: { createdAt: "desc" },
+          select: { id: true, carrier: true, trackingNo: true },
         });
-        if (!current || current.status !== order.status) {
-          throw new Error("ORDER_CONCURRENTLY_CHANGED");
+        if (!pendingShipment) throw new Error("SHIPMENT_NOT_READY");
+
+        const carrier = typeof body?.carrier === "string" ? body.carrier.trim().slice(0, 100) : "";
+        const trackingNo = typeof body?.trackingNo === "string" ? body.trackingNo.trim().slice(0, 100) : "";
+
+        if ((body?.carrier !== undefined && body.carrier !== null) || (body?.trackingNo !== undefined && body.trackingNo !== null)) {
+          if (!carrier || !trackingNo) throw new Error("SHIPMENT_FIELDS_REQUIRED");
         }
 
-        if (action === "submit") {
-          await reserveOrderInventory(
-            tx,
-            {
-              userId: auth.userId,
-              membershipId: auth.membership.id,
-              businessUnitId: auth.membership.businessUnitId,
-              siteId: auth.membership.siteId!,
-            },
-            current,
-          );
-        }
+        const nextCarrier = carrier || pendingShipment.carrier || "";
+        const nextTrackingNo = trackingNo || pendingShipment.trackingNo || "";
+        if (!nextCarrier || !nextTrackingNo) throw new Error("SHIPMENT_FIELDS_REQUIRED");
 
-        if (action === "reject") {
-          await finalizeOrderInventory(
-            tx,
-            {
-              userId: auth.userId,
-              membershipId: auth.membership.id,
-              businessUnitId: auth.membership.businessUnitId,
-              siteId: auth.membership.siteId ?? current.siteId ?? "",
-            },
-            current.id,
-            "RELEASE",
-          );
-        }
-
-        let shipmentId: string | null = null;
-        if (action === "ship") {
+        if (trackingNo && trackingNo !== pendingShipment.trackingNo) {
           const duplicateTracking = await tx.shipment.findFirst({
             where: {
               businessUnitId: current.businessUnitId,
               trackingNo,
-              NOT: { orderId: current.id },
+              NOT: { id: pendingShipment.id },
             },
             select: { id: true },
           });
           if (duplicateTracking) throw new Error("TRACKING_NO_ALREADY_EXISTS");
+        }
 
-          await finalizeOrderInventory(
-            tx,
-            {
-              userId: auth.userId,
-              membershipId: auth.membership.id,
-              businessUnitId: auth.membership.businessUnitId,
-              siteId: auth.membership.siteId!,
-            },
-            current.id,
-            "SHIP",
-          );
+        const proofCount = await tx.attachment.count({
+          where: {
+            businessUnitId: current.businessUnitId,
+            targetType: "SHIPMENT",
+            targetId: pendingShipment.id,
+            status: "ACTIVE",
+          },
+        });
+        if (proofCount < 1) throw new Error("SHIPMENT_PROOF_REQUIRED");
 
-          const shippedAt = new Date();
-          const existing = await tx.shipment.findFirst({
-            where: { orderId: current.id, status: "PENDING" },
-            orderBy: { createdAt: "desc" },
-          });
-          const shipmentData = {
-            carrier,
-            trackingNo,
-            status: "IN_TRANSIT" as const,
+        const shippedAt = new Date();
+        const shipment = await tx.shipment.update({
+          where: { id: pendingShipment.id },
+          data: {
+            carrier: nextCarrier,
+            trackingNo: nextTrackingNo,
+            status: "IN_TRANSIT",
             shippedAt,
             firstTrackedAt: shippedAt,
             lastTrackedAt: shippedAt,
-            workStatus: "MONITORING" as const,
+            workStatus: "MONITORING",
             nextFollowUpAt: new Date(shippedAt.getTime() + 24 * 60 * 60 * 1000),
-            memo: note || "订单已发货，自动进入物流跟踪。",
-          };
-          const shipment = existing
-            ? await tx.shipment.update({ where: { id: existing.id }, data: shipmentData })
-            : await tx.shipment.create({
-                data: {
-                  orderId: current.id,
-                  legalEntityId: current.legalEntityId,
-                  businessUnitId: current.businessUnitId,
-                  siteId: auth.membership.siteId,
-                  ...shipmentData,
-                },
-              });
-          shipmentId = shipment.id;
-
-          await tx.shipmentEvent.createMany({
-            data: [
-              {
-                shipmentId: shipment.id,
-                eventType: "SHIPMENT_CREATED",
-                statusMilestone: "PENDING",
-                source: "ERP",
-                externalEventKey: `order:${current.id}:shipment-created`,
-                memo: "物流单已创建。",
-                actorMembershipId: auth.membership.id,
-              },
-              {
-                shipmentId: shipment.id,
-                eventType: "PICKED_UP",
-                statusMilestone: "IN_TRANSIT",
-                source: "ERP",
-                externalEventKey: `order:${current.id}:shipped`,
-                memo: note || "订单已发货，开始物流跟踪。",
-                actorMembershipId: auth.membership.id,
-              },
-            ],
-            skipDuplicates: true,
-          });
-        }
-
-        const updated = await tx.order.update({
-          where: { id: current.id, status: current.status },
-          data: {
-            status: config.to,
-            note: note || undefined,
-            exceptionNote: action === "reject" ? note : undefined,
+            memo: note || "订单确认发货，等待物流",
           },
         });
-        return { order: updated, shipmentId };
-      },
-      { isolationLevel: "Serializable" },
-    );
+        shipmentId = shipment.id;
+
+        await finalizeOrderInventory(
+          tx,
+          {
+            userId: auth.userId,
+            membershipId: auth.membership.id,
+            businessUnitId: auth.membership.businessUnitId,
+            siteId: auth.membership.siteId!,
+          },
+          current.id,
+          "SHIP",
+        );
+
+        await tx.shipmentEvent.create({
+          data: {
+            shipmentId: shipment.id,
+            eventType: "PICKED_UP",
+            statusMilestone: "IN_TRANSIT",
+            source: "ERP",
+            externalEventKey: `order:${current.id}:shipped`,
+            memo: note || "订单确认发货，等待物流",
+            actorMembershipId: auth.membership.id,
+          },
+        });
+      }
+
+      const updated = await tx.order.update({
+        where: { id: current.id, status: current.status },
+        data: {
+          status: config.to,
+          note: note || undefined,
+          exceptionNote: action === "reject" || action === "void" ? note : undefined,
+        },
+      });
+
+      return { order: updated, shipmentId };
+    }, { isolationLevel: "Serializable" });
 
     await writeAuditLog({
       actorUserId: auth.userId,
@@ -227,10 +233,19 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
   } catch (error) {
     if (error instanceof InventoryError) return fail(error.code, error.message, 409);
     if (error instanceof Error && error.message === "ORDER_CONCURRENTLY_CHANGED") {
-      return fail("ORDER_CONCURRENTLY_CHANGED", "订单已被其他员工修改，请刷新后重试。", 409);
+      return fail("ORDER_CONCURRENTLY_CHANGED", "订单已变更，请稍后重试", 409);
     }
     if (error instanceof Error && error.message === "TRACKING_NO_ALREADY_EXISTS") {
-      return fail("TRACKING_NO_ALREADY_EXISTS", "该物流单号已用于其他订单。", 409);
+      return fail("TRACKING_NO_ALREADY_EXISTS", "物流单号已被占用", 409);
+    }
+    if (error instanceof Error && error.message === "SHIPMENT_NOT_READY") {
+      return fail("SHIPMENT_NOT_READY", "请先创建待发货的物流记录", 409);
+    }
+    if (error instanceof Error && error.message === "SHIPMENT_PROOF_REQUIRED") {
+      return fail("SHIPMENT_PROOF_REQUIRED", "请先上传发货凭证（图片/PDF）", 409);
+    }
+    if (error instanceof Error && error.message === "SHIPMENT_FIELDS_REQUIRED") {
+      return fail("SHIPMENT_FIELDS_REQUIRED", "请填写承运商与物流单号", 400);
     }
     throw error;
   }

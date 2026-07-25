@@ -4,6 +4,7 @@ import CrudPage from "@/components/admin/CrudPage";
 import OrderEntryForm from "@/components/admin/OrderEntryForm";
 import { parseOrderTemplateConfiguration } from "@/lib/order-template";
 import { formatMoneyCents } from "@/lib/money";
+import { resolveOrderReadScope, withOrderReadScope } from "@/lib/order-access";
 import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
 import { checkPermission } from "@/lib/permission";
@@ -43,6 +44,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   ]);
   if (!canRead.allowed) redirect("/admin");
 
+  const orderReadScope = await resolveOrderReadScope(membership, session.userId);
+  if (orderReadScope === "NONE") redirect("/admin");
+
   const customers = await prisma.customer.findMany({
     where: { isActive: true, businessUnitId: membership.businessUnitId },
     orderBy: { createdAt: "desc" },
@@ -54,26 +58,32 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     select: { id: true, code: true, name: true, skus: { where: { isActive: true }, orderBy: { code: "asc" } } },
   });
 
-  const [rows, templates] = await Promise.all([prisma.order.findMany({
-    where: { businessUnitId: membership.businessUnitId, ...(status ? { status } : {}) },
-    orderBy: { createdAt: "desc" },
-    include: {
-      customer: { select: { code: true, name: true } },
-      creatorUser: { select: { username: true } },
-      items: { select: { id: true, quantity: true, productName: true } },
-    },
-  }), prisma.orderTemplate.findMany({
-    where: { businessUnitId: membership.businessUnitId, isActive: true },
-    orderBy: [{ isDefault: "desc" }, { name: "asc" }],
-    select: { id: true, code: true, name: true, configuration: true, isDefault: true },
-  })]);
+  const baseWhere = { businessUnitId: membership.businessUnitId, ...(status ? { status } : {}) };
+  const scopedWhere = withOrderReadScope(baseWhere, orderReadScope, membership, session.userId);
+
+  const [rows, templates] = await Promise.all([
+    prisma.order.findMany({
+      where: scopedWhere as Record<string, unknown>,
+      orderBy: { createdAt: "desc" },
+      include: {
+        customer: { select: { code: true, name: true } },
+        creatorUser: { select: { username: true } },
+        items: { select: { id: true, quantity: true, productName: true } },
+      },
+    }),
+    prisma.orderTemplate.findMany({
+      where: { businessUnitId: membership.businessUnitId, isActive: true },
+      orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+      select: { id: true, code: true, name: true, configuration: true, isDefault: true },
+    }),
+  ]);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">录入订单</h1>
         <p className="mt-1 text-sm text-gray-500">
-          {status ? `当前队列：${zh(status)}。` : "选择模板后自动带出渠道、币种、运费和必填规则。"}
+          {status ? `当前状态：${zh(status)}，仅显示当前可见范围订单。` : "选择模板后快速提交并展示订单列表。"}
         </p>
       </div>
       <OrderEntryForm
@@ -86,88 +96,99 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         }))}
       />
       <CrudPage
-      apiBase="/api/mvp"
-      resource="orders"
-      listTitle="订单列表"
-      detailPath="/admin/orders"
-      showCreate={false}
-      canCreate={canCreate.allowed}
-      canDelete={canDelete.allowed}
-      rows={rows}
-      rowId="id"
-      createFields={[
-        {
-          key: "customerId",
-          label: "Customer",
-          required: true,
-          type: "select",
-          options: customers.map((customer) => ({ value: customer.id, label: `${customer.code} ${customer.name}` })),
-        },
-        { key: "currency", label: "Currency", required: false },
-        {
-          key: "productId",
-          label: "Product",
-          required: true,
-          type: "select",
-          options: products.map((product) => ({ value: product.id, label: `${product.code} ${product.name}` })),
-        },
-        {
-          key: "skuId",
-          label: "SKU",
-          required: true,
-          type: "select",
-          options: products.flatMap((product) =>
-            product.skus.map((sku) => ({
-              value: sku.id,
-              label: `${product.code} / ${sku.code} · ${product.name}`,
-            })),
-          ),
-        },
-        { key: "productName", label: "Product Name", required: true },
-        { key: "quantity", label: "Quantity", type: "number", required: true },
-        { key: "unitPriceCents", label: "Unit Price (Cents)", type: "number", required: true },
-        { key: "codAmountCents", label: "COD Amount (Cents)", type: "number", required: false },
-        { key: "shippingFeeCents", label: "Shipping Fee (Cents)", type: "number", required: false },
-        { key: "note", label: "Order Note", required: false },
-      ]}
-      dataColumns={[
-        { key: "orderNo", label: "Order No." },
-        {
-          key: "customer",
-          label: "Customer",
-          render: (row) => {
-            const customer = row.customer as { code?: string; name?: string } | undefined;
-            return customer ? `${customer.code ?? ""} ${customer.name ?? ""}` : "";
+        apiBase="/api/mvp"
+        resource="orders"
+        listTitle="订单列表"
+        detailPath="/admin/orders"
+        showCreate={false}
+        canCreate={canCreate.allowed}
+        canDelete={canDelete.allowed}
+        rows={rows}
+        rowId="id"
+        createFields={[
+          {
+            key: "customerId",
+            label: "Customer",
+            required: true,
+            type: "select",
+            options: customers.map((customer) => ({ value: customer.id, label: `${customer.code} ${customer.name}` })),
           },
-        },
-        { key: "status", label: "Status" },
-        {
-          key: "amount",
-          label: "Amount",
-          render: (row) => {
-            const rowAny = row as unknown as { productValueCents?: number; shippingFeeCents?: number; currency?: string };
-            const productValue = rowAny.productValueCents ?? 0;
-            const shipping = rowAny.shippingFeeCents ?? 0;
-            return formatMoneyCents(productValue + shipping, rowAny.currency ?? "CNY");
+          { key: "currency", label: "Currency", required: false },
+          {
+            key: "productId",
+            label: "Product",
+            required: true,
+            type: "select",
+            options: products.map((product) => ({ value: product.id, label: `${product.code} ${product.name}` })),
           },
-        },
-        {
-          key: "items",
-          label: "Items",
-          render: (row) => {
-            const items = row.items as { id?: string; quantity?: number; productName?: string }[] | undefined;
-            return items?.length ? `${items.length} items` : "0";
+          {
+            key: "skuId",
+            label: "SKU",
+            required: true,
+            type: "select",
+            options: products.flatMap((product) =>
+              product.skus.map((sku) => ({
+                value: sku.id,
+                label: `${product.code} / ${sku.code} - ${product.name}`,
+              })),
+            ),
           },
-        },
-        {
-          key: "creator",
-          label: "Creator",
-          render: (row) => {
-            const creator = row.creatorUser as { username?: string } | undefined;
-            return creator?.username ?? "-";
+          { key: "productName", label: "Product Name", required: true },
+          { key: "quantity", label: "Quantity", type: "number", required: true },
+          { key: "unitPriceCents", label: "Unit Price (Cents)", type: "number", required: true },
+          { key: "codAmountCents", label: "COD Amount (Cents)", type: "number", required: false },
+          { key: "shippingFeeCents", label: "Shipping Fee (Cents)", type: "number", required: false },
+          { key: "note", label: "Order Note", required: false },
+        ]}
+        dataColumns={[
+          { key: "orderNo", label: "Order No." },
+          {
+            key: "customer",
+            label: "Customer",
+            render: (row) => {
+              const customer = row.customer as { code?: string; name?: string } | undefined;
+              return customer ? `${customer.code ?? ""} ${customer.name ?? ""}` : "";
+            },
           },
-        },
-      ]}
+          { key: "status", label: "Status" },
+          {
+            key: "shipStatusLabel",
+            label: "运输状态",
+            render: (row) => {
+              const rowStatus = (row as { status?: string }).status;
+              if (rowStatus === "SUBMITTED" || rowStatus === "WAITING_SHIPMENT") {
+                return "运输中（待发货）";
+              }
+              return rowStatus ? zh(rowStatus as OrderStatus) : "-";
+            },
+          },
+          {
+            key: "amount",
+            label: "Amount",
+            render: (row) => {
+              const rowAny = row as unknown as { productValueCents?: number; shippingFeeCents?: number; currency?: string };
+              const productValue = rowAny.productValueCents ?? 0;
+              const shipping = rowAny.shippingFeeCents ?? 0;
+              return formatMoneyCents(productValue + shipping, rowAny.currency ?? "CNY");
+            },
+          },
+          {
+            key: "items",
+            label: "Items",
+            render: (row) => {
+              const items = row.items as { id?: string; quantity?: number; productName?: string }[] | undefined;
+              return items?.length ? `${items.length} items` : "0";
+            },
+          },
+          {
+            key: "creator",
+            label: "Creator",
+            render: (row) => {
+              const creator = row.creatorUser as { username?: string } | undefined;
+              return creator?.username ?? "-";
+            },
+          },
+        ]}
       />
     </div>
   );

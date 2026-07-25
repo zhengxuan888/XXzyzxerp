@@ -8,6 +8,8 @@ export type LogisticsReturnRow = {
   providerStatus: string;
 };
 
+export type ReturnWorkbookAliases = Partial<typeof DEFAULT_HEADERS>;
+
 const DEFAULT_HEADERS = {
   orderNo: ["原单号", "订单号", "客户单号"],
   trackingNo: ["转单号", "物流单号", "运单号", "追踪号"],
@@ -33,7 +35,7 @@ function findColumn(headers: string[], aliases: string[]) {
 
 export async function parseLogisticsReturnWorkbook(
   bytes: Buffer,
-  aliases: Partial<typeof DEFAULT_HEADERS> = {},
+  aliases: ReturnWorkbookAliases = {},
 ): Promise<LogisticsReturnRow[]> {
   const workbook = new ExcelJS.Workbook();
   // ExcelJS still publishes its own legacy Buffer declaration; the runtime

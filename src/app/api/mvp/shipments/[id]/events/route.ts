@@ -4,8 +4,23 @@ import { requireAuthContext } from "@/lib/api-auth";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
-import { parseShipmentEventPayload } from "@/lib/logistics";
+import {
+  HIGH_PRIORITY_SHIPMENT_EVENTS,
+  type ShipmentEventType,
+  getAlertRuleForShipmentLocation,
+  resolveHighPriorityIndex,
+  parseShipmentEventPayload,
+  pickAlertRuleKeyFromLocation,
+  shipmentEventMeta,
+  shouldSuppressHighPriorityFollowUp,
+} from "@/lib/logistics";
 import { fail, ok } from "@/lib/api-response";
+
+function nextFollowUpDate(eventType: keyof typeof shipmentEventMeta, occurredAt: Date) {
+  const isHighPriority = shipmentEventMeta[eventType].priority === "HIGH";
+  const hours = isHighPriority ? 6 : 24;
+  return new Date(occurredAt.getTime() + hours * 60 * 60 * 1000);
+}
 
 export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const { id } = await props.params;
@@ -14,7 +29,23 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
 
   const shipment = await prisma.shipment.findFirst({
     where: { id, businessUnitId: auth.membership.businessUnitId },
-    select: { id: true, businessUnitId: true, orderId: true, status: true, workStatus: true, firstTrackedAt: true },
+    select: {
+      id: true,
+      businessUnitId: true,
+      orderId: true,
+      status: true,
+      workStatus: true,
+      firstTrackedAt: true,
+      lastTrackedAt: true,
+      order: {
+        select: {
+          recipientCountryCode: true,
+          recipientRegion: true,
+          recipientCity: true,
+          recipientAddress: true,
+        },
+      },
+    },
   });
   if (!shipment) return NextResponse.json({ error: "Shipment not found." }, { status: 404 });
 
@@ -35,38 +66,83 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
   }
 
   const result = await prisma.$transaction(async (tx) => {
+    const eventLocationHint = parsed.location
+      || shipment.order.recipientCountryCode
+      || shipment.order.recipientRegion
+      || shipment.order.recipientCity
+      || "";
+    const locationRule = getAlertRuleForShipmentLocation(eventLocationHint)
+      ?? getAlertRuleForShipmentLocation(shipment.order.recipientAddress ?? "");
+    const ruleKey = pickAlertRuleKeyFromLocation(eventLocationHint);
+
+    const existingHighPriorityEvents = await tx.shipmentEvent.findMany({
+      where: { shipmentId: shipment.id, eventType: { in: HIGH_PRIORITY_SHIPMENT_EVENTS } },
+      select: { eventType: true, occurredAt: true },
+      orderBy: { occurredAt: "asc" },
+    });
+    const alertContext = resolveHighPriorityIndex(
+      existingHighPriorityEvents.map((entry) => ({
+        eventType: entry.eventType as ShipmentEventType,
+        occurredAt: entry.occurredAt,
+      })),
+      {
+        eventType: parsed.eventType,
+        occurredAt: parsed.occurredAt,
+      },
+    );
+    const followUpCount = await tx.logisticsFollowUp.count({
+      where: { shipmentId: shipment.id, actionType: "TRACKING_EVENT" },
+    });
+    const milestoneCount = locationRule
+      ? await tx.shipmentEvent.count({
+          where: { shipmentId: shipment.id, eventType: locationRule.milestoneEvent },
+        })
+      : 0;
+
+    const isMilestoneReached = milestoneCount > 0;
+    const isHighPriority = shipmentEventMeta[parsed.eventType].priority === "HIGH";
+    const highPriorityIndex = isHighPriority ? alertContext.highPriorityIndex : 0;
+    const suppressFollowUp = shouldSuppressHighPriorityFollowUp(parsed.eventType, {
+      highPriorityIndex,
+      countryRuleName: ruleKey,
+      hasActiveHighPriorityFollowUp: followUpCount > 0,
+      isMilestoneReached,
+      firstTrackedAt: shipment.firstTrackedAt,
+      lastTrackedAt: shipment.lastTrackedAt,
+      occurredAt: parsed.occurredAt,
+    });
+
     const event = await tx.shipmentEvent.create({
       data: {
         shipmentId: shipment.id,
         eventType: parsed.eventType,
         occurredAt: parsed.occurredAt,
+        location: parsed.location,
         memo: parsed.memo,
         actorMembershipId: auth.membership.id,
       },
     });
-    const workStatus =
-      parsed.status === "EXCEPTION"
-        ? "NEEDS_ATTENTION"
-        : parsed.status === "DELIVERED" || parsed.status === "CANCELLED"
-          ? "CLOSED"
-          : "MONITORING";
+
+    const nextWorkStatus = shipmentEventMeta[parsed.eventType].workStatus;
+    const nextFollowUpAt = parsed.status === "DELIVERED" || parsed.status === "CANCELLED"
+      ? null
+      : nextFollowUpDate(parsed.eventType, parsed.occurredAt);
+
     const updatedShipment = await tx.shipment.update({
-        where: { id: shipment.id },
-        data: {
-          status: parsed.status,
-          workStatus,
-          firstTrackedAt: shipment.firstTrackedAt ?? parsed.occurredAt,
-          lastTrackedAt: parsed.occurredAt,
-          deliveredAt: parsed.status === "DELIVERED" ? parsed.occurredAt : undefined,
-          closedAt: parsed.status === "DELIVERED" || parsed.status === "CANCELLED" ? parsed.occurredAt : null,
-          exceptionReason: parsed.status === "EXCEPTION" ? parsed.exceptionReason : parsed.status === "CANCELLED" ? null : undefined,
-          exceptionSeverity: parsed.status === "EXCEPTION" ? parsed.exceptionSeverity ?? "MEDIUM" : undefined,
-          nextFollowUpAt:
-            parsed.status === "DELIVERED" || parsed.status === "CANCELLED"
-              ? null
-              : new Date(parsed.occurredAt.getTime() + 24 * 60 * 60 * 1000),
-        },
-      });
+      where: { id: shipment.id },
+      data: {
+        status: parsed.status,
+        workStatus: nextWorkStatus,
+        firstTrackedAt: shipment.firstTrackedAt ?? parsed.occurredAt,
+        lastTrackedAt: parsed.occurredAt,
+        deliveredAt: parsed.status === "DELIVERED" ? parsed.occurredAt : undefined,
+        closedAt: parsed.status === "DELIVERED" || parsed.status === "CANCELLED" ? parsed.occurredAt : null,
+        exceptionReason: parsed.status === "EXCEPTION" ? parsed.exceptionReason : null,
+        exceptionSeverity: parsed.status === "EXCEPTION" ? parsed.exceptionSeverity ?? "MEDIUM" : undefined,
+        nextFollowUpAt: suppressFollowUp ? null : nextFollowUpAt,
+      },
+    });
+
     const order = await tx.order.findUnique({ where: { id: shipment.orderId }, select: { status: true } });
     if (order) {
       const nextOrderStatus =
@@ -76,32 +152,47 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
             ? "EXCEPTION"
             : parsed.status === "IN_TRANSIT" && order.status === "EXCEPTION"
               ? "SHIPPED"
-              : null;
+              : parsed.status === "RETURNING" || parsed.status === "RETURNED"
+                ? "COMPLETED"
+                : null;
+
       if (nextOrderStatus) {
         await tx.order.update({
           where: { id: shipment.orderId, status: order.status },
           data: {
             status: nextOrderStatus,
             deliveredAt: nextOrderStatus === "DELIVERED" ? parsed.occurredAt : undefined,
-            exceptionNote: nextOrderStatus === "EXCEPTION" ? parsed.exceptionReason : nextOrderStatus === "SHIPPED" ? null : undefined,
+            exceptionNote: parsed.exceptionReason ?? null,
           },
         });
       }
     }
-    await tx.logisticsFollowUp.create({
-      data: {
-        shipmentId: shipment.id,
-        businessUnitId: shipment.businessUnitId,
-        actorUserId: auth.userId,
-        actorMembershipId: auth.membership.id,
-        actionType: "TRACKING_EVENT",
-        fromStatus: shipment.workStatus,
-        toStatus: workStatus,
-        note: parsed.memo ?? parsed.exceptionReason,
-        nextFollowUpAt: updatedShipment.nextFollowUpAt,
-      },
-    });
-    return { event, shipment: updatedShipment };
+
+    let followUp = null;
+    if (!suppressFollowUp && !alertContext.isDuplicate) {
+      followUp = await tx.logisticsFollowUp.create({
+        data: {
+          shipmentId: shipment.id,
+          businessUnitId: shipment.businessUnitId,
+          actorUserId: auth.userId,
+          actorMembershipId: auth.membership.id,
+          actionType: "TRACKING_EVENT",
+          fromStatus: shipment.workStatus,
+          toStatus: nextWorkStatus,
+          note: parsed.memo ?? parsed.exceptionReason,
+          nextFollowUpAt,
+        },
+      });
+    }
+
+    return {
+      event,
+      shipment: updatedShipment,
+      followUp,
+      shipmentRule: locationRule ? locationRule.key : null,
+      followUpSuppressed: suppressFollowUp,
+      alertContext,
+    };
   });
 
   await writeAuditLog({
@@ -118,6 +209,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       eventType: parsed.eventType,
       occurredAt: parsed.occurredAt.toISOString(),
       exceptionSeverity: parsed.exceptionSeverity,
+      followUpCreated: result.followUp !== null,
+      shipmentRule: result.shipmentRule,
+      followUpSuppressed: result.followUpSuppressed,
     },
   });
 

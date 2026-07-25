@@ -3,6 +3,7 @@
 import { Prisma } from "@prisma/client";
 
 import { requireAuthContext } from "@/lib/api-auth";
+import { resolveOrderReadScope, withOrderReadScope } from "@/lib/order-access";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
@@ -93,11 +94,15 @@ export async function GET(request: NextRequest) {
   if (!canRead.allowed) {
     return NextResponse.json({ error: "FORBIDDEN", reasons: canRead.reasons }, { status: 403 });
   }
+  const orderReadScope = await resolveOrderReadScope(auth.membership, auth.userId);
+  if (orderReadScope === "NONE") {
+    return NextResponse.json({ error: "FORBIDDEN", reasons: ["NO_READ_SCOPE_FOR_ORDERS"] }, { status: 403 });
+  }
 
   const pagination = parsePagination(request);
   const status = request.nextUrl.searchParams.get("status")?.trim().toUpperCase();
   const query = request.nextUrl.searchParams.get("q")?.trim();
-  const where: Prisma.OrderWhereInput = {
+  const baseWhere: Prisma.OrderWhereInput = {
     businessUnitId: auth.membership.businessUnitId,
     ...(status ? { status: status as never } : {}),
     ...(query
@@ -110,6 +115,7 @@ export async function GET(request: NextRequest) {
         }
       : {}),
   };
+  const where = withOrderReadScope(baseWhere as Record<string, unknown>, orderReadScope, auth.membership, auth.userId) as Prisma.OrderWhereInput;
   const [rows, total] = await prisma.$transaction([
     prisma.order.findMany({
       where,

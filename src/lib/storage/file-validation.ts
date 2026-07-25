@@ -6,6 +6,7 @@ const types = {
   "image/jpeg": { extension: "jpg", maxBytes: 5 * 1024 * 1024 },
   "image/webp": { extension: "webp", maxBytes: 5 * 1024 * 1024 },
   "application/pdf": { extension: "pdf", maxBytes: 10 * 1024 * 1024 },
+  "video/mp4": { extension: "mp4", maxBytes: 50 * 1024 * 1024 },
 } as const;
 
 export type AllowedMimeType = keyof typeof types;
@@ -19,6 +20,7 @@ function detectedMime(bytes: Uint8Array): AllowedMimeType | null {
     Buffer.from(bytes.subarray(8, 12)).toString("ascii") === "WEBP"
   ) return "image/webp";
   if (bytes.length >= 5 && Buffer.from(bytes.subarray(0, 5)).toString("ascii") === "%PDF-") return "application/pdf";
+  if (bytes.length >= 12 && Buffer.from(bytes.subarray(4, 8)).toString("ascii") === "ftyp") return "video/mp4";
   return null;
 }
 
