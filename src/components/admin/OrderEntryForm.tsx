@@ -251,7 +251,11 @@ export default function OrderEntryForm({
           <Field label="物流渠道"><input name="logisticsChannel" className={input} defaultValue={defaultValues.logisticsChannel} key={`${templateId}-logistics`} placeholder="可选：如 京东快递" /></Field>
           <Field label="数量" required><input name="quantity" type="number" min="1" defaultValue="1" required className={input} /></Field>
           <Field label="商品金额"><input name="unitPrice" type="number" min="0" step="0.01" defaultValue="0.00" required className={input} /></Field>
-          <Field label="币种"><input name="currency" maxLength={3} defaultValue={defaultValues.currency} key={`${templateId}-currency`} className={input} /></Field>
+          <Field label="COD 币种">
+            <select name="currency" defaultValue={defaultValues.currency} key={`${templateId}-currency`} className={input}>
+              {[["EUR", "EUR 欧元"], ["CNY", "CNY 人民币"], ["USD", "USD 美元"], ["GBP", "GBP 英镑"], ["PLN", "PLN 波兰兹罗提"], ["CZK", "CZK 捷克克朗"], ["HUF", "HUF 匈牙利福林"], ["RON", "RON 罗马尼亚列伊"], ["BGN", "BGN 保加利亚列弗"], ["SEK", "SEK 瑞典克朗"], ["DKK", "DKK 丹麦克朗"], ["NOK", "NOK 挪威克朗"], ["CHF", "CHF 瑞士法郎"]].map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </Field>
           <Field label="订单日期"><input name="orderedAt" type="date" defaultValue={today} className={input} /></Field>
         </Section>
 
@@ -287,11 +291,11 @@ export default function OrderEntryForm({
         <Section title="支付与物流">
           <Field label="COD 金额" required={config?.requireCodAmount}><input name="codAmount" type="number" min="0" step="0.01" defaultValue={defaultValues.codAmount} key={`${templateId}-cod`} className={input} /></Field>
           <Field label="运费"><input name="shippingFee" type="number" min="0" step="0.01" defaultValue={defaultValues.shippingFee} key={`${templateId}-shipping`} className={input} /></Field>
-          <Field label="支付方式">
-            <select name="paymentMethod" defaultValue={defaultValues.paymentMethod} key={`${templateId}-payment`} className={input}>
-              <option value="COD">货到付款(COD)</option>
-              <option value="PREPAID">预付</option>
-            </select>
+          <Field label="付款方式">
+            <div className="flex h-10 items-center gap-4 rounded-xl border border-rose-100 bg-white px-3 text-sm">
+              <label className="flex items-center gap-1.5"><input type="radio" name="paymentMethod" value="COD" defaultChecked={defaultValues.paymentMethod === "COD"} />到付</label>
+              <label className="flex items-center gap-1.5"><input type="radio" name="paymentMethod" value="PREPAID" defaultChecked={defaultValues.paymentMethod === "PREPAID"} />预付</label>
+            </div>
           </Field>
           <Field label="客户 WhatsApp"><input name="customerWhatsapp" className={input} placeholder="客户 WhatsApp" /></Field>
           <Field label="员工 WhatsApp"><input name="staffWhatsapp" className={input} placeholder="员工 WhatsApp" /></Field>
