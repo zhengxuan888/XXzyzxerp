@@ -3,6 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import { CalendarDays, Check, CircleCheck, CircleHelp, CircleX, LoaderCircle, MailCheck, Package, Search, Sparkles, WalletCards } from "lucide-react";
 import type { OrderTemplateConfiguration } from "@/lib/order-template";
+import AttachmentPanel from "@/components/admin/AttachmentPanel";
 
 type Option = { id: string; code: string; name: string };
 type CustomerOption = Option & { orderCount: number; lastOrderedAt: string | null };
@@ -31,6 +32,8 @@ export default function OrderEntryForm({
   const [productName, setProductName] = useState(selectedProduct?.name ?? "");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [createdOrder, setCreatedOrder] = useState<{ id: string; orderNo: string } | null>(null);
+  const [submittingReview, setSubmittingReview] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState("");
   const [smartAddress, setSmartAddress] = useState("");
   const [smartMessage, setSmartMessage] = useState("");
@@ -117,7 +120,28 @@ export default function OrderEntryForm({
       setSaving(false);
       return;
     }
-    window.location.assign(`/admin/orders/${result.data.id}`);
+    setCreatedOrder({ id: result.data.id, orderNo: result.data.orderNo });
+    setSaving(false);
+  }
+
+  async function submitForReview() {
+    if (!createdOrder || submittingReview) return;
+    setSubmittingReview(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/mvp/orders/${createdOrder.id}/actions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "submit" }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.error?.message ?? payload?.error ?? "提交核单失败");
+      window.location.assign(`/admin/orders/${createdOrder.id}`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "提交核单失败");
+    } finally {
+      setSubmittingReview(false);
+    }
   }
 
   const handleProductChange = (nextId: string) => {
@@ -324,8 +348,34 @@ export default function OrderEntryForm({
         </Section>
       </div>
 
-      {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-      <div className="flex justify-end">
+      {createdOrder && (
+        <div className="space-y-3 rounded-2xl border-2 border-emerald-200 bg-emerald-50/60 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold text-emerald-900">订单已保存：{createdOrder.orderNo}</p>
+              <p className="mt-1 text-xs text-emerald-800">请在当前页面上传客户沟通凭证，预览确认后再提交核单。</p>
+            </div>
+          </div>
+          <AttachmentPanel
+            targetType="ORDER"
+            targetId={createdOrder.id}
+            canUpload={canCreate}
+            canDelete={canCreate}
+            title="客户沟通凭证（提交核单前必传）"
+          />
+          <button
+            type="button"
+            onClick={() => void submitForReview()}
+            disabled={submittingReview}
+            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
+          >
+            <Check size={18} />
+            {submittingReview ? "正在提交核单..." : "凭证确认无误，提交核单"}
+          </button>
+        </div>
+      )}
+      {error && <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {!createdOrder && <div className="flex justify-end">
         <button
           disabled={!canCreate || saving}
           className="flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-3 font-medium text-white shadow-sm hover:bg-violet-700 disabled:opacity-50"
@@ -333,7 +383,7 @@ export default function OrderEntryForm({
           <Check size={18} />
           {saving ? "正在保存..." : "确认订单"}
         </button>
-      </div>
+      </div>}
     </form>
   );
 }
