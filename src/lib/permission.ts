@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 
-export type PermissionScope = "ALL" | "BUSINESS_UNIT" | "DEPARTMENT" | "SITE" | "SELF" | "NONE";
+export type PermissionScope = "ALL" | "BUSINESS_UNIT" | "DEPARTMENT" | "DEPARTMENT_TREE" | "SUBORDINATES" | "SITE" | "SELF" | "NONE";
 
 export type PermissionDecision = {
   allowed: boolean;
@@ -23,6 +23,8 @@ const scopeLevel: Record<PermissionScope, number> = {
   SELF: 1,
   SITE: 2,
   DEPARTMENT: 2,
+  DEPARTMENT_TREE: 2,
+  SUBORDINATES: 2,
   BUSINESS_UNIT: 3,
   ALL: 4,
 };
@@ -36,10 +38,44 @@ function isActive(entity: { isActive?: boolean; endedAt?: Date | null } | null, 
 export function normalizeScope(scope?: string | null): PermissionScope {
   if (!scope) return "NONE";
   const value = String(scope).toUpperCase();
-  if (value === "ALL" || value === "BUSINESS_UNIT" || value === "DEPARTMENT" || value === "SITE" || value === "SELF") {
+  if (value === "ALL" || value === "BUSINESS_UNIT" || value === "DEPARTMENT" || value === "DEPARTMENT_TREE" || value === "SUBORDINATES" || value === "SITE" || value === "SELF") {
     return value;
   }
   return "NONE";
+}
+
+async function isInReportingScope(actorMembershipId: string, targetUserId: string | null | undefined, includeActor: boolean) {
+  if (!targetUserId) return false;
+  const rows = await prisma.membership.findMany({
+    where: { isActive: true },
+    select: { id: true, userId: true, managerMembershipId: true },
+  });
+  const children = new Map<string, string[]>();
+  for (const row of rows) if (row.managerMembershipId) children.set(row.managerMembershipId, [...(children.get(row.managerMembershipId) ?? []), row.id]);
+  const actor = rows.find((row) => row.id === actorMembershipId);
+  if (!actor) return false;
+  const allowed = new Set<string>(includeActor ? [actor.userId] : []);
+  const queue = [...(children.get(actorMembershipId) ?? [])];
+  while (queue.length) {
+    const id = queue.shift()!;
+    const row = rows.find((item) => item.id === id);
+    if (row) allowed.add(row.userId);
+    queue.push(...(children.get(id) ?? []));
+  }
+  return allowed.has(targetUserId);
+}
+
+async function isDepartmentTreeScope(actorMembershipId: string, targetDepartmentId: string | null | undefined) {
+  if (!targetDepartmentId) return false;
+  const actor = await prisma.membership.findUnique({ where: { id: actorMembershipId }, select: { departmentId: true, businessUnitId: true } });
+  if (!actor?.departmentId) return false;
+  if (targetDepartmentId === actor.departmentId) return true;
+  const departments = await prisma.department.findMany({ where: { businessUnitId: actor.businessUnitId, isActive: true }, select: { id: true, parentId: true } });
+  const children = new Map<string, string[]>();
+  for (const row of departments) if (row.parentId) children.set(row.parentId, [...(children.get(row.parentId) ?? []), row.id]);
+  const queue = [...(children.get(actor.departmentId) ?? [])];
+  while (queue.length) { const id = queue.shift()!; if (id === targetDepartmentId) return true; queue.push(...(children.get(id) ?? [])); }
+  return false;
 }
 
 function isScopedMatch({
@@ -188,6 +224,14 @@ export async function checkPermission(ctx: PermissionContext): Promise<Permissio
 
   for (const perm of rolePerms) {
     const scope = normalizeScope(perm.scope);
+    if (scope === "SUBORDINATES") {
+      if (await isInReportingScope(membership.id, ctx.targetUserId, false)) return { allowed: true, reasons: ["SCOPE_SUBORDINATES_OK", "ROLE_PERMISSION"], source: "role" };
+      continue;
+    }
+    if (scope === "DEPARTMENT_TREE") {
+      if (await isDepartmentTreeScope(membership.id, ctx.targetDepartmentId ?? membership.departmentId)) return { allowed: true, reasons: ["SCOPE_DEPARTMENT_TREE_OK", "ROLE_PERMISSION"], source: "role" };
+      continue;
+    }
     const result = isScopedMatch({ scope, actor, target: ctx });
     if (result.allowed) {
       return {
@@ -213,6 +257,14 @@ export async function checkPermission(ctx: PermissionContext): Promise<Permissio
     if (expired) continue;
 
     const scope = normalizeScope(grant.scope);
+    if (scope === "SUBORDINATES") {
+      if (await isInReportingScope(membership.id, ctx.targetUserId, false)) return { allowed: true, reasons: ["SCOPE_SUBORDINATES_OK", "ACCESS_GRANT"], source: "access_grant" };
+      continue;
+    }
+    if (scope === "DEPARTMENT_TREE") {
+      if (await isDepartmentTreeScope(membership.id, ctx.targetDepartmentId ?? grant.departmentId)) return { allowed: true, reasons: ["SCOPE_DEPARTMENT_TREE_OK", "ACCESS_GRANT"], source: "access_grant" };
+      continue;
+    }
     const result = isScopedMatch({
       scope,
       actor: {

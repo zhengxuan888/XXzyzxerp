@@ -354,28 +354,31 @@ model MenuPermission {
 }
 
 model Membership {
-  id             String    @id @default(uuid())
-  userId         String
-  businessUnitId String
-  departmentId   String?
-  siteId         String?
-  roleId         String
-  legalEntityId  String
-  isPrimary      Boolean   @default(false)
-  isActive       Boolean   @default(true)
-  scope          String    @default("BUSINESS_UNIT")
-  startedAt      DateTime  @default(now())
-  endedAt        DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id                  String    @id @default(uuid())
+  userId              String
+  businessUnitId      String
+  departmentId        String?
+  siteId              String?
+  roleId              String
+  managerMembershipId String?
+  legalEntityId       String
+  isPrimary           Boolean   @default(false)
+  isActive            Boolean   @default(true)
+  scope               String    @default("BUSINESS_UNIT")
+  startedAt           DateTime  @default(now())
+  endedAt             DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  legalEntity  LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  department   Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  site         Site?        @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  role         Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
-  orders       Order[]      @relation("OrderOwner")
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  legalEntity       LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit      BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department        Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  site              Site?        @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  role              Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  managerMembership Membership?  @relation("MembershipHierarchy", fields: [managerMembershipId], references: [id], onDelete: SetNull)
+  directReports     Membership[] @relation("MembershipHierarchy")
+  orders            Order[]      @relation("OrderOwner")
 
   grantedAccess  AccessGrant[] @relation("GrantedAccess")
   receivedAccess AccessGrant[] @relation("ReceivedAccess")
@@ -399,6 +402,7 @@ model Membership {
   @@index([userId, isActive])
   @@index([businessUnitId, isActive])
   @@index([legalEntityId])
+  @@index([managerMembershipId, isActive])
 }
 
 model AccessGrant {
