@@ -41,6 +41,8 @@ describe("permission utils", () => {
     expect(normalizeScope("ALL")).toBe("ALL");
     expect(normalizeScope("invalid")).toBe("NONE");
     expect(normalizeScope(undefined)).toBe("NONE");
+    expect(normalizeScope("SUBORDINATES")).toBe("SUBORDINATES");
+    expect(normalizeScope("DEPARTMENT_TREE")).toBe("DEPARTMENT_TREE");
   });
 
   it("checkPermission allows BUSINESS_UNIT scoped role permission in same business unit", async () => {
