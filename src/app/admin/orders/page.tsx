@@ -85,6 +85,13 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     }),
   ]);
 
+  const myOrderStats = rows.reduce((stats, row) => {
+    stats.total += 1;
+    const key = row.status.toLowerCase() as keyof typeof stats;
+    if (key in stats && key !== "total") stats[key] += 1;
+    return stats;
+  }, { total: 0, draft: 0, submitted: 0, waiting_shipment: 0, shipped: 0, delivered: 0, exception: 0, completed: 0, cancelled: 0 });
+
   return (
     <div className="space-y-6">
       <div>
@@ -108,6 +115,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           ...template,
           configuration: parseOrderTemplateConfiguration(template.configuration),
         }))}
+        myOrderStats={myOrderStats}
       />
       <CrudPage
         apiBase="/api/mvp"

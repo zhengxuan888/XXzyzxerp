@@ -14,11 +14,13 @@ export default function OrderEntryForm({
   products,
   templates,
   canCreate,
+  myOrderStats,
 }: {
   customers: CustomerOption[];
   products: ProductOption[];
   templates: TemplateOption[];
   canCreate: boolean;
+  myOrderStats: { total: number; draft: number; submitted: number; waiting_shipment: number; shipped: number; delivered: number; exception: number; completed: number; cancelled: number };
 }) {
   const defaultTemplate = templates.find((item) => item.isDefault) ?? templates[0];
   const [templateId, setTemplateId] = useState(defaultTemplate?.id ?? "");
@@ -156,6 +158,9 @@ export default function OrderEntryForm({
         <Metric icon={<Package size={18} />} label="订单录入" value="新建订单" color="text-blue-600 bg-blue-50" />
         <Metric icon={<WalletCards size={18} />} label="预计收入" value="输入正确即可提交" color="text-emerald-600 bg-emerald-50" />
         <Metric icon={<CalendarDays size={18} />} label="录入日期" value={today} color="text-violet-600 bg-violet-50" />
+      </div>
+      <div className="grid grid-cols-2 gap-2 rounded-2xl border border-violet-100 bg-white p-3 text-xs sm:grid-cols-4 lg:grid-cols-8">
+        {[['我的订单', myOrderStats.total], ['审核中', myOrderStats.submitted], ['待发货', myOrderStats.waiting_shipment], ['运输中', myOrderStats.shipped], ['已签收', myOrderStats.delivered], ['异常', myOrderStats.exception], ['已完成', myOrderStats.completed], ['草稿', myOrderStats.draft]].map(([label, value]) => <div key={String(label)} className="rounded-xl bg-slate-50 px-2 py-2"><span className="block text-slate-500">{label}</span><strong className="mt-1 block text-lg text-slate-900">{value}</strong></div>)}
       </div>
 
       <div className="flex items-center gap-2 rounded-xl border border-rose-100 bg-white px-3">
