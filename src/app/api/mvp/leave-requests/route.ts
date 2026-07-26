@@ -121,9 +121,29 @@ export async function DELETE(request: NextRequest) {
       where: { id },
       data: { status: "CANCELED", rejectReason: "withdrawn by requester" },
     });
+    await writeAuditLog({
+      actorUserId: auth.userId,
+      actorMembershipId: auth.membership.id,
+      module: "mvp.leave-requests",
+      action: "leave_request.cancel",
+      targetType: "leave_request",
+      targetId: row.id,
+      businessUnitId: row.businessUnitId,
+      roleId: auth.membership.roleId,
+    });
     return NextResponse.json({ ok: true, id });
   }
 
   await prisma.leaveRequest.delete({ where: { id } });
+  await writeAuditLog({
+    actorUserId: auth.userId,
+    actorMembershipId: auth.membership.id,
+    module: "mvp.leave-requests",
+    action: "leave_request.delete",
+    targetType: "leave_request",
+    targetId: row.id,
+    businessUnitId: row.businessUnitId,
+    roleId: auth.membership.roleId,
+  });
   return NextResponse.json({ ok: true, deleted: id });
 }
