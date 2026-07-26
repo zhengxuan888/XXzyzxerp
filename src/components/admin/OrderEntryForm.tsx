@@ -189,6 +189,9 @@ export default function OrderEntryForm({
         </div>
 
         <Section title="订单信息">
+          <Field label="订单号">
+            <input name="orderNo" readOnly value="保存后自动生成" className={`${input} bg-slate-50 text-slate-500`} aria-label="订单号（保存后自动生成）" />
+          </Field>
           <Field label="历史客户匹配（可选）">
             <select name="customerId" className={input} value={selectedCustomerId} onChange={(event) => setSelectedCustomerId(event.target.value)}>
               <option value="">新客/不选择历史档案</option>
