@@ -143,6 +143,13 @@ export default function OrderEntryForm({
       </div>
 
       <div className="rounded-2xl border-2 border-violet-100 bg-white/70 p-4">
+        <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
+          <CircleHelp size={18} className="mt-0.5 shrink-0 text-amber-600" />
+          <div>
+            <p className="font-semibold">录单后请补充客户沟通凭证</p>
+            <p className="mt-1 text-xs leading-5 text-amber-800">订单创建后进入详情页上传客户聊天截图、PDF 或视频；上传完成后才能提交核单。新客可以直接录入，不需要先建立固定客户档案。</p>
+          </div>
+        </div>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-violet-100 bg-violet-50/70 px-3 py-2">
           <span className="flex items-center gap-2 text-sm font-medium text-violet-700">
             <Sparkles size={16} />
