@@ -150,8 +150,8 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => null);
-  if (!body || typeof body.customerId !== "string") {
-    return NextResponse.json({ error: "customerId is required." }, { status: 400 });
+  if (!body) {
+    return NextResponse.json({ error: "Request body is required." }, { status: 400 });
   }
 
   const items = parseItems(body.items).length > 0 ? parseItems(body.items) : parseSingleItem(body);
@@ -174,6 +174,11 @@ export async function POST(request: NextRequest) {
     return fail("SKU_REQUIRED", "当前订单模板要求必须选择 SKU。", 400);
   }
   const recipientPhone = typeof body.recipientPhone === "string" ? body.recipientPhone.trim() : "";
+  const customerId = typeof body.customerId === "string" ? body.customerId.trim() : "";
+  const customerName = typeof body.customerName === "string" ? body.customerName.trim().slice(0, 100) : "";
+  const shopId = typeof body.shopId === "string" ? body.shopId.trim().slice(0, 100) : "";
+  if (!customerName) return fail("RECIPIENT_NAME_REQUIRED", "请填写本次订单收件人/客户姓名。", 400);
+  if (!shopId) return fail("SHOP_ID_REQUIRED", "请填写店铺 ID。", 400);
   const recipientEmail = typeof body.recipientEmail === "string" ? body.recipientEmail.trim().toLowerCase() : "";
   const recipientAddress = typeof body.recipientAddress === "string" ? body.recipientAddress.trim() : "";
   const recipientCountryCode = typeof body.recipientCountryCode === "string" ? body.recipientCountryCode.trim() : "";
@@ -209,13 +214,17 @@ export async function POST(request: NextRequest) {
     return fail("CUSTOM_FIELDS_REQUIRED", `请填写：${customFields.missing.join("、")}`, 400);
   }
 
-  const customer = await prisma.customer.findFirst({
-    where: { id: body.customerId, businessUnitId: auth.membership.businessUnitId },
+  const customer = customerId ? await prisma.customer.findFirst({
+    where: { id: customerId, businessUnitId: auth.membership.businessUnitId },
+    select: { id: true },
+  }) : await prisma.customer.findFirst({
+    where: { businessUnitId: auth.membership.businessUnitId, isActive: true, OR: [
+      ...(recipientEmail ? [{ contactEmail: recipientEmail }] : []),
+      ...(recipientPhone ? [{ contactPhone: recipientPhone }] : []),
+    ] },
     select: { id: true },
   });
-  if (!customer) {
-    return NextResponse.json({ error: "Customer invalid for current business unit." }, { status: 400 });
-  }
+  if (customerId && !customer) return NextResponse.json({ error: "Customer invalid for current business unit." }, { status: 400 });
 
   const productIds = [...new Set(items.map((item) => item.productId))];
   const products = await prisma.product.findMany({
@@ -272,16 +281,30 @@ export async function POST(request: NextRequest) {
   }
 
   const created = await prisma.$transaction(async (tx) => {
+    const resolvedCustomer = customer ?? await tx.customer.create({
+      data: {
+        legalEntityId: auth.membership.legalEntityId,
+        businessUnitId: auth.membership.businessUnitId,
+        departmentId: auth.membership.departmentId,
+        code: `EC-${Date.now()}-${Math.floor(Math.random() * 1000).toString().padStart(3, "0")}`,
+        name: customerName,
+        contactName: customerName,
+        contactPhone: recipientPhone || null,
+        contactEmail: recipientEmail || null,
+      },
+      select: { id: true },
+    });
     const order = await tx.order.create({
       data: {
         legalEntityId: auth.membership.legalEntityId,
         businessUnitId: auth.membership.businessUnitId,
         departmentId: auth.membership.departmentId,
         siteId: auth.membership.siteId,
-        customerId: body.customerId,
+        customerId: resolvedCustomer.id,
         orderNo,
         creatorUserId: auth.userId,
         ownedByMembershipId: auth.membership.id,
+        shopId,
         orderTemplateId: orderTemplate?.id,
         status: "DRAFT",
         currency: typeof body.currency === "string" ? body.currency.trim().toUpperCase().slice(0, 3) : templateConfiguration.currency,

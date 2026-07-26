@@ -158,35 +158,35 @@ model BusinessUnit {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  legalEntity           LegalEntity            @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  departments           Department[]
-  sites                 Site[]
-  memberships           Membership[]
-  auditLogs             AuditLog[]
-  accessGrants          AccessGrant[]
-  customers             Customer[]
-  products              Product[]
-  orders                Order[]
-  documents             Document[]
-  announcements         Announcement[]
-  attendance            Attendance[]
-  leaveRequests         LeaveRequest[]
-  expenses              Expense[]
-  shipments             Shipment[]
-  approvalRecords       ApprovalRecord[]
-  inventoryBalances     InventoryBalance[]
-  inventoryTransactions InventoryTransaction[]
-  inventoryReservations InventoryReservation[]
-  orderTemplates        OrderTemplate[]
-  logisticsTemplates    LogisticsProviderTemplate[]
-  logisticsFollowUps    LogisticsFollowUp[]
+  legalEntity               LegalEntity                 @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  departments               Department[]
+  sites                     Site[]
+  memberships               Membership[]
+  auditLogs                 AuditLog[]
+  accessGrants              AccessGrant[]
+  customers                 Customer[]
+  products                  Product[]
+  orders                    Order[]
+  documents                 Document[]
+  announcements             Announcement[]
+  attendance                Attendance[]
+  leaveRequests             LeaveRequest[]
+  expenses                  Expense[]
+  shipments                 Shipment[]
+  approvalRecords           ApprovalRecord[]
+  inventoryBalances         InventoryBalance[]
+  inventoryTransactions     InventoryTransaction[]
+  inventoryReservations     InventoryReservation[]
+  orderTemplates            OrderTemplate[]
+  logisticsTemplates        LogisticsProviderTemplate[]
+  logisticsFollowUps        LogisticsFollowUp[]
   logisticsEventAnnotations LogisticsEventAnnotation[]
-  channelConnections    ChannelConnection[]
-  contactIdentities     ContactIdentity[]
-  conversations         Conversation[]
-  inboxTags             InboxTag[]
-  inboxAuditEvents      InboxAuditEvent[]
-  attachments           Attachment[]
+  channelConnections        ChannelConnection[]
+  contactIdentities         ContactIdentity[]
+  conversations             Conversation[]
+  inboxTags                 InboxTag[]
+  inboxAuditEvents          InboxAuditEvent[]
+  attachments               Attachment[]
 
   @@unique([legalEntityId, code])
   @@index([legalEntityId])
@@ -380,21 +380,21 @@ model Membership {
   grantedAccess  AccessGrant[] @relation("GrantedAccess")
   receivedAccess AccessGrant[] @relation("ReceivedAccess")
 
-  actionAudits                AuditLog[]               @relation("ActorMembership")
-  submittedApprovals          ApprovalRecord[]         @relation("SubmittedApprovals")
-  approvedApprovals           ApprovalRecord[]         @relation("ApprovedApprovals")
-  attendanceRecords           Attendance[]             @relation("MembershipAttendance")
-  leaveRequests               LeaveRequest[]           @relation("LeaveRequester")
-  leaveApprovals              LeaveRequest[]           @relation("LeaveApprover")
-  shipmentEvents              ShipmentEvent[]          @relation("MembershipShipmentEvents")
-  ownedShipments              Shipment[]               @relation("ShipmentAftersalesOwner")
+  actionAudits                AuditLog[]                 @relation("ActorMembership")
+  submittedApprovals          ApprovalRecord[]           @relation("SubmittedApprovals")
+  approvedApprovals           ApprovalRecord[]           @relation("ApprovedApprovals")
+  attendanceRecords           Attendance[]               @relation("MembershipAttendance")
+  leaveRequests               LeaveRequest[]             @relation("LeaveRequester")
+  leaveApprovals              LeaveRequest[]             @relation("LeaveApprover")
+  shipmentEvents              ShipmentEvent[]            @relation("MembershipShipmentEvents")
+  ownedShipments              Shipment[]                 @relation("ShipmentAftersalesOwner")
   logisticsFollowUps          LogisticsFollowUp[]
   handledLogisticsAnnotations LogisticsEventAnnotation[] @relation("LogisticsAnnotationHandler")
   inventoryTransactions       InventoryTransaction[]
-  assignedConversations       ConversationAssignment[] @relation("ConversationAssignee")
-  conversationAssignmentsMade ConversationAssignment[] @relation("ConversationAssigner")
-  inboxAuditEvents            InboxAuditEvent[]        @relation("InboxAuditMembership")
-  uploadedAttachments         Attachment[]             @relation("AttachmentUploaderMembership")
+  assignedConversations       ConversationAssignment[]   @relation("ConversationAssignee")
+  conversationAssignmentsMade ConversationAssignment[]   @relation("ConversationAssigner")
+  inboxAuditEvents            InboxAuditEvent[]          @relation("InboxAuditMembership")
+  uploadedAttachments         Attachment[]               @relation("AttachmentUploaderMembership")
 
   @@index([userId, isActive])
   @@index([businessUnitId, isActive])
@@ -543,6 +543,7 @@ model Order {
   orderNo               String
   creatorUserId         String
   ownedByMembershipId   String
+  shopId                String?
   orderTemplateId       String?
   status                OrderStatus @default(DRAFT)
   currency              String      @default("CNY")
@@ -745,13 +746,13 @@ model Shipment {
   createdAt           DateTime                @default(now())
   updatedAt           DateTime                @updatedAt
 
-  order           Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  legalEntity     LegalEntity         @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  businessUnit    BusinessUnit        @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  site            Site?               @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  ownerMembership Membership?         @relation("ShipmentAftersalesOwner", fields: [ownerMembershipId], references: [id], onDelete: SetNull)
-  events          ShipmentEvent[]
-  followUps       LogisticsFollowUp[]
+  order            Order                      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  legalEntity      LegalEntity                @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit     BusinessUnit               @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  site             Site?                      @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  ownerMembership  Membership?                @relation("ShipmentAftersalesOwner", fields: [ownerMembershipId], references: [id], onDelete: SetNull)
+  events           ShipmentEvent[]
+  followUps        LogisticsFollowUp[]
   eventAnnotations LogisticsEventAnnotation[]
 
   @@index([orderId, status])
@@ -772,8 +773,8 @@ model ShipmentEvent {
   memo              String?
   actorMembershipId String?
 
-  shipment        Shipment    @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
-  actorMembership Membership? @relation("MembershipShipmentEvents", fields: [actorMembershipId], references: [id], onDelete: SetNull)
+  shipment        Shipment                  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  actorMembership Membership?               @relation("MembershipShipmentEvents", fields: [actorMembershipId], references: [id], onDelete: SetNull)
   annotation      LogisticsEventAnnotation?
 
   @@unique([shipmentId, source, externalEventKey])
@@ -793,10 +794,10 @@ model LogisticsEventAnnotation {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
-  shipment           Shipment      @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
-  shipmentEvent      ShipmentEvent @relation(fields: [shipmentEventId], references: [id], onDelete: Cascade)
-  businessUnit       BusinessUnit  @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  handledByMembership Membership?  @relation("LogisticsAnnotationHandler", fields: [handledByMembershipId], references: [id], onDelete: SetNull)
+  shipment            Shipment      @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  shipmentEvent       ShipmentEvent @relation(fields: [shipmentEventId], references: [id], onDelete: Cascade)
+  businessUnit        BusinessUnit  @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  handledByMembership Membership?   @relation("LogisticsAnnotationHandler", fields: [handledByMembershipId], references: [id], onDelete: SetNull)
 
   @@index([businessUnitId, isHandled, updatedAt])
   @@index([shipmentId, updatedAt])

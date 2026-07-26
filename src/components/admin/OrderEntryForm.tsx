@@ -74,6 +74,8 @@ export default function OrderEntryForm({
     const payload = {
       orderTemplateId: templateId || undefined,
       customerId: String(data.get("customerId") ?? ""),
+      customerName: String(data.get("recipientName") ?? ""),
+      shopId: String(data.get("shopId") ?? ""),
       productId: selectedProductId,
       skuId: String(data.get("skuId") ?? ""),
       productName: finalProductName,
@@ -155,9 +157,9 @@ export default function OrderEntryForm({
         </div>
 
         <Section title="订单信息">
-          <Field label="客户" required>
-            <select name="customerId" required className={input} value={selectedCustomerId} onChange={(event) => setSelectedCustomerId(event.target.value)}>
-              <option value="">选择客户</option>
+          <Field label="历史客户匹配（可选）">
+            <select name="customerId" className={input} value={selectedCustomerId} onChange={(event) => setSelectedCustomerId(event.target.value)}>
+              <option value="">新客/不选择历史档案</option>
               {customers.map((item) => <option key={item.id} value={item.id}>{item.code} / {item.name}</option>)}
             </select>
             {selectedCustomer && (
@@ -170,6 +172,7 @@ export default function OrderEntryForm({
               </p>
             )}
           </Field>
+          <Field label="店铺 ID" required><input name="shopId" required className={input} placeholder="旧 ERP 的店铺标识" /></Field>
           <Field label="产品搜索">
             <input
               className={input}
