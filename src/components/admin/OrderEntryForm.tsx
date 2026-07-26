@@ -30,6 +30,8 @@ export default function OrderEntryForm({
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState("");
+  const [smartAddress, setSmartAddress] = useState("");
+  const [smartMessage, setSmartMessage] = useState("");
   const template = templates.find((item) => item.id === templateId) ?? defaultTemplate;
   const config = template?.configuration;
   const today = new Date().toISOString().slice(0, 10);
@@ -124,6 +126,29 @@ export default function OrderEntryForm({
 
   const input =
     "h-10 w-full rounded-xl border border-rose-100 bg-white px-3 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100";
+
+  function parseSmartAddress() {
+    const lines = smartAddress.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    if (!lines.length) return;
+    const form = document.querySelector("form");
+    if (!form) return;
+    const set = (name: string, value: string) => {
+      const field = form.elements.namedItem(name);
+      if (field instanceof HTMLInputElement && value) {
+        field.value = value;
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    };
+    const email = lines.find((line) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(line));
+    const phone = lines.find((line) => /^[+()\d\s-]{7,}$/.test(line));
+    const name = lines.find((line) => line !== email && line !== phone && !/[,.，。]/.test(line));
+    const address = lines.filter((line) => line !== email && line !== phone && line !== name).join(", ");
+    set("recipientName", name ?? lines[0] ?? "");
+    set("recipientEmail", email ?? "");
+    set("recipientPhone", phone ?? "");
+    set("recipientAddress", address);
+    setSmartMessage("已尝试填充收件人、邮箱、电话和地址，请人工核对后再提交。");
+  }
 
   return (
     <form onSubmit={submit} className="space-y-4 rounded-2xl border border-violet-100 bg-[#fffaf7] p-4 shadow-sm">
@@ -228,6 +253,14 @@ export default function OrderEntryForm({
         </Section>
 
         <Section title="收件信息">
+          <div className="md:col-span-4 rounded-xl border border-violet-100 bg-violet-50/60 p-3">
+            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-violet-800"><Sparkles size={15} />智能识别地址（辅助，不替代人工核对）</div>
+            <textarea value={smartAddress} onChange={(event) => setSmartAddress(event.target.value)} className="min-h-20 w-full rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-violet-100" placeholder="粘贴客户发来的姓名、电话、地址和邮箱，每行一项" />
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <button type="button" onClick={parseSmartAddress} className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-700">识别并填充</button>
+              {smartMessage && <span className="text-xs text-emerald-700">{smartMessage}</span>}
+            </div>
+          </div>
           <Field label="收件人" required><input name="recipientName" required className={input} placeholder="收件人姓名" /></Field>
           <Field label="电话" required={config?.requireRecipientPhone}>
             <input name="recipientPhone" required={config?.requireRecipientPhone} className={input} placeholder="收件人联系电话" />
