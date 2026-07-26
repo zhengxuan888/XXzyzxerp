@@ -25,6 +25,10 @@
 
 `Message(conversationId, providerMessageKey)` 和 `DeliveryAttempt(channelConnectionId, idempotencyKey)` 双重唯一约束保证重复推送或重复拉取不会重复入库。失败标记为 `RETRYABLE` 并记录下一次重试时间，不静默丢弃。
 
+### 飞书接入
+
+`src/lib/inbox/feishu-adapter.ts` 提供飞书事件到统一 `ProviderMessage` 的标准化适配器，`/api/webhooks/feishu` 提供事件订阅入口。入口只接受配置的 `FEISHU_VERIFICATION_TOKEN`，按请求头中的 `x-feishu-connection-id` 找到数据库中的 `providerKey=FEISHU` 且启用的渠道连接，再复用统一幂等同步链路；不保存 App Secret，也不自动向飞书发送消息。配置真实应用前必须在飞书后台完成事件订阅、消息权限、HTTPS 回调和回调重试策略验证。
+
 ## 权限动作
 
 - `inbox.read`

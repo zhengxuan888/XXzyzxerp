@@ -6,6 +6,8 @@ export type ProviderMessage = {
   subject?: string;
   text: string;
   occurredAt: Date;
+  normalizedAddress?: string;
+  contentType?: string;
 };
 
 export interface ChannelProviderAdapter {
