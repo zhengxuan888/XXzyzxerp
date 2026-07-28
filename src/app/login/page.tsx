@@ -51,15 +51,17 @@ export default function LoginPage() {
         </div>
 
         <div className="relative z-10 max-w-xl">
-          <span className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-cyan-200">
-            <ShieldCheck size={14} /> 数据隔离 · 动态权限 · 全程审计
+          <span className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-amber-200">
+            <ShieldCheck size={14} /> 诚信 · 责任 · 品质 · 长期共赢
           </span>
           <h1 className="text-5xl font-bold leading-[1.15] tracking-tight">
-            让订单、发货与物流跟单
-            <span className="mt-2 block bg-gradient-to-r from-violet-300 to-cyan-300 bg-clip-text text-transparent">在一个工作台完成</span>
+            与优秀的人同行
+            <span className="mt-2 block bg-gradient-to-r from-amber-200 to-amber-500 bg-clip-text text-transparent">
+              为客户臻选更好的产品与服务
+            </span>
           </h1>
           <p className="mt-6 max-w-lg text-base leading-7 text-slate-300">
-            面向公司各业务板块与部门的日常运营系统，根据当前业务上下文和岗位自动呈现待办、菜单与可操作范围。
+            择优秀人才、选优质资源、做卓越服务。通过科技、数据与 AI 持续提升协作效率，为客户和合作伙伴创造长期价值。
           </p>
         </div>
 

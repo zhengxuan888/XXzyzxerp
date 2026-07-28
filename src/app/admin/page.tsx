@@ -139,6 +139,9 @@ export default async function AdminHomePage() {
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
           依照权限自动展示可见工作区，并支持高优先级待办处理。
         </p>
+        <p className="mt-5 border-l-2 border-amber-400 pl-3 text-xs leading-5 text-amber-100">
+          择优秀人才，选优质资源，做卓越服务。
+        </p>
       </header>
       {visibleWorkbench.length > 0 ? (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
