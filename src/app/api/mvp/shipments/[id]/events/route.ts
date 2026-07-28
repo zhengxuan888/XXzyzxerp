@@ -37,6 +37,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       workStatus: true,
       firstTrackedAt: true,
       lastTrackedAt: true,
+      nextFollowUpAt: true,
       order: {
         select: {
           recipientCountryCode: true,
@@ -90,9 +91,6 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         occurredAt: parsed.occurredAt,
       },
     );
-    const followUpCount = await tx.logisticsFollowUp.count({
-      where: { shipmentId: shipment.id, actionType: "TRACKING_EVENT" },
-    });
     const milestoneCount = locationRule
       ? await tx.shipmentEvent.count({
           where: { shipmentId: shipment.id, eventType: locationRule.milestoneEvent },
@@ -105,7 +103,12 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     const suppressFollowUp = shouldSuppressHighPriorityFollowUp(parsed.eventType, {
       highPriorityIndex,
       countryRuleName: ruleKey,
-      hasActiveHighPriorityFollowUp: followUpCount > 0,
+      // Only an outstanding, not-yet-due follow-up suppresses a duplicate task.
+      // Historical/closed follow-ups must not prevent a new tracking event from
+      // creating a new customer-contact task.
+      hasActiveHighPriorityFollowUp: Boolean(
+        shipment.nextFollowUpAt && shipment.nextFollowUpAt.getTime() > Date.now(),
+      ),
       isMilestoneReached,
       firstTrackedAt: shipment.firstTrackedAt,
       lastTrackedAt: shipment.lastTrackedAt,

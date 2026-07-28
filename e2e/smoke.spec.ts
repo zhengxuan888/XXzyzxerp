@@ -164,6 +164,8 @@ test("订单提交核单前强制上传客户沟通凭证", async ({ page }) => 
     data: {
       orderTemplateId: template.id,
       customerId: customer.id,
+      customerName: "本地验收客户",
+      shopId: "acceptance-shop",
       productId: product.id,
       skuId: sku.id,
       productName: product.name,

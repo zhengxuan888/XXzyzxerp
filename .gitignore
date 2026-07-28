@@ -37,6 +37,8 @@ yarn-error.log*
 /.codex-dev.log
 /.codex-dev.err.log
 /.codex-dev-error.log
+/.codex-dev-visible.log
+/.codex-dev-visible.err.log
 /design-menu-current.png
 /.local-storage/
 /.local-logs/
