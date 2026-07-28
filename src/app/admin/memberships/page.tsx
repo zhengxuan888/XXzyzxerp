@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import CrudPage from "@/components/admin/CrudPage";
+import ReportingLineManager from "@/components/admin/ReportingLineManager";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
@@ -12,12 +13,19 @@ export default async function MembershipsPage() {
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
 
-  const [canRead, canCreate, canDelete] = await Promise.all([
+  const [canRead, canManageReportingLine, canCreate, canDelete] = await Promise.all([
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
       actionKey: "membership.read",
       targetBusinessUnitId: membership.businessUnitId,
+    }),
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "membership.reporting_line.manage",
+      targetBusinessUnitId: membership.businessUnitId,
+      targetDepartmentId: membership.departmentId,
     }),
     checkPermission({
       userId: session.userId,
@@ -35,7 +43,7 @@ export default async function MembershipsPage() {
   if (!canRead.allowed) redirect("/admin");
 
   const [rows, users, legalEntities, businessUnits, roles, departments, sites] = await Promise.all([
-    prisma.membership.findMany({ orderBy: { createdAt: "desc" }, include: { user: true, role: true, businessUnit: true, department: true, site: true } }),
+    prisma.membership.findMany({ where: { businessUnitId: membership.businessUnitId, isActive: true }, orderBy: { createdAt: "desc" }, include: { user: true, role: true, businessUnit: true, department: true, site: true, managerMembership: { include: { user: true } } } }),
     prisma.user.findMany({ orderBy: { username: "asc" } }),
     prisma.legalEntity.findMany({ orderBy: { name: "asc" } }),
     prisma.businessUnit.findMany({ orderBy: { name: "asc" } }),
@@ -44,7 +52,17 @@ export default async function MembershipsPage() {
     prisma.site.findMany({ orderBy: { code: "asc" } }),
   ]);
 
-  return (
+  const reportingRows = rows.map((row) => ({
+    id: row.id,
+    employeeName: row.user.fullName,
+    username: row.user.username,
+    roleName: row.role.name,
+    departmentName: row.department?.name ?? "未分配部门",
+    managerMembershipId: row.managerMembershipId,
+  }));
+
+  return (<>
+    <ReportingLineManager rows={reportingRows} canManage={canManageReportingLine.allowed} />
     <CrudPage
       resource="memberships"
       listTitle="Memberships"
@@ -93,6 +111,12 @@ export default async function MembershipsPage() {
           options: sites.map((site) => ({ value: site.id, label: site.name })),
         },
         {
+          key: "managerMembershipId",
+          label: "直属上级（可选）",
+          type: "select",
+          options: reportingRows.map((row) => ({ value: row.id, label: `${row.employeeName} · ${row.roleName}` })),
+        },
+        {
           key: "scope",
           label: "Scope",
           type: "select",
@@ -117,6 +141,7 @@ export default async function MembershipsPage() {
           render: (row) => ((row.businessUnit as { name?: string } | undefined)?.name ?? "-"),
         },
         { key: "role", label: "Role", render: (row) => ((row.role as { name?: string } | undefined)?.name ?? "-") },
+        { key: "managerMembership", label: "直属上级", render: (row) => ((row.managerMembership as { user?: { fullName?: string } } | undefined)?.user?.fullName ?? "-") },
         {
           key: "department",
           label: "Department",
@@ -125,5 +150,5 @@ export default async function MembershipsPage() {
         { key: "scope", label: "Scope" },
       ]}
     />
-  );
+  </>);
 }

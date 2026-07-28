@@ -29,6 +29,7 @@ const actionDefs: SeedAction[] = [
   { key: "membership.read", name: "Membership read", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "membership.create", name: "Membership create", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "membership.delete", name: "Membership delete", namespace: "erp", scope: "BUSINESS_UNIT" },
+  { key: "membership.reporting_line.manage", name: "配置员工汇报关系", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "role.read", name: "Role read", namespace: "erp", scope: "ALL" },
   { key: "role.create", name: "Role create", namespace: "erp", scope: "ALL" },
   { key: "role.delete", name: "Role delete", namespace: "erp", scope: "ALL" },
@@ -590,6 +591,7 @@ async function main() {
     "membership.read",
     "membership.create",
     "membership.delete",
+    "membership.reporting_line.manage",
     "role.read",
     "menu.read",
     "menu.create",
@@ -699,7 +701,10 @@ async function main() {
     demoRoles.set(profile.code, role);
     const allowed = new Set(profile.allowed);
     allowed.add("report.view");
-    if (profile.code === "demo_hr") allowed.add("report.team.view");
+    if (profile.code === "demo_hr") {
+      allowed.add("report.team.view");
+      allowed.add("membership.reporting_line.manage");
+    }
     for (const action of actions) {
       await prisma.rolePermission.upsert({
         where: { roleId_actionKey: { roleId: role.id, actionKey: action.key } },

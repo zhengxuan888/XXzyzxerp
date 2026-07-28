@@ -366,7 +366,7 @@ export async function POST(request: NextRequest, props: RouteParams) {
     ) {
       return invalidBody("userId, legalEntityId, businessUnitId and roleId are required.");
     }
-    const [businessUnit, department, site, rolePermissions] = await Promise.all([
+    const [businessUnit, department, site, managerMembership, rolePermissions] = await Promise.all([
       prisma.businessUnit.findFirst({ where: { id: body.businessUnitId, legalEntityId: body.legalEntityId, isActive: true } }),
       typeof body.departmentId === "string" && body.departmentId
         ? prisma.department.findFirst({ where: { id: body.departmentId, businessUnitId: body.businessUnitId, isActive: true } })
@@ -374,9 +374,12 @@ export async function POST(request: NextRequest, props: RouteParams) {
       typeof body.siteId === "string" && body.siteId
         ? prisma.site.findFirst({ where: { id: body.siteId, businessUnitId: body.businessUnitId, isActive: true } })
         : null,
+      typeof body.managerMembershipId === "string" && body.managerMembershipId
+        ? prisma.membership.findFirst({ where: { id: body.managerMembershipId, businessUnitId: body.businessUnitId, isActive: true } })
+        : null,
       prisma.rolePermission.findMany({ where: { roleId: body.roleId, isAllowed: true } }),
     ]);
-    if (!businessUnit || (body.departmentId && !department) || (body.siteId && !site)) {
+    if (!businessUnit || (body.departmentId && !department) || (body.siteId && !site) || (body.managerMembershipId && !managerMembership)) {
       return invalidBody("Membership organization references are inconsistent.");
     }
     const targetPermission = await checkPermission({
@@ -414,6 +417,7 @@ export async function POST(request: NextRequest, props: RouteParams) {
         businessUnitId: body.businessUnitId,
         departmentId: typeof body.departmentId === "string" && body.departmentId ? body.departmentId : null,
         siteId: typeof body.siteId === "string" && body.siteId ? body.siteId : null,
+        managerMembershipId: typeof body.managerMembershipId === "string" && body.managerMembershipId ? body.managerMembershipId : null,
         roleId: body.roleId,
         isPrimary: body.isPrimary === true,
         scope: typeof body.scope === "string" ? body.scope : "BUSINESS_UNIT",
