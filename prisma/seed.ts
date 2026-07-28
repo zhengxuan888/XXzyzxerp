@@ -62,6 +62,7 @@ const actionDefs: SeedAction[] = [
   { key: "order.status.update", name: "Order status update", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "order.submit", name: "提交订单核单", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "order.review", name: "订单核单", namespace: "erp", scope: "BUSINESS_UNIT" },
+  { key: "order.review.proof.upload", name: "上传核单凭证", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "order.ship", name: "订单发货", namespace: "erp", scope: "BUSINESS_UNIT" },
 
   { key: "shipment.read", name: "Shipment read", namespace: "erp", scope: "BUSINESS_UNIT" },
@@ -623,7 +624,7 @@ async function main() {
   // Local-only role templates for acceptance testing. Names and permissions remain data-driven.
   const roleProfiles = [
     { code: "demo_sales", name: "演示销售录单员", username: "demo_sales", email: "demo.sales@local.erp", allowed: ["dashboard.view", "customer.read", "customer.create", "product.read", "order.read", "order.create", "order.update", "order.submit", "attachment.read", "attachment.create", "leave_request.read", "leave_request.create"] },
-    { code: "demo_reviewer", name: "演示核单员", username: "demo_reviewer", email: "demo.reviewer@local.erp", allowed: ["dashboard.view", "customer.read", "product.read", "order.read", "order.review", "order.status.update", "attachment.read", "approval.review"] },
+    { code: "demo_reviewer", name: "演示核单员", username: "demo_reviewer", email: "demo.reviewer@local.erp", allowed: ["dashboard.view", "customer.read", "product.read", "order.read", "order.review", "order.review.proof.upload", "order.status.update", "attachment.read", "attachment.create", "approval.review"] },
     { code: "demo_shipping", name: "演示发货员", username: "demo_shipping", email: "demo.shipping@local.erp", allowed: ["dashboard.view", "product.read", "order.read", "shipment.read", "shipment.create", "shipment.track.update", "logistics_template.read", "logistics_template.export", "attachment.read", "attachment.create"] },
     { code: "demo_after_sales", name: "演示物流售后员", username: "demo_after_sales", email: "demo.after.sales@local.erp", allowed: ["dashboard.view", "customer.read", "order.read", "shipment.read", "shipment.tracking_no.view", "shipment.timeline.view", "shipment.track.update", "inbox.read", "inbox.manage", "inbox.assign", "inbox.customer.link", "attachment.read", "attachment.create"] },
     { code: "demo_finance", name: "演示财务员", username: "demo_finance", email: "demo.finance@local.erp", allowed: ["dashboard.view", "order.read", "expense.read", "expense.create", "approval.review"] },

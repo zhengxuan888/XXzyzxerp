@@ -61,6 +61,11 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     return fail("FORBIDDEN", "当前角色无权执行此操作", 403);
   }
 
+  if (action === "approve") {
+    const proofPermission = await checkPermission({ userId: auth.userId, membershipId: auth.membership.id, actionKey: "order.review.proof.upload", targetBusinessUnitId: order.businessUnitId, targetDepartmentId: order.departmentId, targetSiteId: order.siteId });
+    if (!proofPermission.allowed) return fail("FORBIDDEN", "当前角色未配置核单凭证权限", 403);
+  }
+
   if (!config.from.includes(order.status) || !canTransitionOrder(order.status, config.to)) {
     return fail(
       "INVALID_ORDER_TRANSITION",

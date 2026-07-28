@@ -41,7 +41,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const allowed = await assertOrderReadScope({ membership, userId: session.userId, orderId: order.id });
   if (!allowed) redirect("/admin");
 
-  const [canSubmit, canReview, canShip, canCancel, canReadAttachments, canCreateAttachments, canDeleteAttachments] = await Promise.all([
+  const [canSubmit, canReview, canReviewProof, canShip, canCancel, canReadAttachments, canCreateAttachments, canDeleteAttachments] = await Promise.all([
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
@@ -54,6 +54,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       actionKey: "order.review",
       targetBusinessUnitId: membership.businessUnitId,
     }),
+    checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "order.review.proof.upload", targetBusinessUnitId: membership.businessUnitId, targetDepartmentId: order.departmentId }),
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
@@ -156,7 +157,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         />
       )}
 
-      {canReadAttachments.allowed && canReview.allowed && order.status === "SUBMITTED" && (
+      {canReadAttachments.allowed && canReview.allowed && canReviewProof.allowed && order.status === "SUBMITTED" && (
         <AttachmentPanel
           targetType="ORDER_REVIEW"
           targetId={order.id}
