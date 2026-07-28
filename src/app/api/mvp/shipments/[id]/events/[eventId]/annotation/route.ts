@@ -33,6 +33,7 @@ export async function PATCH(
 
   const body = await request.json().catch(() => null);
   const note = typeof body?.note === "string" ? body.note.trim().slice(0, 1000) : "";
+  if (body?.isHandled === true && !note) return fail("TRACKING_NOTE_REQUIRED", "标记物流轨迹完成前必须填写备注。", 400);
   const tags: string[] = Array.isArray(body?.tags)
     ? [...new Set<string>(body.tags.filter((tag: unknown): tag is string => typeof tag === "string").map((tag: string) => tag.trim().slice(0, 30)).filter(Boolean))].slice(0, 10)
     : [];

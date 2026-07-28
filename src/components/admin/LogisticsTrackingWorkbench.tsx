@@ -45,6 +45,7 @@ function EventEditor({ shipmentId, event }: { shipmentId: string; event: Trackin
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   async function save(nextHandled = isHandled) {
+    if (!note.trim()) { setMessage("请先填写本条轨迹备注"); return; }
     setSaving(true); setMessage("");
     const tags = tagsText.split(/[,，、]/).map((tag) => tag.trim()).filter(Boolean);
     const response = await fetch(`/api/mvp/shipments/${shipmentId}/events/${event.id}/annotation`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note, tags, isHandled: nextHandled }) });
