@@ -19,6 +19,11 @@ export async function GET(request: NextRequest) {
   });
   if (!canRead.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: canRead.reasons }, { status: 403 });
 
+  const [canViewTrackingNo, canViewTimeline] = await Promise.all([
+    checkPermission({ userId: auth.userId, membershipId: auth.membership.id, actionKey: "shipment.tracking_no.view", targetBusinessUnitId: auth.membership.businessUnitId }),
+    checkPermission({ userId: auth.userId, membershipId: auth.membership.id, actionKey: "shipment.timeline.view", targetBusinessUnitId: auth.membership.businessUnitId }),
+  ]);
+
   const pagination = parsePagination(request);
   const status = request.nextUrl.searchParams.get("status")?.trim().toUpperCase();
   const query = request.nextUrl.searchParams.get("q")?.trim();
@@ -28,7 +33,7 @@ export async function GET(request: NextRequest) {
     ...(query
       ? {
           OR: [
-            { trackingNo: { contains: query, mode: "insensitive" } },
+            ...(canViewTrackingNo.allowed ? [{ trackingNo: { contains: query, mode: "insensitive" as const } }] : []),
             { carrier: { contains: query, mode: "insensitive" } },
             { order: { orderNo: { contains: query, mode: "insensitive" } } },
           ],
@@ -45,7 +50,12 @@ export async function GET(request: NextRequest) {
     }),
     prisma.shipment.count({ where }),
   ]);
-  return paginated(rows, total, pagination);
+  const safeRows = rows.map((row) => ({
+    ...row,
+    trackingNo: canViewTrackingNo.allowed ? row.trackingNo : null,
+    events: canViewTimeline.allowed ? row.events : [],
+  }));
+  return paginated(safeRows, total, pagination);
 }
 
 export async function POST(request: NextRequest) {
