@@ -78,3 +78,4 @@
 - `pnpm run test:e2e -- e2e/smoke.spec.ts`：13 个 Playwright 用例全部通过。
 - 物流提醒修复：仅在仍有未到期跟进时抑制重复待办；已处理或已到期后，新轨迹可再次生成跟进任务。
 - 修复后 TypeScript、Lint、Vitest（17 文件/54 测试）和生产构建再次通过。
+- `pnpm run deploy:dry-run`：通过（配置、Docker、迁移、全量测试、构建和健康检查均通过；仅本地环境）。
