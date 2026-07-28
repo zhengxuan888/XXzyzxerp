@@ -209,6 +209,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               return creator?.username ?? "-";
             },
           },
+          { key: "recipient", label: "收件人", render: (row) => String(row.recipientName ?? "-") },
+          { key: "contact", label: "客户联系方式", render: (row) => [row.recipientEmail, row.customerWhatsapp, row.recipientPhone].filter(Boolean).join(" / ") || "-" },
+          { key: "country", label: "目的地国家", render: (row) => String(row.recipientCountryCode ?? "-") },
         ]}
       />
       <div className="flex items-center justify-between text-sm text-slate-500"><span>共 {totalCount} 条，第 {page} / {Math.max(1, Math.ceil(totalCount / pageSize))} 页</span><div className="flex gap-2">{page > 1 && <Link className="rounded-lg border px-3 py-1.5" href={`/admin/orders?status=${status ?? ""}&employee=${employee ?? ""}&product=${product ?? ""}&country=${country ?? ""}&page=${page - 1}`}>上一页</Link>}{page < Math.ceil(totalCount / pageSize) && <Link className="rounded-lg border px-3 py-1.5" href={`/admin/orders?status=${status ?? ""}&employee=${employee ?? ""}&product=${product ?? ""}&country=${country ?? ""}&page=${page + 1}`}>下一页</Link>}</div></div>
