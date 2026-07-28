@@ -13,6 +13,7 @@ import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import type { OrderStatus } from "@prisma/client";
 import { zh } from "@/lib/i18n";
+import OrderStatusCards from "@/components/admin/OrderStatusCards";
 
 const ORDER_STATUSES = new Set<OrderStatus>(["DRAFT", "SUBMITTED", "WAITING_SHIPMENT", "SHIPPED", "DELIVERED", "EXCEPTION", "COMPLETED", "CANCELLED"]);
 
@@ -63,7 +64,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
   const baseWhere = { businessUnitId: membership.businessUnitId, ...(status ? { status } : {}), ...(employee ? { creatorUserId: employee } : {}), ...(country ? { recipientCountryCode: country } : {}), ...(product ? { items: { some: { productName: { contains: product, mode: "insensitive" as const } } } } : {}) };
   const scopedWhere = withOrderReadScope(baseWhere, orderReadScope, membership, session.userId);
-  const [rows, totalCount, templates, employees, countries] = await Promise.all([
+  const statusScopeWhere = withOrderReadScope({ businessUnitId: membership.businessUnitId, ...(employee ? { creatorUserId: employee } : {}), ...(country ? { recipientCountryCode: country } : {}), ...(product ? { items: { some: { productName: { contains: product, mode: "insensitive" as const } } } } : {}) }, orderReadScope, membership, session.userId);
+  const [rows, totalCount, statusGroups, templates, employees, countries] = await Promise.all([
     prisma.order.findMany({
       where: scopedWhere as Record<string, unknown>,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -76,6 +78,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       },
     }),
     prisma.order.count({ where: scopedWhere as Record<string, unknown> }),
+    prisma.order.groupBy({ by: ["status"], where: statusScopeWhere as Record<string, unknown>, _count: { _all: true } }),
     prisma.orderTemplate.findMany({
       where: { businessUnitId: membership.businessUnitId, isActive: true },
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
@@ -111,6 +114,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         myOrderStats={myOrderStats}
       />
       <OrderBatchImport canCreate={canCreate.allowed} />
+      <OrderStatusCards groups={statusGroups.map((item) => ({ status: item.status, count: item._count._all }))} activeStatus={status} />
       <form method="get" className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4">
         <input type="hidden" name="status" value={status ?? ""} />
         <select name="employee" defaultValue={employee ?? ""} className="rounded-xl border border-slate-200 px-3 py-2 text-sm"><option value="">全部录单员工</option>{employees.map((item) => <option key={item.id} value={item.id}>{item.fullName || item.username}</option>)}</select>
