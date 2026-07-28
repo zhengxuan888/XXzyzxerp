@@ -156,6 +156,16 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         />
       )}
 
+      {canReadAttachments.allowed && canReview.allowed && order.status === "SUBMITTED" && (
+        <AttachmentPanel
+          targetType="ORDER_REVIEW"
+          targetId={order.id}
+          canUpload
+          canDelete={canDeleteAttachments.allowed}
+          title="核单凭证（审核通过前必传，由当前审核人员上传）"
+        />
+      )}
+
       <section className="rounded border border-gray-200 p-4">
         <h2 className="mb-3 font-medium">物流信息</h2>
         {order.shipments.length === 0 ? (

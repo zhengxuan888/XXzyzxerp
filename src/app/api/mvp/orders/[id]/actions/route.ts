@@ -113,6 +113,19 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         );
       }
 
+      if (action === "approve") {
+        const reviewProofCount = await tx.attachment.count({
+          where: {
+            businessUnitId: current.businessUnitId,
+            targetType: "ORDER_REVIEW",
+            targetId: current.id,
+            status: "ACTIVE",
+            uploadedByMembershipId: auth.membership.id,
+          },
+        });
+        if (reviewProofCount < 1) throw new Error("ORDER_REVIEW_PROOF_REQUIRED");
+      }
+
       if (action === "reject" || action === "void") {
         await finalizeOrderInventory(
           tx,
@@ -261,6 +274,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         "提交核单前必须上传客户沟通凭证（图片、PDF 或视频）。",
         409,
       );
+    }
+    if (error instanceof Error && error.message === "ORDER_REVIEW_PROOF_REQUIRED") {
+      return fail("ORDER_REVIEW_PROOF_REQUIRED", "核单通过前必须上传核单凭证，且由当前审核人员上传。", 409);
     }
     if (error instanceof Error && error.message === "SHIPMENT_FIELDS_REQUIRED") {
       return fail("SHIPMENT_FIELDS_REQUIRED", "请填写承运商与物流单号", 400);
