@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import ShipmentEventForm from "@/components/admin/ShipmentEventForm";
 import LogisticsFollowUpForm from "@/components/admin/LogisticsFollowUpForm";
 import AttachmentPanel from "@/components/admin/AttachmentPanel";
+import ShipmentSyncButton from "@/components/admin/ShipmentSyncButton";
 import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
 import { checkPermission } from "@/lib/permission";
@@ -75,6 +76,7 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
             <Info icon={<PackageCheck size={16} />} label="跟进记录" value={`${shipment.followUps.length} 条`} />
             <Info icon={<CalendarClock size={16} />} label="下次跟进" value={shipment.nextFollowUpAt ? new Date(shipment.nextFollowUpAt).toLocaleString("zh-CN") : "未安排"} />
           </div>
+          <ShipmentSyncButton shipmentId={shipment.id} />
         </div>
       </header>
 
