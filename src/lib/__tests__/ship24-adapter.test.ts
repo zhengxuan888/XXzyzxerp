@@ -3,8 +3,8 @@ import { DemoTrackingAdapter, normalizeShip24, ship24ConfigFromEnv } from "@/lib
 
 describe("Ship24 tracking adapter", () => {
   it("keeps real provider disabled without explicit config", () => {
-    expect(ship24ConfigFromEnv({ SHIP24_API_KEY: "demo" })).toBeNull();
-    expect(ship24ConfigFromEnv({ SHIP24_API_KEY: "demo", SHIP24_ENABLED: "true" })).toMatchObject({ apiKey: "demo", enabled: true });
+    expect(ship24ConfigFromEnv({ NODE_ENV: "test", SHIP24_API_KEY: "demo" })).toBeNull();
+    expect(ship24ConfigFromEnv({ NODE_ENV: "test", SHIP24_API_KEY: "demo", SHIP24_ENABLED: "true" })).toMatchObject({ apiKey: "demo", enabled: true });
   });
 
   it("normalizes and sorts provider events", () => {
