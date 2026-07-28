@@ -7,6 +7,7 @@ const oneHour = 60 * 60 * 1000;
 
 const membershipFindFirst = vi.fn();
 const membershipFindUnique = vi.fn();
+const membershipFindMany = vi.fn();
 const rolePermissionFindMany = vi.fn();
 const rolePermissionFindUnique = vi.fn();
 const accessGrantFindMany = vi.fn();
@@ -17,6 +18,7 @@ vi.mock("../prisma", () => ({
     membership: {
       findFirst: (...args: unknown[]) => membershipFindFirst(...args),
       findUnique: (...args: unknown[]) => membershipFindUnique(...args),
+      findMany: (...args: unknown[]) => membershipFindMany(...args),
     },
     rolePermission: {
       findMany: (...args: unknown[]) => rolePermissionFindMany(...args),
@@ -121,6 +123,54 @@ describe("permission utils", () => {
       targetDepartmentId: "D2",
     });
     expect(denied.allowed).toBe(false);
+  });
+
+  it("checkPermission allows reporting-line subordinates and rejects peers", async () => {
+    membershipFindFirst.mockResolvedValue({
+      id: "manager",
+      businessUnitId: "BU_A",
+      departmentId: "D1",
+      siteId: null,
+      userId: "manager-user",
+      roleId: "role_manager",
+      isActive: true,
+      endedAt: null,
+      role: { id: "role_manager" },
+    });
+    rolePermissionFindMany.mockResolvedValue([{ scope: "SUBORDINATES" }]);
+    accessGrantFindMany.mockResolvedValue([]);
+    membershipFindMany.mockResolvedValue([
+      { id: "manager", userId: "manager-user", managerMembershipId: null },
+      { id: "direct", userId: "direct-user", managerMembershipId: "manager" },
+      { id: "indirect", userId: "indirect-user", managerMembershipId: "direct" },
+      { id: "peer", userId: "peer-user", managerMembershipId: null },
+    ]);
+
+    const direct = await checkPermission({
+      userId: "manager-user",
+      membershipId: "manager",
+      actionKey: "daily_goal.manage",
+      targetBusinessUnitId: "BU_A",
+      targetUserId: "direct-user",
+    });
+    const indirect = await checkPermission({
+      userId: "manager-user",
+      membershipId: "manager",
+      actionKey: "daily_goal.manage",
+      targetBusinessUnitId: "BU_A",
+      targetUserId: "indirect-user",
+    });
+    const peer = await checkPermission({
+      userId: "manager-user",
+      membershipId: "manager",
+      actionKey: "daily_goal.manage",
+      targetBusinessUnitId: "BU_A",
+      targetUserId: "peer-user",
+    });
+
+    expect(direct.allowed).toBe(true);
+    expect(indirect.allowed).toBe(true);
+    expect(peer.allowed).toBe(false);
   });
 
   it("checkPermission accepts valid ACCESS_GRANT and rejects expired grant", async () => {
