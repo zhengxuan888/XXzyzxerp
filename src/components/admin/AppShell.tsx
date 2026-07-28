@@ -2,6 +2,7 @@
 
 import {
   Bell,
+  ChartNoAxesCombined,
   Building2,
   ChevronRight,
   ChevronDown,
@@ -15,6 +16,7 @@ import {
   Settings2,
   ShieldCheck,
   ShoppingCart,
+  Target,
   Truck,
   MessagesSquare,
   Package,
@@ -65,6 +67,8 @@ const navIcons = {
   UsersRound,
   ShieldCheck,
   Settings2,
+  Target,
+  ChartNoAxesCombined,
 } as const;
 
 function MenuIcon({ name, active }: { name?: string | null; active?: boolean }) {

@@ -47,6 +47,8 @@ const actionDefs: SeedAction[] = [
   { key: "daily_goal.export", name: "导出今日目标", namespace: "workforce", scope: "SUBORDINATES" },
   { key: "team_goal.read", name: "查看团队目标", namespace: "workforce", scope: "BUSINESS_UNIT" },
   { key: "team_goal.manage", name: "设置团队目标", namespace: "workforce", scope: "BUSINESS_UNIT" },
+  { key: "report.view", name: "查看本人统计", namespace: "report", scope: "SELF" },
+  { key: "report.team.view", name: "查看团队统计", namespace: "report", scope: "SUBORDINATES" },
 
   { key: "customer.read", name: "Customer read", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "customer.create", name: "Customer create", namespace: "erp", scope: "BUSINESS_UNIT" },
@@ -299,6 +301,14 @@ const menuDefs = [
     isActive: true,
   },
   {
+    key: "statistics",
+    label: "统计报表",
+    path: "/admin/statistics",
+    requiredActionKey: "report.view",
+    sortOrder: 158,
+    isActive: true,
+  },
+  {
     key: "attendance",
     label: "考勤管理",
     path: "/admin/attendance",
@@ -339,6 +349,7 @@ const menuGroupDefs = [
   { key: "group-product", label: "商品与库存", path: "/admin/products", icon: "Package", sortOrder: 40 },
   { key: "group-finance", label: "财务与审批", path: "/admin/expenses", icon: "WalletCards", sortOrder: 50 },
   { key: "group-workforce", label: "目标与协作", path: "/admin/daily-goals", icon: "Target", sortOrder: 55 },
+  { key: "group-data", label: "数据与报表", path: "/admin/statistics", icon: "ChartNoAxesCombined", sortOrder: 58 },
   { key: "group-hr", label: "人事与行政", path: "/admin/attendance", icon: "UsersRound", sortOrder: 60 },
   { key: "group-organization", label: "组织与权限", path: "/admin/users", icon: "ShieldCheck", sortOrder: 70 },
   { key: "group-system", label: "系统配置", path: "/admin/menus", icon: "Settings2", sortOrder: 80 },
@@ -358,6 +369,7 @@ const menuGroupByKey: Record<string, (typeof menuGroupDefs)[number]["key"]> = {
   expenses: "group-finance",
   approvals: "group-finance",
   "daily-goals": "group-workforce",
+  statistics: "group-data",
   attendance: "group-hr",
   "leave-requests": "group-hr",
   announcements: "group-hr",
@@ -379,6 +391,7 @@ const dashboardShortcutOrder = new Map<string, number>([
   ["shipping-workbench", 30],
   ["shipments", 40],
   ["daily-goals", 50],
+  ["statistics", 55],
   ["expenses", 60],
   ["attendance", 70],
   ["leave-requests", 80],
@@ -563,6 +576,8 @@ async function main() {
     "daily_goal.export",
     "team_goal.read",
     "team_goal.manage",
+    "report.view",
+    "report.team.view",
     "legal_entity.read",
     "legal_entity.create",
     "business_unit.read",
@@ -683,6 +698,8 @@ async function main() {
     });
     demoRoles.set(profile.code, role);
     const allowed = new Set(profile.allowed);
+    allowed.add("report.view");
+    if (profile.code === "demo_hr") allowed.add("report.team.view");
     for (const action of actions) {
       await prisma.rolePermission.upsert({
         where: { roleId_actionKey: { roleId: role.id, actionKey: action.key } },
