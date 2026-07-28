@@ -213,6 +213,7 @@ model Department {
   accessGrants       AccessGrant[]
   customers          Customer[]
   orders             Order[]
+  expenses           Expense[]
   documents          Document[]
   channelConnections ChannelConnection[]
   conversations      Conversation[]
@@ -834,6 +835,7 @@ model Expense {
   orderId        String?
   legalEntityId  String
   businessUnitId String
+  departmentId   String?
   siteId         String?
   actorUserId    String
   category       String
@@ -847,11 +849,13 @@ model Expense {
   order        Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
   legalEntity  LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
   businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department   Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   site         Site?        @relation(fields: [siteId], references: [id], onDelete: SetNull)
   actorUser    User         @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
 
   @@index([orderId, legalEntityId])
   @@index([businessUnitId, category])
+  @@index([businessUnitId, departmentId, category])
 }
 
 model ApprovalRecord {

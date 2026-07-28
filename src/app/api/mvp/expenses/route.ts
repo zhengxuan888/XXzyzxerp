@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
 
   const pagination = parsePagination(request);
   const category = request.nextUrl.searchParams.get("category")?.trim();
-  const where = { businessUnitId: auth.membership.businessUnitId, ...(category ? { category } : {}) };
+  const where = { businessUnitId: auth.membership.businessUnitId, ...(auth.membership.departmentId ? { departmentId: auth.membership.departmentId } : {}), ...(category ? { category } : {}) };
   const [rows, total] = await prisma.$transaction([
     prisma.expense.findMany({
       where,
@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
       orderId,
       legalEntityId: auth.membership.legalEntityId,
       businessUnitId: auth.membership.businessUnitId,
+      departmentId: auth.membership.departmentId,
       siteId: auth.membership.siteId,
       actorUserId: auth.userId,
       category: String(body.category),
