@@ -50,7 +50,7 @@ export function normalizeShip24(payload: unknown, trackingNo: string, carrier?: 
 
 export class DemoTrackingAdapter implements TrackingProviderAdapter {
   readonly key = "DEMO";
-  async track(trackingNo: string, carrier = "DEMO") {
+  async track(trackingNo: string, carrier = "DEMO"): Promise<TrackingProviderResult> {
     return { trackingNo, carrier, events: [{ externalEventKey: `demo-${trackingNo}-picked-up`, status: "PICKED_UP", description: "Demo 已发出", occurredAt: new Date() }] };
   }
 }
