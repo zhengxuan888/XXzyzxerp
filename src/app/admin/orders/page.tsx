@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import CrudPage from "@/components/admin/CrudPage";
+import OrderBatchImport from "@/components/admin/OrderBatchImport";
 import OrderEntryForm from "@/components/admin/OrderEntryForm";
 import { parseOrderTemplateConfiguration } from "@/lib/order-template";
 import { formatMoneyCents } from "@/lib/money";
@@ -117,6 +118,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         }))}
         myOrderStats={myOrderStats}
       />
+      <OrderBatchImport canCreate={canCreate.allowed} />
       <CrudPage
         apiBase="/api/mvp"
         resource="orders"
