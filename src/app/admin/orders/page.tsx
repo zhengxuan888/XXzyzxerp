@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 import CrudPage from "@/components/admin/CrudPage";
 import OrderBatchImport from "@/components/admin/OrderBatchImport";
@@ -15,13 +16,19 @@ import { zh } from "@/lib/i18n";
 
 const ORDER_STATUSES = new Set<OrderStatus>(["DRAFT", "SUBMITTED", "WAITING_SHIPMENT", "SHIPPED", "DELIVERED", "EXCEPTION", "COMPLETED", "CANCELLED"]);
 
-export default async function OrdersPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
+export default async function OrdersPage({ searchParams }: { searchParams: Promise<{ status?: string; employee?: string; product?: string; country?: string; page?: string }> }) {
   const session = await getSessionFromCookie();
   if (!session?.activeMembershipId) redirect("/login");
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
-  const requestedStatus = (await searchParams).status?.toUpperCase() as OrderStatus | undefined;
+  const params = await searchParams;
+  const requestedStatus = params.status?.toUpperCase() as OrderStatus | undefined;
   const status = requestedStatus && ORDER_STATUSES.has(requestedStatus) ? requestedStatus : undefined;
+  const employee = params.employee?.trim() || undefined;
+  const product = params.product?.trim() || undefined;
+  const country = params.country?.trim().toUpperCase() || undefined;
+  const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
+  const pageSize = 20;
 
   const [canRead, canCreate, canDelete] = await Promise.all([
     checkPermission({
@@ -54,23 +61,27 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     select: { id: true, code: true, name: true, skus: { where: { isActive: true }, orderBy: { code: "asc" } } },
   });
 
-  const baseWhere = { businessUnitId: membership.businessUnitId, ...(status ? { status } : {}) };
+  const baseWhere = { businessUnitId: membership.businessUnitId, ...(status ? { status } : {}), ...(employee ? { creatorUserId: employee } : {}), ...(country ? { recipientCountryCode: country } : {}), ...(product ? { items: { some: { productName: { contains: product, mode: "insensitive" as const } } } } : {}) };
   const scopedWhere = withOrderReadScope(baseWhere, orderReadScope, membership, session.userId);
-  const [rows, templates] = await Promise.all([
+  const [rows, totalCount, templates, employees] = await Promise.all([
     prisma.order.findMany({
       where: scopedWhere as Record<string, unknown>,
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
       include: {
         customer: { select: { code: true, name: true } },
         creatorUser: { select: { username: true } },
         items: { select: { id: true, quantity: true, productName: true } },
       },
     }),
+    prisma.order.count({ where: scopedWhere as Record<string, unknown> }),
     prisma.orderTemplate.findMany({
       where: { businessUnitId: membership.businessUnitId, isActive: true },
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
       select: { id: true, code: true, name: true, configuration: true, isDefault: true },
     }),
+    prisma.user.findMany({ where: { memberships: { some: { businessUnitId: membership.businessUnitId, isActive: true } } }, orderBy: { username: "asc" }, select: { id: true, username: true, fullName: true } }),
   ]);
 
   const myOrderStats = rows.reduce((stats, row) => {
@@ -98,6 +109,13 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         myOrderStats={myOrderStats}
       />
       <OrderBatchImport canCreate={canCreate.allowed} />
+      <form method="get" className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4">
+        <input type="hidden" name="status" value={status ?? ""} />
+        <select name="employee" defaultValue={employee ?? ""} className="rounded-xl border border-slate-200 px-3 py-2 text-sm"><option value="">全部录单员工</option>{employees.map((item) => <option key={item.id} value={item.id}>{item.fullName || item.username}</option>)}</select>
+        <input name="product" defaultValue={product ?? ""} placeholder="产品名称" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+        <input name="country" defaultValue={country ?? ""} placeholder="目的地国家代码，如 ES" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+        <button className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white">筛选</button>
+      </form>
       <CrudPage
         apiBase="/api/mvp"
         resource="orders"
@@ -193,6 +211,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           },
         ]}
       />
+      <div className="flex items-center justify-between text-sm text-slate-500"><span>共 {totalCount} 条，第 {page} / {Math.max(1, Math.ceil(totalCount / pageSize))} 页</span><div className="flex gap-2">{page > 1 && <Link className="rounded-lg border px-3 py-1.5" href={`/admin/orders?status=${status ?? ""}&employee=${employee ?? ""}&product=${product ?? ""}&country=${country ?? ""}&page=${page - 1}`}>上一页</Link>}{page < Math.ceil(totalCount / pageSize) && <Link className="rounded-lg border px-3 py-1.5" href={`/admin/orders?status=${status ?? ""}&employee=${employee ?? ""}&product=${product ?? ""}&country=${country ?? ""}&page=${page + 1}`}>下一页</Link>}</div></div>
     </div>
   );
 }
