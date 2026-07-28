@@ -146,6 +146,7 @@ model LegalEntity {
   conversations      Conversation[]
   inboxAuditEvents   InboxAuditEvent[]
   attachments        Attachment[]
+  dailyGoals         DailyGoal[]
 }
 
 model BusinessUnit {
@@ -187,6 +188,7 @@ model BusinessUnit {
   inboxTags                 InboxTag[]
   inboxAuditEvents          InboxAuditEvent[]
   attachments               Attachment[]
+  dailyGoals                DailyGoal[]
 
   @@unique([legalEntityId, code])
   @@index([legalEntityId])
@@ -399,6 +401,8 @@ model Membership {
   conversationAssignmentsMade ConversationAssignment[]   @relation("ConversationAssigner")
   inboxAuditEvents            InboxAuditEvent[]          @relation("InboxAuditMembership")
   uploadedAttachments         Attachment[]               @relation("AttachmentUploaderMembership")
+  dailyGoals                  DailyGoal[]                  @relation("DailyGoalOwner")
+  goalsSetForOthers           DailyGoal[]                  @relation("DailyGoalSetter")
 
   @@index([userId, isActive])
   @@index([businessUnitId, isActive])
@@ -1212,4 +1216,40 @@ model Attachment {
 
   @@index([businessUnitId, departmentId, targetType, targetId, status])
   @@index([sha256])
+}
+
+model DailyGoal {
+  id                String   @id @default(uuid())
+  legalEntityId     String
+  businessUnitId    String
+  membershipId      String
+  goalDate          DateTime @db.Date
+  targetOrderCount  Int      @default(0)
+  targetAmountCents Int      @default(0)
+  currency          String   @default("EUR")
+  note              String?
+  setByMembershipId String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  legalEntity    LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit   BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  membership     Membership   @relation("DailyGoalOwner", fields: [membershipId], references: [id], onDelete: Cascade)
+  setByMembership Membership  @relation("DailyGoalSetter", fields: [setByMembershipId], references: [id], onDelete: Restrict)
+
+  @@unique([businessUnitId, membershipId, goalDate])
+  @@index([businessUnitId, goalDate])
+  @@index([membershipId, goalDate])
+}
+
+model Country {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  name      String
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
 }

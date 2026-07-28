@@ -63,7 +63,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
   const baseWhere = { businessUnitId: membership.businessUnitId, ...(status ? { status } : {}), ...(employee ? { creatorUserId: employee } : {}), ...(country ? { recipientCountryCode: country } : {}), ...(product ? { items: { some: { productName: { contains: product, mode: "insensitive" as const } } } } : {}) };
   const scopedWhere = withOrderReadScope(baseWhere, orderReadScope, membership, session.userId);
-  const [rows, totalCount, templates, employees] = await Promise.all([
+  const [rows, totalCount, templates, employees, countries] = await Promise.all([
     prisma.order.findMany({
       where: scopedWhere as Record<string, unknown>,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -82,6 +82,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       select: { id: true, code: true, name: true, configuration: true, isDefault: true },
     }),
     prisma.user.findMany({ where: { memberships: { some: { businessUnitId: membership.businessUnitId, isActive: true } } }, orderBy: { username: "asc" }, select: { id: true, username: true, fullName: true } }),
+    prisma.country.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { code: true, name: true } }),
   ]);
 
   const myOrderStats = rows.reduce((stats, row) => {
@@ -106,6 +107,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           ...template,
           configuration: parseOrderTemplateConfiguration(template.configuration),
         }))}
+        countries={countries}
         myOrderStats={myOrderStats}
       />
       <OrderBatchImport canCreate={canCreate.allowed} />

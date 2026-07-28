@@ -12,11 +12,13 @@ type TemplateOption = Option & { configuration: OrderTemplateConfiguration; isDe
 export default function OrderEntryForm({
   products,
   templates,
+  countries,
   canCreate,
   myOrderStats,
 }: {
   products: ProductOption[];
   templates: TemplateOption[];
+  countries: { code: string; name: string }[];
   canCreate: boolean;
   myOrderStats: { total: number; draft: number; submitted: number; waiting_shipment: number; shipped: number; delivered: number; exception: number; completed: number; cancelled: number };
 }) {
@@ -260,7 +262,6 @@ export default function OrderEntryForm({
               {selectedProduct?.skus.map((sku) => <option key={sku.id} value={sku.id}>{sku.code}</option>)}
             </select>
           </Field>
-          <Field label="物流渠道"><input name="logisticsChannel" className={input} defaultValue={defaultValues.logisticsChannel} key={`${templateId}-logistics`} placeholder="可选：如 京东快递" /></Field>
           <Field label="数量" required><input name="quantity" type="number" min="1" defaultValue="1" required className={input} /></Field>
           <Field label="商品金额"><input name="unitPrice" type="number" min="0" step="0.01" defaultValue="0.00" required className={input} /></Field>
           <Field label="COD 币种">
@@ -286,7 +287,7 @@ export default function OrderEntryForm({
           </Field>
           <EmailValidationField inputClass={input} required={config?.requireRecipientEmail !== false} />
           <Field label="国家代码" required={config?.requireRecipientCountryCode}>
-            <input name="recipientCountryCode" required={config?.requireRecipientCountryCode} className={input} placeholder="如 CN" />
+            <select name="recipientCountryCode" required={config?.requireRecipientCountryCode} className={input} defaultValue=""><option value="">请选择目的地国家</option>{countries.map((country) => <option key={country.code} value={country.code}>{country.name} ({country.code})</option>)}</select>
           </Field>
           <Field label="邮编" required={config?.requireRecipientPostalCode}>
             <input name="recipientPostalCode" required={config?.requireRecipientPostalCode} className={input} placeholder="邮编" />
