@@ -11,7 +11,7 @@ const QUICK_TAGS = ["已通知客户", "无人接听", "等待客户回复", "�
 
 export default function LogisticsTrackingWorkbench({ rows }: { rows: TrackingRow[] }) {
   const [keyword, setKeyword] = useState("");
-  const [expanded, setExpanded] = useState<Record<string, boolean>>(() => Object.fromEntries(rows.slice(0, 3).map((row) => [row.id, true])));
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const visibleRows = useMemo(() => {
     const term = keyword.trim().toLowerCase();
     if (!term) return rows;
@@ -32,7 +32,7 @@ export default function LogisticsTrackingWorkbench({ rows }: { rows: TrackingRow
         <div><div className="flex items-start gap-2"><Package size={16} className="mt-0.5 shrink-0 text-slate-400" /><div className="text-sm text-slate-700">{row.order.items.map((item) => `${item.productName} × ${item.quantity}`).join("、") || "未记录产品"}</div></div><p className="mt-2 text-xs text-slate-500">COD：<strong className="text-slate-800">{row.order.codAmountLabel}</strong> · 销售：{row.order.creatorUser.fullName || row.order.creatorUser.username}</p></div>
         <button type="button" onClick={() => setExpanded((value) => ({ ...value, [row.id]: !isOpen }))} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">{isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}{isOpen ? "收起轨迹" : `展开轨迹 ${row.events.length}`}</button>
       </div>
-      {isOpen && <div className="border-t border-slate-200 bg-slate-50/60 p-4"><div className="space-y-3">{row.events.map((event) => <EventEditor key={event.id} shipmentId={row.id} event={event} />)}{!row.events.length && <p className="py-8 text-center text-sm text-slate-500">暂无物流轨迹。</p>}</div></div>}
+      {row.events.length > 0 && <div className="border-t border-slate-200 bg-slate-50/60 p-4"><div className="mb-2 text-xs font-medium text-slate-500">{isOpen ? `共 ${row.events.length} 条轨迹，轨迹区域可独立滚动` : "最新物流轨迹"}</div><div className={`${isOpen ? "max-h-[34rem] overflow-y-auto pr-1" : ""} space-y-3`}>{(isOpen ? row.events : row.events.slice(0, 1)).map((event) => <EventEditor key={event.id} shipmentId={row.id} event={event} />)}</div></div>}
     </article>; })}
     {!visibleRows.length && <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center text-sm text-slate-500">没有找到匹配的物流订单。</div>}
   </div>;
