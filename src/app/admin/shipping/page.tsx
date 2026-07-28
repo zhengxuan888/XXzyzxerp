@@ -13,32 +13,13 @@ export default async function ShippingWorkbenchPage() {
   if (!session?.activeMembershipId) redirect("/login");
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
-  const permission = await checkPermission({
-    userId: session.userId,
-    membershipId: membership.id,
-    actionKey: "shipment.create",
-    targetBusinessUnitId: membership.businessUnitId,
-  });
+  const permission = await checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "shipment.create", targetBusinessUnitId: membership.businessUnitId });
   if (!permission.allowed) redirect("/admin");
 
   const [orders, pendingShipments, logisticsTemplates, templateRead, templateManage, templateExport] = await Promise.all([
-    prisma.order.findMany({
-      where: { businessUnitId: membership.businessUnitId, status: "WAITING_SHIPMENT" },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      select: { id: true, orderNo: true },
-    }),
-    prisma.shipment.findMany({
-      where: { businessUnitId: membership.businessUnitId, status: "PENDING" },
-      include: {
-        order: { select: { orderNo: true, creatorUser: { select: { username: true } } } },
-      },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    }),
-    prisma.logisticsProviderTemplate.findMany({
-      where: { businessUnitId: membership.businessUnitId, isActive: true },
-      orderBy: [{ name: "asc" }, { id: "asc" }],
-      select: { id: true, code: true, name: true, carrierName: true },
-    }),
+    prisma.order.findMany({ where: { businessUnitId: membership.businessUnitId, status: "WAITING_SHIPMENT" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true, orderNo: true } }),
+    prisma.shipment.findMany({ where: { businessUnitId: membership.businessUnitId, status: "PENDING" }, include: { order: { select: { orderNo: true, creatorUser: { select: { username: true } } } } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }] }),
+    prisma.logisticsProviderTemplate.findMany({ where: { businessUnitId: membership.businessUnitId, isActive: true }, orderBy: [{ name: "asc" }, { id: "asc" }], select: { id: true, code: true, name: true, carrierName: true } }),
     checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "logistics_template.read", targetBusinessUnitId: membership.businessUnitId }),
     checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "logistics_template.manage", targetBusinessUnitId: membership.businessUnitId }),
     checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "logistics_template.export", targetBusinessUnitId: membership.businessUnitId }),
@@ -48,50 +29,27 @@ export default async function ShippingWorkbenchPage() {
     <div className="space-y-6">
       <header>
         <h1 className="text-2xl font-bold text-slate-950">待发货工作台</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          批量或手动回填物流单号；回填后仍是待发货，上传出货凭证并确认发货后才进入物流追踪。
-        </p>
+        <p className="mt-1 text-sm text-slate-500">先回填真实物流单号，再上传出货凭证并确认发货；只有确认发货后才进入物流追踪。</p>
       </header>
-      {templateRead.allowed && (
-        <LogisticsTemplateManager
-          templates={logisticsTemplates}
-          waitingOrderCount={orders.length}
-          canManage={templateManage.allowed}
-          canExport={templateExport.allowed}
-        />
-      )}
+      {templateRead.allowed && <LogisticsTemplateManager templates={logisticsTemplates} waitingOrderCount={orders.length} canManage={templateManage.allowed} canExport={templateExport.allowed} />}
       <LogisticsReturnImport />
       <CrudPage
         apiBase="/api/mvp"
         resource="shipments"
-        listTitle="已回填物流单号，等待上传凭证并确认发货"
+        listTitle="已回填运单号，等待上传凭证并确认发货"
         detailPath="/admin/orders"
         canCreate
         canDelete={false}
         rows={pendingShipments.map((shipment) => ({ ...shipment, id: shipment.orderId }))}
         createFields={[
-          {
-            key: "orderId",
-            label: "已核单订单",
-            required: true,
-            type: "select",
-            options: orders.map((order) => ({ value: order.id, label: order.orderNo })),
-          },
+          { key: "orderId", label: "已核单订单", required: true, type: "select", options: orders.map((order) => ({ value: order.id, label: order.orderNo })) },
           { key: "carrier", label: "物流商 / 运输方式", required: true },
           { key: "trackingNo", label: "物流单号", required: true },
           { key: "memo", label: "回填备注" },
         ]}
         dataColumns={[
-          {
-            key: "order",
-            label: "订单号",
-            render: (row) => (row.order as { orderNo?: string } | undefined)?.orderNo ?? "-",
-          },
-          {
-            key: "employee",
-            label: "录单员工",
-            render: (row) => (row.order as { creatorUser?: { username?: string } } | undefined)?.creatorUser?.username ?? "-",
-          },
+          { key: "order", label: "订单号", render: (row) => (row.order as { orderNo?: string } | undefined)?.orderNo ?? "-" },
+          { key: "employee", label: "录单员工", render: (row) => (row.order as { creatorUser?: { username?: string } } | undefined)?.creatorUser?.username ?? "-" },
           { key: "trackingNo", label: "物流单号" },
           { key: "carrier", label: "物流商 / 运输方式" },
           { key: "status", label: "发货状态" },

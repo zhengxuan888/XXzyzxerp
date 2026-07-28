@@ -6,11 +6,12 @@ import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState("");
+  const [username, setUsername] = useState(() => typeof window === "undefined" ? "" : window.localStorage.getItem("erp-remember-username") ?? "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [rememberUsername, setRememberUsername] = useState(true);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -29,6 +30,9 @@ export default function LoginPage() {
       return;
     }
 
+    if (rememberUsername) window.localStorage.setItem("erp-remember-username", username.trim());
+    else window.localStorage.removeItem("erp-remember-username");
+
     router.push("/admin");
     router.refresh();
   }
@@ -39,7 +43,7 @@ export default function LoginPage() {
         <div className="absolute -left-32 top-20 size-96 rounded-full bg-violet-600/30 blur-3xl" />
         <div className="absolute -right-24 bottom-10 size-80 rounded-full bg-cyan-400/20 blur-3xl" />
         <div className="relative z-10 flex items-center gap-3">
-          <span className="grid size-11 place-items-center rounded-2xl bg-gradient-to-br from-violet-500 to-cyan-400 text-base font-black">ZC</span>
+          <span className="grid size-11 place-items-center rounded-2xl bg-gradient-to-br from-amber-300 to-amber-700 text-base font-black text-white">ZC</span>
           <div>
             <strong className="block text-base">择优臻选</strong>
             <span className="text-xs text-slate-400">公司运营管理系统</span>
@@ -65,7 +69,7 @@ export default function LoginPage() {
       <section className="flex items-center justify-center px-5 py-12 sm:px-10">
         <div className="w-full max-w-md">
           <div className="mb-9 flex items-center gap-3 lg:hidden">
-            <span className="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-violet-600 to-cyan-500 text-sm font-black text-white">ZC</span>
+            <span className="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-amber-300 to-amber-700 text-sm font-black text-white">ZC</span>
             <div>
               <strong className="block text-sm">择优臻选</strong>
               <span className="text-xs text-slate-500">择优臻选 ERP</span>
@@ -121,6 +125,11 @@ export default function LoginPage() {
                 </div>
               </div>
 
+              <label className="flex items-center gap-2 text-sm text-slate-600">
+                <input type="checkbox" checked={rememberUsername} onChange={(event) => setRememberUsername(event.target.checked)} className="size-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500" />
+                记住账号（不保存密码）
+              </label>
+
               {error && (
                 <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-700">
                   {error}
@@ -129,7 +138,7 @@ export default function LoginPage() {
 
               <button
                 type="submit"
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 text-sm font-semibold text-white shadow-lg shadow-violet-200 transition hover:-translate-y-0.5 hover:shadow-xl disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-700 to-amber-500 text-sm font-semibold text-white shadow-lg shadow-amber-200 transition hover:-translate-y-0.5 hover:shadow-xl disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={loading}
               >
                 {loading ? "正在登录..." : "进入工作台"}

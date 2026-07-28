@@ -620,6 +620,33 @@ async function main() {
     });
   }
 
+  // Local-only role templates for acceptance testing. Names and permissions remain data-driven.
+  const roleProfiles = [
+    { code: "demo_sales", name: "演示销售录单员", username: "demo_sales", email: "demo.sales@local.erp", allowed: ["dashboard.view", "customer.read", "customer.create", "product.read", "order.read", "order.create", "order.update", "order.submit", "attachment.read", "attachment.create", "leave_request.read", "leave_request.create"] },
+    { code: "demo_reviewer", name: "演示核单员", username: "demo_reviewer", email: "demo.reviewer@local.erp", allowed: ["dashboard.view", "customer.read", "product.read", "order.read", "order.review", "order.status.update", "attachment.read", "approval.review"] },
+    { code: "demo_shipping", name: "演示发货员", username: "demo_shipping", email: "demo.shipping@local.erp", allowed: ["dashboard.view", "product.read", "order.read", "shipment.read", "shipment.create", "shipment.track.update", "logistics_template.read", "logistics_template.export", "attachment.read", "attachment.create"] },
+    { code: "demo_after_sales", name: "演示物流售后员", username: "demo_after_sales", email: "demo.after.sales@local.erp", allowed: ["dashboard.view", "customer.read", "order.read", "shipment.read", "shipment.tracking_no.view", "shipment.timeline.view", "shipment.track.update", "inbox.read", "inbox.manage", "inbox.assign", "inbox.customer.link", "attachment.read", "attachment.create"] },
+    { code: "demo_finance", name: "演示财务员", username: "demo_finance", email: "demo.finance@local.erp", allowed: ["dashboard.view", "order.read", "expense.read", "expense.create", "approval.review"] },
+    { code: "demo_hr", name: "演示人事员", username: "demo_hr", email: "demo.hr@local.erp", allowed: ["dashboard.view", "user.read", "membership.read", "department.read", "attendance.read", "attendance.create", "attendance.approve", "leave_request.read", "leave_request.approve", "announcement.read", "announcement.create"] },
+  ];
+  const demoRoles = new Map<string, { id: string }>();
+  for (const profile of roleProfiles) {
+    const role = await prisma.role.upsert({
+      where: { code: profile.code },
+      update: { name: profile.name, isSystem: false },
+      create: { code: profile.code, name: profile.name, description: "本地验收演示角色", isSystem: false },
+    });
+    demoRoles.set(profile.code, role);
+    const allowed = new Set(profile.allowed);
+    for (const action of actions) {
+      await prisma.rolePermission.upsert({
+        where: { roleId_actionKey: { roleId: role.id, actionKey: action.key } },
+        update: { isAllowed: allowed.has(action.key), scope: allowed.has(action.key) ? actionSeedMap.get(action.key)?.scope ?? "BUSINESS_UNIT" : "SELF" },
+        create: { roleId: role.id, actionKey: action.key, scope: allowed.has(action.key) ? actionSeedMap.get(action.key)?.scope ?? "BUSINESS_UNIT" : "SELF", isAllowed: allowed.has(action.key) },
+      });
+    }
+  }
+
   const menuList = await prisma.menu.findMany();
   for (const menu of menuList) {
     await prisma.menuPermission.upsert({
@@ -650,8 +677,22 @@ async function main() {
       },
     });
   }
+  for (const profile of roleProfiles) {
+    const role = demoRoles.get(profile.code);
+    if (!role) continue;
+    const allowed = new Set(profile.allowed);
+    for (const menu of menuList) {
+      const enabled = menu.requiredActionKey ? allowed.has(menu.requiredActionKey) : false;
+      await prisma.menuPermission.upsert({
+        where: { menuId_roleId: { menuId: menu.id, roleId: role.id } },
+        update: { isEnabled: enabled },
+        create: { menuId: menu.id, roleId: role.id, isEnabled: enabled },
+      });
+    }
+  }
 
-  const founderPassword = await bcrypt.hash(process.env.SEED_FOUNDER_PASSWORD || "ChangeMe#2026", 10);
+  const founderPassword = await bcrypt.hash(process.env.SEED_FOUNDER_PASSWORD || "123456", 10);
+  const demoPassword = await bcrypt.hash(process.env.SEED_DEMO_PASSWORD || "123456", 10);
   const founderUser = await prisma.user.upsert({
     where: { username: "founder" },
     update: { fullName: "演示管理员" },
@@ -663,6 +704,7 @@ async function main() {
       isActive: true,
     },
   });
+  await prisma.user.update({ where: { username: "founder" }, data: { passwordHash: founderPassword, isActive: true } });
   const restrictedUser = await prisma.user.upsert({
     where: { username: "测试员工_中文" },
     update: { fullName: "受限演示员工", isActive: true, passwordHash: founderPassword },
@@ -671,6 +713,17 @@ async function main() {
       email: "restricted.employee@local.erp",
       fullName: "受限演示员工",
       passwordHash: founderPassword,
+      isActive: true,
+    },
+  });
+  const managerUser = await prisma.user.upsert({
+    where: { username: "demo_manager" },
+    update: { fullName: "演示业务负责人", isActive: true, passwordHash: demoPassword },
+    create: {
+      username: "demo_manager",
+      email: "demo.manager@local.erp",
+      fullName: "演示业务负责人",
+      passwordHash: demoPassword,
       isActive: true,
     },
   });
@@ -716,6 +769,40 @@ async function main() {
         scope: "SELF",
       },
     });
+  }
+  const existingManagerMembership = await prisma.membership.findFirst({
+    where: { userId: managerUser.id, businessUnitId: businessUnit.id, roleId: roleManager.id, isPrimary: true },
+  });
+  if (!existingManagerMembership) {
+    await prisma.membership.create({
+      data: {
+        userId: managerUser.id,
+        legalEntityId: legalEntity.id,
+        businessUnitId: businessUnit.id,
+        departmentId: rootDepartment.id,
+        siteId: site.id,
+        roleId: roleManager.id,
+        isPrimary: true,
+        isActive: true,
+        scope: "BUSINESS_UNIT",
+        startedAt: new Date(),
+      },
+    });
+  }
+  for (const profile of roleProfiles) {
+    const role = demoRoles.get(profile.code);
+    if (!role) continue;
+    const user = await prisma.user.upsert({
+      where: { username: profile.username },
+      update: { fullName: profile.name, email: profile.email, passwordHash: demoPassword, isActive: true },
+      create: { username: profile.username, email: profile.email, fullName: profile.name, passwordHash: demoPassword, isActive: true },
+    });
+    const membership = await prisma.membership.findFirst({ where: { userId: user.id, businessUnitId: businessUnit.id, roleId: role.id, isPrimary: true } });
+    if (!membership) {
+      await prisma.membership.create({
+        data: { userId: user.id, legalEntityId: legalEntity.id, businessUnitId: businessUnit.id, departmentId: rootDepartment.id, siteId: site.id, roleId: role.id, isPrimary: true, isActive: true, scope: "BUSINESS_UNIT", startedAt: new Date() },
+      });
+    }
   }
 
   const demoCustomer = await prisma.customer.upsert({
@@ -777,6 +864,7 @@ async function main() {
       normalizedAddress: "demo-contact-001",
     },
   });
+  await prisma.contactIdentity.update({ where: { id: demoIdentity.id }, data: { displayName: "演示咨询客户" } });
   await prisma.inboxTag.upsert({
     where: { businessUnitId_name: { businessUnitId: businessUnit.id, name: "高意向" } },
     update: { color: "violet", isActive: true },
@@ -860,6 +948,70 @@ async function main() {
       attributes: { color: "红色", purpose: "本地演示" },
     },
   });
+
+  // A complete fictitious shipment is included so every role can verify the tracking workflow locally.
+  const demoSalesUser = await prisma.user.findUniqueOrThrow({ where: { username: "demo_sales" } });
+  const demoSalesMembership = await prisma.membership.findFirstOrThrow({ where: { userId: demoSalesUser.id, businessUnitId: businessUnit.id, isPrimary: true, isActive: true } });
+  const demoOrder = await prisma.order.upsert({
+    where: { businessUnitId_orderNo: { businessUnitId: businessUnit.id, orderNo: "DEMO-ORDER-001" } },
+    update: { status: "SHIPPED", recipientEmail: "demo.customer@example.com", customerWhatsapp: "+34123456789" },
+    create: {
+      legalEntityId: legalEntity.id,
+      businessUnitId: businessUnit.id,
+      departmentId: rootDepartment.id,
+      siteId: site.id,
+      customerId: demoCustomer.id,
+      orderNo: "DEMO-ORDER-001",
+      creatorUserId: demoSalesUser.id,
+      ownedByMembershipId: demoSalesMembership.id,
+      status: "SHIPPED",
+      currency: "EUR",
+      productValueCents: 2999,
+      codAmountCents: 2999,
+      recipientName: "Demo Customer",
+      recipientPhone: "+34123456789",
+      recipientEmail: "demo.customer@example.com",
+      recipientCountryCode: "ES",
+      recipientCity: "Madrid",
+      recipientAddress: "Demo Street 1",
+      customerWhatsapp: "+34123456789",
+      paymentMethod: "COD",
+      note: "本地虚构验收订单，不是真实客户数据",
+    },
+  });
+  const existingDemoItem = await prisma.orderItem.findFirst({ where: { orderId: demoOrder.id, productId: demoProduct.id } });
+  if (!existingDemoItem) await prisma.orderItem.create({ data: { orderId: demoOrder.id, productId: demoProduct.id, skuId: demoSku.id, productName: demoProduct.name, quantity: 1, unitPriceCents: 2999, subtotalCents: 2999 } });
+  for (const draft of [
+    { orderNo: "DEMO-ORDER-002", status: "SUBMITTED" as const, recipientName: "Demo Review Customer" },
+    { orderNo: "DEMO-ORDER-003", status: "WAITING_SHIPMENT" as const, recipientName: "Demo Shipping Customer" },
+  ]) {
+    const order = await prisma.order.upsert({
+      where: { businessUnitId_orderNo: { businessUnitId: businessUnit.id, orderNo: draft.orderNo } },
+      update: { status: draft.status, recipientName: draft.recipientName },
+      create: { legalEntityId: legalEntity.id, businessUnitId: businessUnit.id, departmentId: rootDepartment.id, siteId: site.id, customerId: demoCustomer.id, orderNo: draft.orderNo, creatorUserId: demoSalesUser.id, ownedByMembershipId: demoSalesMembership.id, status: draft.status, currency: "EUR", productValueCents: 2999, codAmountCents: 2999, recipientName: draft.recipientName, recipientPhone: "+34123456780", recipientEmail: `${draft.orderNo.toLowerCase()}@example.com`, recipientCountryCode: "ES", recipientCity: "Madrid", recipientAddress: "Demo Street 2", customerWhatsapp: "+34123456780", paymentMethod: "COD" },
+    });
+    const item = await prisma.orderItem.findFirst({ where: { orderId: order.id, productId: demoProduct.id } });
+    if (!item) await prisma.orderItem.create({ data: { orderId: order.id, productId: demoProduct.id, skuId: demoSku.id, productName: demoProduct.name, quantity: 1, unitPriceCents: 2999, subtotalCents: 2999 } });
+  }
+  const demoAfterSalesUser = await prisma.user.findUniqueOrThrow({ where: { username: "demo_after_sales" } });
+  const demoAfterSalesMembership = await prisma.membership.findFirstOrThrow({ where: { userId: demoAfterSalesUser.id, businessUnitId: businessUnit.id, isPrimary: true, isActive: true } });
+  const demoShipment = await prisma.shipment.upsert({
+    where: { id: "00000000-0000-4000-8000-000000000201" },
+    update: { status: "IN_TRANSIT", trackingNo: "DEMO-TRACK-001", ownerMembershipId: demoAfterSalesMembership.id, workStatus: "NEEDS_ATTENTION" },
+    create: { id: "00000000-0000-4000-8000-000000000201", orderId: demoOrder.id, legalEntityId: legalEntity.id, businessUnitId: businessUnit.id, siteId: site.id, carrier: "DEMO CARRIER", trackingNo: "DEMO-TRACK-001", status: "IN_TRANSIT", shippedAt: new Date(), ownerMembershipId: demoAfterSalesMembership.id, workStatus: "NEEDS_ATTENTION", lastTrackedAt: new Date() },
+  });
+  const waitingShipmentOrder = await prisma.order.findUniqueOrThrow({ where: { businessUnitId_orderNo: { businessUnitId: businessUnit.id, orderNo: "DEMO-ORDER-003" } } });
+  await prisma.shipment.upsert({
+    where: { id: "00000000-0000-4000-8000-000000000202" },
+    update: { orderId: waitingShipmentOrder.id, status: "PENDING", trackingNo: null, workStatus: "MONITORING" },
+    create: { id: "00000000-0000-4000-8000-000000000202", orderId: waitingShipmentOrder.id, legalEntityId: legalEntity.id, businessUnitId: businessUnit.id, siteId: site.id, carrier: "DEMO CARRIER", status: "PENDING", workStatus: "MONITORING" },
+  });
+  const demoEvent = await prisma.shipmentEvent.upsert({
+    where: { shipmentId_source_externalEventKey: { shipmentId: demoShipment.id, source: "DEMO", externalEventKey: "demo-event-001" } },
+    update: { memo: "包裹正在运输中，请及时联系客户确认收货安排。", location: "Madrid", eventType: "IN_TRANSIT" },
+    create: { shipmentId: demoShipment.id, source: "DEMO", externalEventKey: "demo-event-001", eventType: "IN_TRANSIT", statusMilestone: "IN_TRANSIT", location: "Madrid", memo: "包裹正在运输中，请及时联系客户确认收货安排。", actorMembershipId: demoAfterSalesMembership.id },
+  });
+  await prisma.logisticsEventAnnotation.upsert({ where: { shipmentEventId: demoEvent.id }, update: { note: "演示：已提醒客户保持电话畅通", tags: ["已通知客户", "演示"], isHandled: false }, create: { shipmentId: demoShipment.id, shipmentEventId: demoEvent.id, businessUnitId: businessUnit.id, note: "演示：已提醒客户保持电话畅通", tags: ["已通知客户", "演示"] } });
 
   await prisma.orderTemplate.upsert({
     where: { businessUnitId_code: { businessUnitId: businessUnit.id, code: "DEFAULT_COD" } },

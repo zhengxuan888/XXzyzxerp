@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import type { AttachmentTargetType } from "@/lib/attachments";
-import { FileText, ImageOff, LoaderCircle, Paperclip, RefreshCw, Trash2, Upload } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileText, ImageOff, LoaderCircle, Paperclip, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 type Attachment = {
@@ -34,6 +34,9 @@ export default function AttachmentPanel({
   const [error, setError] = useState("");
   const [failed, setFailed] = useState<Record<string, number>>({});
   const [versions, setVersions] = useState<Record<string, number>>({});
+  const [dragging, setDragging] = useState(false);
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const imageItems = items.filter((item) => item.mimeType.startsWith("image/"));
 
   async function load() {
     setLoading(true);
@@ -136,6 +139,31 @@ export default function AttachmentPanel({
         )}
       </div>
 
+      {canUpload && (
+        <div
+          onDragEnter={(event) => { event.preventDefault(); setDragging(true); }}
+          onDragOver={(event) => event.preventDefault()}
+          onDragLeave={(event) => { event.preventDefault(); setDragging(false); }}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragging(false);
+            void upload(event.dataTransfer.files?.[0] ?? null);
+          }}
+          onPaste={(event) => {
+            const file = Array.from(event.clipboardData.files).find((item) => item.type.startsWith("image/") || item.type === "application/pdf");
+            if (file) {
+              event.preventDefault();
+              void upload(file);
+            }
+          }}
+          tabIndex={0}
+          className={`mt-4 rounded-xl border-2 border-dashed p-4 text-center text-sm transition ${dragging ? "border-amber-500 bg-amber-50 text-amber-800" : "border-slate-200 bg-slate-50 text-slate-500"}`}
+          aria-label="拖拽或粘贴凭证"
+        >
+          {dragging ? "松开鼠标即可上传" : "可从微信直接拖入截图，或复制截图后在此处按 Ctrl+V 粘贴上传"}
+        </div>
+      )}
+
       {error && <p role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
       {loading ? (
         <div className="mt-4 flex items-center gap-2 text-sm text-slate-500"><LoaderCircle size={16} className="animate-spin" /> 加载中...</div>
@@ -150,15 +178,9 @@ export default function AttachmentPanel({
               <article key={item.id} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
                 <div className="relative grid aspect-[4/3] place-items-center overflow-hidden bg-slate-100">
                   {isImage && !failed[item.id] ? (
-                    <Image
-                      unoptimized
-                      fill
-                      sizes="(max-width: 640px) 100vw, 320px"
-                      src={contentUrl}
-                      alt={item.originalName}
-                      className="object-contain"
-                      onError={() => setFailed((current) => ({ ...current, [item.id]: 1 }))}
-                    />
+                    <button type="button" className="absolute inset-0" onClick={() => setPreviewIndex(imageItems.findIndex((image) => image.id === item.id))} aria-label={`预览 ${item.originalName}`}>
+                      <Image unoptimized fill sizes="(max-width: 640px) 100vw, 320px" src={contentUrl} alt={item.originalName} className="object-contain" onError={() => setFailed((current) => ({ ...current, [item.id]: 1 }))} />
+                    </button>
                   ) : isImage ? (
                     <div className="p-4 text-center text-slate-500">
                       <ImageOff className="mx-auto mb-2" />
@@ -201,6 +223,17 @@ export default function AttachmentPanel({
               </article>
             );
           })}
+        </div>
+      )}
+      {previewIndex !== null && imageItems[previewIndex] && (
+        <div className="fixed inset-0 z-[100] grid place-items-center bg-slate-950/80 p-4" role="dialog" aria-modal="true" aria-label="图片预览">
+          <button type="button" onClick={() => setPreviewIndex(null)} className="absolute right-5 top-5 rounded-full bg-white/90 p-2 text-slate-800" aria-label="关闭预览"><X size={20} /></button>
+          <button type="button" disabled={previewIndex <= 0} onClick={() => setPreviewIndex((value) => value === null ? null : Math.max(0, value - 1))} className="absolute left-4 rounded-full bg-white/90 p-3 text-slate-800 disabled:opacity-30" aria-label="上一张"><ChevronLeft size={24} /></button>
+          <div className="relative h-[80vh] w-[80vw] max-w-5xl">
+            <Image unoptimized fill sizes="80vw" src={`/api/mvp/attachments/${imageItems[previewIndex].id}/content?v=${versions[imageItems[previewIndex].id] ?? 0}`} alt={imageItems[previewIndex].originalName} className="object-contain" />
+            <p className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-xs text-white">{imageItems[previewIndex].originalName} · {previewIndex + 1}/{imageItems.length}</p>
+          </div>
+          <button type="button" disabled={previewIndex >= imageItems.length - 1} onClick={() => setPreviewIndex((value) => value === null ? null : Math.min(imageItems.length - 1, value + 1))} className="absolute right-4 rounded-full bg-white/90 p-3 text-slate-800 disabled:opacity-30" aria-label="下一张"><ChevronRight size={24} /></button>
         </div>
       )}
     </section>

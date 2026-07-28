@@ -101,7 +101,7 @@ export default function UnifiedInbox({ canUploadAttachments, canDeleteAttachment
               <Inbox size={16} /> Local unified inbox
             </div>
             <h1 id="inbox-title" className="text-2xl font-black tracking-tight">统一收件箱</h1>
-            <p className="mt-2 max-w-2xl text-sm text-slate-300">集中处理不同渠道的客户咨询；当前仅启用本地 DEMO 适配器，不连接任何真实账号。</p>
+            <p className="mt-2 max-w-2xl text-sm text-slate-300">集中处理不同渠道的客户咨询，统一查看会话、消息、分派和客户关联。</p>
           </div>
           <button
             type="button"
@@ -109,7 +109,7 @@ export default function UnifiedInbox({ canUploadAttachments, canDeleteAttachment
             onClick={() => demo && act({ action: "sync_demo", connectionId: demo.id })}
             className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-white px-4 text-sm font-bold text-slate-950 disabled:opacity-50"
           >
-            <RefreshCw size={17} className={busy ? "animate-spin" : ""} /> 拉取演示消息
+            <RefreshCw size={17} className={busy ? "animate-spin" : ""} /> 同步消息
           </button>
         </div>
       </section>

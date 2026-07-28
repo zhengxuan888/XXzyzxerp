@@ -6,18 +6,15 @@ import type { OrderTemplateConfiguration } from "@/lib/order-template";
 import AttachmentPanel from "@/components/admin/AttachmentPanel";
 
 type Option = { id: string; code: string; name: string };
-type CustomerOption = Option & { orderCount: number; lastOrderedAt: string | null };
 type ProductOption = Option & { skus: { id: string; code: string }[] };
 type TemplateOption = Option & { configuration: OrderTemplateConfiguration; isDefault: boolean };
 
 export default function OrderEntryForm({
-  customers,
   products,
   templates,
   canCreate,
   myOrderStats,
 }: {
-  customers: CustomerOption[];
   products: ProductOption[];
   templates: TemplateOption[];
   canCreate: boolean;
@@ -25,14 +22,13 @@ export default function OrderEntryForm({
 }) {
   const defaultTemplate = templates.find((item) => item.isDefault) ?? templates[0];
   const [templateId, setTemplateId] = useState(defaultTemplate?.id ?? "");
-  const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [selectedProductId, setSelectedProductId] = useState(products[0]?.id ?? "");
   const selectedProduct = products.find((item) => item.id === selectedProductId);
-  const selectedCustomer = customers.find((item) => item.id === selectedCustomerId);
   const [productName, setProductName] = useState(selectedProduct?.name ?? "");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [createdOrder, setCreatedOrder] = useState<{ id: string; orderNo: string } | null>(null);
+  const [celebration, setCelebration] = useState(false);
   const [submittingReview, setSubmittingReview] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState("");
   const [smartAddress, setSmartAddress] = useState("");
@@ -80,7 +76,6 @@ export default function OrderEntryForm({
     );
     const payload = {
       orderTemplateId: templateId || undefined,
-      customerId: String(data.get("customerId") ?? ""),
       customerName: String(data.get("recipientName") ?? ""),
       shopId: String(data.get("shopId") ?? ""),
       productId: selectedProductId,
@@ -121,6 +116,8 @@ export default function OrderEntryForm({
       return;
     }
     setCreatedOrder({ id: result.data.id, orderNo: result.data.orderNo });
+    setCelebration(true);
+    window.setTimeout(() => setCelebration(false), 6000);
     setSaving(false);
   }
 
@@ -177,7 +174,8 @@ export default function OrderEntryForm({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4 rounded-2xl border border-violet-100 bg-[#fffaf7] p-4 shadow-sm">
+    <form onSubmit={submit} className="relative space-y-4 rounded-2xl border border-violet-100 bg-[#fffaf7] p-4 shadow-sm">
+      {celebration && <div className="absolute inset-x-4 top-4 z-20 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-center shadow-lg" role="status"><p className="text-lg font-bold text-amber-900">🎉 恭喜，订单已录入成功！</p><p className="mt-1 text-sm text-amber-800">订单号：{createdOrder?.orderNo} · 今日第 {myOrderStats.total + 1} 单</p><p className="mt-2 text-xs text-amber-700">请继续上传客户沟通凭证，再提交核单。</p></div>}
       <div className="grid gap-3 md:grid-cols-3">
         <Metric icon={<Package size={18} />} label="订单录入" value="新建订单" color="text-blue-600 bg-blue-50" />
         <Metric icon={<WalletCards size={18} />} label="预计收入" value="输入正确即可提交" color="text-emerald-600 bg-emerald-50" />
@@ -220,21 +218,6 @@ export default function OrderEntryForm({
         <Section title="订单信息">
           <Field label="订单号">
             <input name="orderNo" readOnly value="保存后自动生成" className={`${input} bg-slate-50 text-slate-500`} aria-label="订单号（保存后自动生成）" />
-          </Field>
-          <Field label="历史客户匹配（可选）">
-            <select name="customerId" className={input} value={selectedCustomerId} onChange={(event) => setSelectedCustomerId(event.target.value)}>
-              <option value="">新客/不选择历史档案</option>
-              {customers.map((item) => <option key={item.id} value={item.id}>{item.code} / {item.name}</option>)}
-            </select>
-            {selectedCustomer && (
-              <p className={`mt-2 rounded-lg px-3 py-2 text-xs ${
-                selectedCustomer.orderCount > 0 ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-700"
-              }`}>
-                {selectedCustomer.orderCount > 0
-                  ? `历史客户：当前可见范围内已下单 ${selectedCustomer.orderCount} 次，最近下单 ${selectedCustomer.lastOrderedAt ? new Date(selectedCustomer.lastOrderedAt).toLocaleString("zh-CN") : "-"}。`
-                  : "当前可见范围内没有历史订单，可按新客户继续录入。"}
-              </p>
-            )}
           </Field>
           <Field label="店铺 ID" required><input name="shopId" required className={input} placeholder="旧 ERP 的店铺标识" /></Field>
           <Field label="产品搜索">

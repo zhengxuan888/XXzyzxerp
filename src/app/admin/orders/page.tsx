@@ -48,11 +48,6 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const orderReadScope = await resolveOrderReadScope(membership, session.userId);
   if (orderReadScope === "NONE") redirect("/admin");
 
-  const customers = await prisma.customer.findMany({
-    where: { isActive: true, businessUnitId: membership.businessUnitId },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, code: true, name: true },
-  });
   const products = await prisma.product.findMany({
     where: { isActive: true, businessUnitId: membership.businessUnitId },
     orderBy: { createdAt: "desc" },
@@ -61,14 +56,6 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
   const baseWhere = { businessUnitId: membership.businessUnitId, ...(status ? { status } : {}) };
   const scopedWhere = withOrderReadScope(baseWhere, orderReadScope, membership, session.userId);
-  const customerHistory = await prisma.order.groupBy({
-    by: ["customerId"],
-    where: scopedWhere as Record<string, unknown>,
-    _count: { _all: true },
-    _max: { orderedAt: true },
-  });
-  const historyByCustomer = new Map(customerHistory.map((item) => [item.customerId, item]));
-
   const [rows, templates] = await Promise.all([
     prisma.order.findMany({
       where: scopedWhere as Record<string, unknown>,
@@ -103,14 +90,6 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       </div>
       <OrderEntryForm
         canCreate={canCreate.allowed}
-        customers={customers.map((customer) => {
-          const history = historyByCustomer.get(customer.id);
-          return {
-            ...customer,
-            orderCount: history?._count._all ?? 0,
-            lastOrderedAt: history?._max.orderedAt?.toISOString() ?? null,
-          };
-        })}
         products={products}
         templates={templates.map((template) => ({
           ...template,
@@ -135,7 +114,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             label: "客户",
             required: true,
             type: "select",
-            options: customers.map((customer) => ({ value: customer.id, label: `${customer.code} ${customer.name}` })),
+            options: [],
           },
           { key: "currency", label: "Currency", required: false },
           {

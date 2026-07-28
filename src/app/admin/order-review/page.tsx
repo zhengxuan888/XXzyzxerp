@@ -26,11 +26,11 @@ export default async function OrderReviewWorkbenchPage() {
   });
   return (
     <div className="space-y-6">
-      <header><h1 className="text-2xl font-bold text-slate-950">核单工作台</h1><p className="mt-1 text-sm text-slate-500">仅显示员工已经提交、等待核对的订单。</p></header>
+      <header><h1 className="text-2xl font-bold text-slate-950">核单工作台</h1><p className="mt-1 text-sm text-slate-500">仅显示员工已提交、等待核对的订单。</p></header>
       <CrudPage
         apiBase="/api/mvp"
         resource="orders"
-        listTitle="待核单"
+        listTitle="待核单订单"
         detailPath="/admin/orders"
         showCreate={false}
         canCreate={false}

@@ -1,12 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f6f8fc;
+  --background: #ffffff;
   --foreground: #0f172a;
   --surface: #ffffff;
-  --surface-muted: #f6f8fc;
-  --brand: #6d4aff;
-  --brand-strong: #5b35ee;
+  --surface-muted: #faf9f6;
+  --brand: #b8892d;
+  --brand-strong: #936817;
+  --brand-soft: #fbf5e8;
+  --brand-border: #ead8ad;
   --success: #059669;
   --warning: #d97706;
   --danger: #e11d48;
@@ -32,14 +34,32 @@ body {
 }
 
 ::selection {
-  background: #ddd6fe;
-  color: #2e1065;
+  background: #ead8ad;
+  color: #4b3510;
 }
 
 :focus-visible {
-  outline: 2px solid #7c3aed;
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
+
+/* ZC brand bridge: existing utility classes keep their semantics while the
+   shared visual language moves from violet to white + warm gold. */
+.bg-violet-50 { background-color: var(--brand-soft) !important; }
+.bg-violet-100 { background-color: #f5e8c9 !important; }
+.bg-violet-500, .bg-violet-600 { background-color: var(--brand) !important; }
+.bg-violet-700 { background-color: var(--brand-strong) !important; }
+.text-violet-600, .text-violet-700, .text-violet-800 { color: var(--brand-strong) !important; }
+.border-violet-100, .border-violet-200, .border-violet-300 { border-color: var(--brand-border) !important; }
+.ring-violet-100 { --tw-ring-color: #f5e8c9 !important; }
+.focus\:border-violet-400:focus, .focus-within\:border-violet-400:focus-within { border-color: var(--brand) !important; }
+.hover\:bg-violet-50:hover, .focus\:bg-violet-50:focus { background-color: var(--brand-soft) !important; }
+.hover\:bg-violet-700:hover { background-color: var(--brand-strong) !important; }
+.hover\:text-violet-700:hover, .hover\:text-violet-800:hover { color: var(--brand-strong) !important; }
+.from-violet-600 { --tw-gradient-from: var(--brand) var(--tw-gradient-from-position) !important; }
+.from-violet-500 { --tw-gradient-from: #c49a43 var(--tw-gradient-from-position) !important; }
+.to-violet-500 { --tw-gradient-to: var(--brand-strong) var(--tw-gradient-to-position) !important; }
+.to-violet-600 { --tw-gradient-to: var(--brand-strong) var(--tw-gradient-to-position) !important; }
 
 button,
 a,
