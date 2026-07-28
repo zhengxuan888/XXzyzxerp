@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { getActiveMembershipById } from "@/lib/auth";
 import { getAllowedActionsForSession } from "@/lib/permission";
+import { getMembershipAwareMenus } from "@/lib/permission-guard";
 import { HIGH_PRIORITY_SHIPMENT_EVENTS } from "@/lib/logistics";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookie } from "@/lib/session";
@@ -25,6 +26,7 @@ export default async function AdminHomePage() {
   const allowedActions = new Set(
     await getAllowedActionsForSession({ userId: session.userId, membershipId: membership.id }),
   );
+  const menuMap = await getMembershipAwareMenus({ userId: session.userId, membershipId: membership.id });
   const unitWhere = { businessUnitId: membership.businessUnitId };
 
   const [myDrafts, pendingReview, pendingShipment, inTransit, needsAttention, highPriorityTodo, highPriorityOverdue] = await Promise.all([
@@ -117,17 +119,16 @@ export default async function AdminHomePage() {
   ];
   const visibleWorkbench = workbench.filter((item) => allowedActions.has(item.actionKey));
 
-  const secondary = [
-    { actionKey: "customer.read", label: "客户管理", href: "/admin/customers" },
-    { actionKey: "product.read", label: "商品/SKU", href: "/admin/products" },
-    { actionKey: "inventory.read", label: "库存查询", href: "/admin/inventory" },
-    { actionKey: "expense.read", label: "费用记录", href: "/admin/expenses" },
-    { actionKey: "approval.submit", label: "审批中心", href: "/admin/approvals" },
-    { actionKey: "attendance.read", label: "考勤", href: "/admin/attendance" },
-    { actionKey: "leave_request.read", label: "请假", href: "/admin/leave-requests" },
-    { actionKey: "membership.read", label: "组织与员工", href: "/admin/memberships" },
-    { actionKey: "role.read", label: "角色权限", href: "/admin/roles" },
-  ].filter((item) => allowedActions.has(item.actionKey));
+  const secondary = [...menuMap.values()]
+    .flat()
+    .map((item) => {
+      const condition = item.requiredCondition && typeof item.requiredCondition === "object"
+        ? item.requiredCondition as { dashboardShortcut?: boolean; shortcutOrder?: number }
+        : null;
+      return { label: item.label, href: item.path, enabled: condition?.dashboardShortcut === true, order: condition?.shortcutOrder ?? 999 };
+    })
+    .filter((item) => item.enabled && item.href !== "/admin")
+    .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
 
   return (
     <div className="space-y-6">

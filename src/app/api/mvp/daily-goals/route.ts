@@ -33,11 +33,13 @@ export async function GET(request: NextRequest) {
   const search = (searchParams.get("search") ?? "").trim().toLowerCase();
   const departmentId = searchParams.get("departmentId");
 
-  let visible = await getVisibleGoalMemberships({
+  const allVisible = await getVisibleGoalMemberships({
     id: auth.membership.id,
     userId: auth.userId,
     businessUnitId: auth.membership.businessUnitId,
   });
+  const selfMembership = allVisible.find((row) => row.id === auth.membership.id) ?? null;
+  let visible = allVisible;
   if (departmentId) visible = visible.filter((row) => row.departmentId === departmentId);
   if (search) {
     visible = visible.filter((row) =>
@@ -92,9 +94,55 @@ export async function GET(request: NextRequest) {
   const actualCountByMembership = new Map(orders.map((row) => [row.ownedByMembershipId, 0]));
   for (const row of orders) actualCountByMembership.set(row.ownedByMembershipId, (actualCountByMembership.get(row.ownedByMembershipId) ?? 0) + row._count._all);
   const completed = allGoals.filter((goal) => (actualCountByMembership.get(goal.membershipId) ?? 0) >= goal.targetOrderCount).length;
+  const selfGoal = selfMembership
+    ? await prisma.dailyGoal.findUnique({
+        where: {
+          businessUnitId_membershipId_goalDate: {
+            businessUnitId: auth.membership.businessUnitId,
+            membershipId: selfMembership.id,
+            goalDate: date,
+          },
+        },
+      })
+    : null;
+  const selfOrders = selfMembership
+    ? await prisma.order.aggregate({
+        where: {
+          businessUnitId: auth.membership.businessUnitId,
+          ownedByMembershipId: selfMembership.id,
+          orderedAt: { gte: date, lt: nextDate },
+          status: { notIn: ["DRAFT", "CANCELLED"] },
+        },
+        _count: { _all: true },
+        _sum: { codAmountCents: true },
+      })
+    : null;
 
   return NextResponse.json({
     date: dateText,
+    self: selfMembership
+      ? {
+          membershipId: selfMembership.id,
+          employeeName: selfMembership.user.fullName,
+          username: selfMembership.user.username,
+          departmentId: selfMembership.departmentId,
+          departmentName: selfMembership.department?.name ?? "未分配部门",
+          isSelf: true,
+          goal: selfGoal
+            ? {
+                targetOrderCount: selfGoal.targetOrderCount,
+                targetAmountCents: selfGoal.targetAmountCents,
+                currency: selfGoal.currency,
+                note: selfGoal.note,
+              }
+            : null,
+          actual: {
+            count: selfOrders?._count._all ?? 0,
+            amountCents: selfOrders?._sum.codAmountCents ?? 0,
+            currency: selfGoal?.currency ?? "EUR",
+          },
+        }
+      : null,
     rows: pageRows.map((membership) => {
       const goal = goalMap.get(membership.id);
       const actual = actualMap.get(membership.id) ?? { count: 0, amountCents: 0, currency: goal?.currency ?? "EUR" };

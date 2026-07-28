@@ -9,6 +9,7 @@ type PermissionSource = {
   icon: string | null;
   parentId: string | null;
   sortOrder: number;
+  requiredCondition: unknown;
 };
 
 export type PermissionOptions = {
@@ -81,6 +82,7 @@ export async function getMembershipAwareMenus(opts: {
         parentId: item.parentId,
         sortOrder: item.sortOrder,
         requiredActionKey: item.requiredActionKey,
+        requiredCondition: item.requiredCondition,
       }),
     )
     .filter(
@@ -96,6 +98,7 @@ export async function getMembershipAwareMenus(opts: {
       icon: item.icon,
       parentId: item.parentId,
       sortOrder: item.sortOrder,
+      requiredCondition: item.requiredCondition,
     }));
 
   const visibleIds = new Set(initiallyVisible.map((item) => item.id));
@@ -117,6 +120,7 @@ export async function getMembershipAwareMenus(opts: {
       icon: item.icon,
       parentId: item.parentId,
       sortOrder: item.sortOrder,
+      requiredCondition: item.requiredCondition,
     }));
 
   const byParent = new Map<string | null, PermissionSource[]>();

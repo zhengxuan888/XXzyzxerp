@@ -147,6 +147,7 @@ model LegalEntity {
   inboxAuditEvents   InboxAuditEvent[]
   attachments        Attachment[]
   dailyGoals         DailyGoal[]
+  teamGoals          TeamGoal[]
 }
 
 model BusinessUnit {
@@ -189,6 +190,7 @@ model BusinessUnit {
   inboxAuditEvents          InboxAuditEvent[]
   attachments               Attachment[]
   dailyGoals                DailyGoal[]
+  teamGoals                 TeamGoal[]
 
   @@unique([legalEntityId, code])
   @@index([legalEntityId])
@@ -220,6 +222,7 @@ model Department {
   channelConnections ChannelConnection[]
   conversations      Conversation[]
   attachments        Attachment[]
+  teamGoals          TeamGoal[]
 
   @@unique([businessUnitId, code, parentId])
   @@index([businessUnitId, parentId])
@@ -401,8 +404,9 @@ model Membership {
   conversationAssignmentsMade ConversationAssignment[]   @relation("ConversationAssigner")
   inboxAuditEvents            InboxAuditEvent[]          @relation("InboxAuditMembership")
   uploadedAttachments         Attachment[]               @relation("AttachmentUploaderMembership")
-  dailyGoals                  DailyGoal[]                  @relation("DailyGoalOwner")
-  goalsSetForOthers           DailyGoal[]                  @relation("DailyGoalSetter")
+  dailyGoals                  DailyGoal[]                @relation("DailyGoalOwner")
+  goalsSetForOthers           DailyGoal[]                @relation("DailyGoalSetter")
+  teamGoalsSet                TeamGoal[]                 @relation("TeamGoalSetter")
 
   @@index([userId, isActive])
   @@index([businessUnitId, isActive])
@@ -1232,14 +1236,40 @@ model DailyGoal {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  legalEntity    LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  businessUnit   BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  membership     Membership   @relation("DailyGoalOwner", fields: [membershipId], references: [id], onDelete: Cascade)
-  setByMembership Membership  @relation("DailyGoalSetter", fields: [setByMembershipId], references: [id], onDelete: Restrict)
+  legalEntity     LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit    BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  membership      Membership   @relation("DailyGoalOwner", fields: [membershipId], references: [id], onDelete: Cascade)
+  setByMembership Membership   @relation("DailyGoalSetter", fields: [setByMembershipId], references: [id], onDelete: Restrict)
 
   @@unique([businessUnitId, membershipId, goalDate])
   @@index([businessUnitId, goalDate])
   @@index([membershipId, goalDate])
+}
+
+model TeamGoal {
+  id                String   @id @default(uuid())
+  legalEntityId     String
+  businessUnitId    String
+  departmentId      String?
+  scopeType         String
+  scopeKey          String
+  goalDate          DateTime @db.Date
+  targetOrderCount  Int      @default(0)
+  targetAmountCents Int      @default(0)
+  currency          String   @default("EUR")
+  note              String?
+  setByMembershipId String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  legalEntity     LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit    BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department      Department?  @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  setByMembership Membership   @relation("TeamGoalSetter", fields: [setByMembershipId], references: [id], onDelete: Restrict)
+
+  @@unique([businessUnitId, scopeKey, goalDate])
+  @@index([businessUnitId, goalDate])
+  @@index([departmentId, goalDate])
 }
 
 model Country {

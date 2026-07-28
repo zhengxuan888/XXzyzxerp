@@ -45,6 +45,8 @@ const actionDefs: SeedAction[] = [
   { key: "daily_goal.create", name: "设置本人今日目标", namespace: "workforce", scope: "SELF" },
   { key: "daily_goal.manage", name: "管理下属今日目标", namespace: "workforce", scope: "SUBORDINATES" },
   { key: "daily_goal.export", name: "导出今日目标", namespace: "workforce", scope: "SUBORDINATES" },
+  { key: "team_goal.read", name: "查看团队目标", namespace: "workforce", scope: "BUSINESS_UNIT" },
+  { key: "team_goal.manage", name: "设置团队目标", namespace: "workforce", scope: "BUSINESS_UNIT" },
 
   { key: "customer.read", name: "Customer read", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "customer.create", name: "Customer create", namespace: "erp", scope: "BUSINESS_UNIT" },
@@ -371,6 +373,18 @@ const menuGroupByKey: Record<string, (typeof menuGroupDefs)[number]["key"]> = {
   menus: "group-system",
 };
 
+const dashboardShortcutOrder = new Map<string, number>([
+  ["orders", 10],
+  ["order-review", 20],
+  ["shipping-workbench", 30],
+  ["shipments", 40],
+  ["daily-goals", 50],
+  ["expenses", 60],
+  ["attendance", 70],
+  ["leave-requests", 80],
+  ["memberships", 90],
+]);
+
 async function main() {
   const countrySeed = [
     ["AT", "奥地利"], ["BE", "比利时"], ["BG", "保加利亚"], ["CH", "瑞士"], ["CZ", "捷克"], ["DE", "德国"], ["DK", "丹麦"], ["ES", "西班牙"], ["FI", "芬兰"], ["FR", "法国"], ["GB", "英国"], ["GR", "希腊"], ["HR", "克罗地亚"], ["HU", "匈牙利"], ["IE", "爱尔兰"], ["IT", "意大利"], ["LT", "立陶宛"], ["LU", "卢森堡"], ["LV", "拉脱维亚"], ["NL", "荷兰"], ["NO", "挪威"], ["PL", "波兰"], ["PT", "葡萄牙"], ["RO", "罗马尼亚"], ["SE", "瑞典"], ["SI", "斯洛文尼亚"], ["SK", "斯洛伐克"], ["US", "美国"], ["CA", "加拿大"], ["SG", "新加坡"], ["MY", "马来西亚"], ["AU", "澳大利亚"], ["NZ", "新西兰"],
@@ -467,6 +481,9 @@ async function main() {
         sortOrder: menu.sortOrder,
         isActive: menu.isActive,
         parentId,
+        requiredCondition: dashboardShortcutOrder.has(menu.key)
+          ? { dashboardShortcut: true, shortcutOrder: dashboardShortcutOrder.get(menu.key) }
+          : undefined,
       },
       create: {
         key: menu.key,
@@ -476,6 +493,9 @@ async function main() {
         sortOrder: menu.sortOrder,
         isActive: menu.isActive,
         parentId,
+        requiredCondition: dashboardShortcutOrder.has(menu.key)
+          ? { dashboardShortcut: true, shortcutOrder: dashboardShortcutOrder.get(menu.key) }
+          : undefined,
       },
     });
   }
@@ -541,6 +561,8 @@ async function main() {
     "daily_goal.create",
     "daily_goal.manage",
     "daily_goal.export",
+    "team_goal.read",
+    "team_goal.manage",
     "legal_entity.read",
     "legal_entity.create",
     "business_unit.read",
@@ -645,12 +667,12 @@ async function main() {
 
   // Local-only role templates for acceptance testing. Names and permissions remain data-driven.
   const roleProfiles = [
-    { code: "demo_sales", name: "演示销售录单员", username: "demo_sales", email: "demo.sales@local.erp", allowed: ["dashboard.view", "daily_goal.read", "daily_goal.create", "customer.read", "customer.create", "product.read", "order.read", "order.create", "order.update", "order.submit", "attachment.read", "attachment.create", "leave_request.read", "leave_request.create"] },
+    { code: "demo_sales", name: "演示销售录单员", username: "demo_sales", email: "demo.sales@local.erp", allowed: ["dashboard.view", "daily_goal.read", "daily_goal.create", "team_goal.read", "customer.read", "customer.create", "product.read", "order.read", "order.create", "order.update", "order.submit", "attachment.read", "attachment.create", "leave_request.read", "leave_request.create"] },
     { code: "demo_reviewer", name: "演示核单员", username: "demo_reviewer", email: "demo.reviewer@local.erp", allowed: ["dashboard.view", "customer.read", "product.read", "order.read", "order.review", "order.review.proof.upload", "order.status.update", "attachment.read", "attachment.create", "approval.review"] },
     { code: "demo_shipping", name: "演示发货员", username: "demo_shipping", email: "demo.shipping@local.erp", allowed: ["dashboard.view", "product.read", "order.read", "shipment.read", "shipment.create", "shipment.track.update", "logistics_template.read", "logistics_template.export", "attachment.read", "attachment.create"] },
     { code: "demo_after_sales", name: "演示物流售后员", username: "demo_after_sales", email: "demo.after.sales@local.erp", allowed: ["dashboard.view", "customer.read", "order.read", "shipment.read", "shipment.tracking_no.view", "shipment.timeline.view", "shipment.track.update", "inbox.read", "inbox.manage", "inbox.assign", "inbox.customer.link", "attachment.read", "attachment.create"] },
     { code: "demo_finance", name: "演示财务员", username: "demo_finance", email: "demo.finance@local.erp", allowed: ["dashboard.view", "order.read", "expense.read", "expense.create", "approval.review"] },
-    { code: "demo_hr", name: "演示人事员", username: "demo_hr", email: "demo.hr@local.erp", allowed: ["dashboard.view", "daily_goal.read", "daily_goal.manage", "user.read", "membership.read", "department.read", "attendance.read", "attendance.create", "attendance.approve", "leave_request.read", "leave_request.approve", "announcement.read", "announcement.create"] },
+    { code: "demo_hr", name: "演示人事员", username: "demo_hr", email: "demo.hr@local.erp", allowed: ["dashboard.view", "daily_goal.read", "daily_goal.manage", "team_goal.read", "user.read", "membership.read", "department.read", "attendance.read", "attendance.create", "attendance.approve", "leave_request.read", "leave_request.approve", "announcement.read", "announcement.create"] },
   ];
   const demoRoles = new Map<string, { id: string }>();
   for (const profile of roleProfiles) {
