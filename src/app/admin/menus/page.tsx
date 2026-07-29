@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import CrudPage from "@/components/admin/CrudPage";
+import MenuManager from "@/components/admin/MenuManager";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
@@ -12,7 +12,7 @@ export default async function MenusPage() {
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
 
-  const [canRead, canCreate, canDelete] = await Promise.all([
+  const [canRead, canCreate, canUpdate] = await Promise.all([
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
@@ -28,40 +28,24 @@ export default async function MenusPage() {
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
-      actionKey: "menu.delete",
+      actionKey: "menu.update",
       targetBusinessUnitId: membership.businessUnitId,
     }),
   ]);
 
   if (!canRead.allowed) redirect("/admin");
 
-  const rows = await prisma.menu.findMany({ orderBy: { sortOrder: "asc" } });
+  const [rows, actions] = await Promise.all([
+    prisma.menu.findMany({ orderBy: [{ sortOrder: "asc" }, { key: "asc" }], include: { parent: true } }),
+    prisma.action.findMany({ orderBy: [{ namespace: "asc" }, { key: "asc" }] }),
+  ]);
 
   return (
-    <CrudPage
-      resource="menus"
-      listTitle="Menus"
+    <MenuManager
       canCreate={canCreate.allowed}
-      canDelete={canDelete.allowed}
-      rows={rows}
-      createFields={[
-        { key: "key", label: "Menu key", required: true },
-        { key: "label", label: "Label", required: true },
-        { key: "path", label: "Path", required: true },
-        {
-          key: "requiredActionKey",
-          label: "Required Action",
-          type: "text",
-          required: true,
-        },
-      ]}
-      dataColumns={[
-        { key: "key", label: "Key" },
-        { key: "label", label: "Label" },
-        { key: "path", label: "Path" },
-        { key: "requiredActionKey", label: "Action" },
-        { key: "sortOrder", label: "Order" },
-      ]}
+      canUpdate={canUpdate.allowed}
+      menus={rows.map((row) => ({ id: row.id, key: row.key, label: row.label, path: row.path, icon: row.icon, parentId: row.parentId, parentLabel: row.parent?.label ?? null, sortOrder: row.sortOrder, isActive: row.isActive, requiredActionKey: row.requiredActionKey }))}
+      actionOptions={actions.map((action) => ({ value: action.key, label: `${action.key} · ${action.name}` }))}
     />
   );
 }

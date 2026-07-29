@@ -483,15 +483,26 @@ export async function POST(request: NextRequest, props: RouteParams) {
     if (typeof body.key !== "string" || typeof body.label !== "string" || typeof body.path !== "string") {
       return invalidBody("key,label,path are required.");
     }
+    const parentId = typeof body.parentId === "string" && body.parentId ? body.parentId : null;
+    const requiredActionKey = typeof body.requiredActionKey === "string" && body.requiredActionKey ? body.requiredActionKey : null;
+    const [duplicate, parent, requiredAction] = await Promise.all([
+      prisma.menu.findUnique({ where: { key: body.key.trim() }, select: { id: true } }),
+      parentId ? prisma.menu.findUnique({ where: { id: parentId }, select: { id: true } }) : null,
+      requiredActionKey ? prisma.action.findUnique({ where: { key: requiredActionKey }, select: { key: true } }) : null,
+    ]);
+    if (duplicate) return invalidBody("menu key already exists.");
+    if (parentId && !parent) return invalidBody("parent menu does not exist.");
+    if (requiredActionKey && !requiredAction) return invalidBody("required action does not exist.");
     const row = await prisma.menu.create({
       data: {
-        key: body.key,
-        label: body.label,
-        path: body.path,
-        parentId: typeof body.parentId === "string" && body.parentId ? body.parentId : null,
+        key: body.key.trim(),
+        label: body.label.trim(),
+        path: body.path.trim(),
+        parentId,
         sortOrder: Number.isFinite(Number(body.sortOrder)) ? Number(body.sortOrder) : 0,
         icon: typeof body.icon === "string" ? body.icon : null,
-        requiredActionKey: typeof body.requiredActionKey === "string" ? body.requiredActionKey : null,
+        requiredActionKey,
+        isActive: body.isActive !== false,
       },
     });
     await writeAuditLog({
