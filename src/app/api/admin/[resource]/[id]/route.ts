@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
 import { ADMIN_RESOURCE_MAP, type AdminResource } from "@/lib/admin-rules";
 import { requireAuthContext } from "@/lib/api-auth";
 import { assertGrantRule, normalizeScope, checkPermission, type PermissionScope } from "@/lib/permission";
@@ -26,6 +27,19 @@ async function createsMenuCycle(menuId: string, parentId: string | null) {
     const parent = await prisma.menu.findUnique({ where: { id: cursor }, select: { parentId: true } });
     if (!parent) return false;
     cursor = parent.parentId;
+  }
+  return false;
+}
+
+async function createsReportingCycle(membershipId: string, managerMembershipId: string | null) {
+  let cursor = managerMembershipId;
+  const visited = new Set<string>();
+  while (cursor) {
+    if (cursor === membershipId || visited.has(cursor)) return true;
+    visited.add(cursor);
+    const row = await prisma.membership.findUnique({ where: { id: cursor }, select: { managerMembershipId: true } });
+    if (!row) return false;
+    cursor = row.managerMembershipId;
   }
   return false;
 }
@@ -89,6 +103,102 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ res
     if (await prisma.site.findFirst({ where: { businessUnitId, code, id: { not: current.id } }, select: { id: true } })) return invalidBody("站点编码已存在。");
     const row = await prisma.site.update({ where: { id: current.id }, data: { code, name, departmentId, isActive: updateBody.isActive === true } });
     await writeAuditLog({ actorUserId: auth.userId, actorMembershipId: auth.membership.id, module: "admin.sites", action: "site.update", targetType: "site", targetId: row.id, businessUnitId: row.businessUnitId, roleId: auth.membership.roleId, details: { previous: current, next: row } });
+    return NextResponse.json(row);
+  }
+
+  if (params.resource === "users") {
+    const userBody = await request.json().catch(() => null) as Record<string, unknown> | null;
+    if (!userBody || typeof userBody.username !== "string" || typeof userBody.email !== "string" || typeof userBody.fullName !== "string") return invalidBody("账户名、邮箱和员工姓名为必填项。");
+    const current = await prisma.user.findUnique({
+      where: { id: params.id },
+      include: { memberships: { where: { isActive: true }, select: { businessUnitId: true, departmentId: true, siteId: true } } },
+    });
+    if (!current) return buildResponseNotFound();
+    const decisions = await Promise.all([...current.memberships.map((membership) => checkPermission({
+      userId: auth.userId,
+      membershipId: auth.membership.id,
+      actionKey: "user.update",
+      targetBusinessUnitId: membership.businessUnitId,
+      targetDepartmentId: membership.departmentId,
+      targetSiteId: membership.siteId,
+      targetUserId: current.id,
+    })), checkPermission({
+      userId: auth.userId,
+      membershipId: auth.membership.id,
+      actionKey: "user.update",
+      targetBusinessUnitId: auth.membership.businessUnitId,
+      targetDepartmentId: auth.membership.departmentId,
+      targetUserId: current.id,
+    })]);
+    if (!decisions.some((decision) => decision.allowed)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+    const hasOtherUnit = current.memberships.some((membership) => membership.businessUnitId !== auth.membership.businessUnitId);
+    if (hasOtherUnit && !decisions.some((decision) => decision.allowed && decision.reasons.includes("SCOPE_ALL"))) {
+      return NextResponse.json({ error: "CROSS_UNIT_IDENTITY_REQUIRES_GLOBAL_PERMISSION" }, { status: 403 });
+    }
+    const username = userBody.username.trim();
+    const email = userBody.email.trim().toLowerCase();
+    const fullName = userBody.fullName.trim();
+    if (!username || !email || !fullName) return invalidBody("账户名、邮箱和员工姓名不能为空。");
+    if (await prisma.user.findFirst({ where: { id: { not: current.id }, OR: [{ username }, { email }] }, select: { id: true } })) return invalidBody("账户名或邮箱已被使用。");
+    const passwordHash = typeof userBody.password === "string" && userBody.password ? await bcrypt.hash(userBody.password, 10) : current.passwordHash;
+    const row = await prisma.user.update({ where: { id: current.id }, data: { username, email, fullName, passwordHash, isActive: userBody.isActive === true } });
+    await writeAuditLog({ actorUserId: auth.userId, actorMembershipId: auth.membership.id, module: "admin.users", action: "user.update", targetType: "user", targetId: row.id, roleId: auth.membership.roleId, details: { previous: { username: current.username, email: current.email, fullName: current.fullName, isActive: current.isActive }, next: { username, email, fullName, isActive: row.isActive }, passwordChanged: passwordHash !== current.passwordHash } });
+    return NextResponse.json({ id: row.id, username: row.username, email: row.email, fullName: row.fullName, isActive: row.isActive });
+  }
+
+  if (params.resource === "memberships") {
+    const membershipBody = await request.json().catch(() => null) as Record<string, unknown> | null;
+    const current = await prisma.membership.findUnique({ where: { id: params.id }, include: { role: true } });
+    if (!current) return buildResponseNotFound();
+    if (!membershipBody || typeof membershipBody.roleId !== "string") return invalidBody("岗位角色为必填项。");
+    if ((typeof membershipBody.userId === "string" && membershipBody.userId !== current.userId) ||
+        (typeof membershipBody.businessUnitId === "string" && membershipBody.businessUnitId !== current.businessUnitId) ||
+        (typeof membershipBody.legalEntityId === "string" && membershipBody.legalEntityId !== current.legalEntityId)) {
+      return invalidBody("员工、公司和业务板块不能通过岗位编辑直接变更。");
+    }
+    const departmentId = typeof membershipBody.departmentId === "string" && membershipBody.departmentId ? membershipBody.departmentId : null;
+    const siteId = typeof membershipBody.siteId === "string" && membershipBody.siteId ? membershipBody.siteId : null;
+    const decision = await checkPermission({ userId: auth.userId, membershipId: auth.membership.id, actionKey: "membership.update", targetBusinessUnitId: current.businessUnitId, targetDepartmentId: departmentId ?? current.departmentId, targetSiteId: siteId ?? current.siteId, targetUserId: current.userId });
+    if (!decision.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: decision.reasons }, { status: 403 });
+    const [department, site, manager, rolePermissions] = await Promise.all([
+      departmentId ? prisma.department.findFirst({ where: { id: departmentId, businessUnitId: current.businessUnitId, isActive: true } }) : null,
+      siteId ? prisma.site.findFirst({ where: { id: siteId, businessUnitId: current.businessUnitId, isActive: true } }) : null,
+      typeof membershipBody.managerMembershipId === "string" && membershipBody.managerMembershipId ? prisma.membership.findFirst({ where: { id: membershipBody.managerMembershipId, businessUnitId: current.businessUnitId, isActive: true } }) : null,
+      prisma.rolePermission.findMany({ where: { roleId: membershipBody.roleId, isAllowed: true } }),
+    ]);
+    if ((departmentId && !department) || (siteId && !site) || (membershipBody.managerMembershipId && !manager)) return invalidBody("部门、站点或上级不属于当前业务板块。");
+    if (manager?.id === current.id) return invalidBody("员工不能成为自己的直属上级。");
+    if (await createsReportingCycle(current.id, manager?.id ?? null)) return invalidBody("直属上级关系会形成循环。");
+    if (membershipBody.roleId !== current.roleId) {
+      for (const permission of rolePermissions) {
+        const delegation = await assertGrantRule({
+          actorMembershipId: auth.membership.id,
+          actorUserId: auth.userId,
+          actionKey: permission.actionKey,
+          requestedScope: normalizeScope(permission.scope),
+          target: { businessUnitId: current.businessUnitId, departmentId, siteId },
+        });
+        if (!delegation.allowed) return NextResponse.json({ error: "ROLE_ASSIGNMENT_EXCEEDS_AUTHORITY", actionKey: permission.actionKey, reasons: delegation.reasons }, { status: 403 });
+      }
+    }
+    const nextScope = normalizeScope(typeof membershipBody.scope === "string" ? membershipBody.scope : current.scope);
+    if (nextScope === "NONE") return invalidBody("岗位数据范围无效。");
+    const previous = { roleId: current.roleId, departmentId: current.departmentId, siteId: current.siteId, managerMembershipId: current.managerMembershipId, scope: current.scope, isPrimary: current.isPrimary, isActive: current.isActive };
+    const row = await prisma.membership.update({
+      where: { id: current.id },
+      data: {
+        roleId: membershipBody.roleId,
+        departmentId,
+        siteId,
+        managerMembershipId: manager?.id ?? null,
+        scope: nextScope,
+        isPrimary: membershipBody.isPrimary === true,
+        isActive: membershipBody.isActive === true,
+        endedAt: membershipBody.isActive === true ? null : new Date(),
+      },
+    });
+    if (row.isPrimary) await prisma.membership.updateMany({ where: { userId: row.userId, id: { not: row.id } }, data: { isPrimary: false } });
+    await writeAuditLog({ actorUserId: auth.userId, actorMembershipId: auth.membership.id, module: "admin.memberships", action: "membership.update", targetType: "membership", targetId: row.id, businessUnitId: row.businessUnitId, roleId: auth.membership.roleId, details: { previous, next: { roleId: row.roleId, departmentId: row.departmentId, siteId: row.siteId, managerMembershipId: row.managerMembershipId, scope: row.scope, isPrimary: row.isPrimary, isActive: row.isActive } } });
     return NextResponse.json(row);
   }
 
@@ -293,12 +403,12 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ re
   }
 
   if (params.resource === "users") {
-    const row = await prisma.user.delete({ where: { id: params.id } });
+    const row = await prisma.user.update({ where: { id: params.id }, data: { isActive: false } });
     await writeAuditLog({
       actorUserId: auth.userId,
       actorMembershipId: auth.membership.id,
       module: "admin.users",
-      action: "user.delete",
+      action: "user.deactivate",
       targetType: "user",
       targetId: row.id,
       roleId: auth.membership.roleId,

@@ -13,7 +13,10 @@ export default async function MembershipsPage() {
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
 
-  const [canRead, canManageReportingLine, canCreate, canDelete] = await Promise.all([
+  const [canRead, canManageReportingLine, canCreate, canUpdate, canDelete] = await Promise.all([
+    checkPermission({
+      userId: session.userId, membershipId: membership.id, actionKey: "membership.update", targetBusinessUnitId: membership.businessUnitId, targetDepartmentId: membership.departmentId,
+    }),
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
@@ -44,12 +47,12 @@ export default async function MembershipsPage() {
 
   const [rows, users, legalEntities, businessUnits, roles, departments, sites] = await Promise.all([
     prisma.membership.findMany({ where: { businessUnitId: membership.businessUnitId, isActive: true }, orderBy: { createdAt: "desc" }, include: { user: true, role: true, businessUnit: true, department: true, site: true, managerMembership: { include: { user: true } } } }),
-    prisma.user.findMany({ orderBy: { username: "asc" } }),
-    prisma.legalEntity.findMany({ orderBy: { name: "asc" } }),
-    prisma.businessUnit.findMany({ orderBy: { name: "asc" } }),
+    prisma.user.findMany({ where: { OR: [{ memberships: { none: {} } }, { memberships: { some: { businessUnitId: membership.businessUnitId } } }] }, orderBy: { username: "asc" } }),
+    prisma.legalEntity.findMany({ where: { businessUnits: { some: { id: membership.businessUnitId } } }, orderBy: { name: "asc" } }),
+    prisma.businessUnit.findMany({ where: { id: membership.businessUnitId }, orderBy: { name: "asc" } }),
     prisma.role.findMany({ orderBy: { name: "asc" } }),
-    prisma.department.findMany({ orderBy: { name: "asc" } }),
-    prisma.site.findMany({ orderBy: { code: "asc" } }),
+    prisma.department.findMany({ where: { businessUnitId: membership.businessUnitId }, orderBy: { name: "asc" } }),
+    prisma.site.findMany({ where: { businessUnitId: membership.businessUnitId }, orderBy: { code: "asc" } }),
   ]);
 
   const reportingRows = rows.map((row) => ({
@@ -67,7 +70,9 @@ export default async function MembershipsPage() {
       resource="memberships"
       listTitle="Memberships"
       canCreate={canCreate.allowed}
+      canUpdate={canUpdate.allowed}
       canDelete={canDelete.allowed}
+      deleteConfirmation="确定停用该员工岗位吗？账号及历史业务记录会保留。"
       rows={rows}
       createFields={[
         {
@@ -128,6 +133,8 @@ export default async function MembershipsPage() {
             { value: "SITE", label: "SITE" },
           ],
         },
+        { key: "isPrimary", label: "主岗位", type: "checkbox" },
+        { key: "isActive", label: "启用岗位", type: "checkbox" },
       ]}
       dataColumns={[
         {

@@ -12,7 +12,10 @@ export default async function UsersPage() {
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
 
-  const [canRead, canCreate, canDelete] = await Promise.all([
+  const [canRead, canCreate, canUpdate, canDelete] = await Promise.all([
+    checkPermission({
+      userId: session.userId, membershipId: membership.id, actionKey: "user.update", targetBusinessUnitId: membership.businessUnitId, targetDepartmentId: membership.departmentId,
+    }),
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
@@ -35,6 +38,9 @@ export default async function UsersPage() {
   if (!canRead.allowed) redirect("/admin");
 
   const rows = await prisma.user.findMany({
+    where: canRead.reasons.includes("SCOPE_ALL")
+      ? {}
+      : { memberships: { some: { businessUnitId: membership.businessUnitId } } },
     orderBy: { createdAt: "desc" },
     include: { memberships: { include: { businessUnit: true, role: true } } },
   });
@@ -44,13 +50,16 @@ export default async function UsersPage() {
       resource="users"
       listTitle="Users"
       canCreate={canCreate.allowed}
+      canUpdate={canUpdate.allowed}
       canDelete={canDelete.allowed}
+      deleteConfirmation="确定停用该员工账户吗？历史订单、考勤和审计记录不会删除。"
       rows={rows}
       createFields={[
         { key: "username", label: "Username", required: true },
         { key: "email", label: "Email", type: "email", required: true },
         { key: "fullName", label: "Full Name", required: true },
         { key: "password", label: "Initial Password", type: "password" },
+        { key: "isActive", label: "启用账户", type: "checkbox" },
       ]}
       dataColumns={[
         { key: "username", label: "Username" },
