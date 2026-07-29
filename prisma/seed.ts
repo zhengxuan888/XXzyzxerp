@@ -208,6 +208,14 @@ const menuDefs = [
     isActive: true,
   },
   {
+    key: "delegation-rules",
+    label: "权限转授规则",
+    path: "/admin/delegation-rules",
+    requiredActionKey: "delegation.manage",
+    sortOrder: 92,
+    isActive: true,
+  },
+  {
     key: "unified-inbox",
     label: "统一收件箱",
     path: "/admin/inbox",
