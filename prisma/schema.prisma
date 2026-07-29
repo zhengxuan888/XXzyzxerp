@@ -48,6 +48,14 @@ enum LogisticsWorkStatus {
   CLOSED
 }
 
+enum NotificationDeliveryStatus {
+  PENDING
+  PROCESSING
+  RETRY
+  SENT
+  DEAD
+}
+
 enum AttendanceType {
   CHECK_IN
   CHECK_OUT
@@ -192,6 +200,7 @@ model BusinessUnit {
   attachments               Attachment[]
   dailyGoals                DailyGoal[]
   teamGoals                 TeamGoal[]
+  notificationDeliveries    NotificationDelivery[]
 
   @@unique([legalEntityId, code])
   @@index([legalEntityId])
@@ -765,14 +774,15 @@ model Shipment {
   createdAt           DateTime                @default(now())
   updatedAt           DateTime                @updatedAt
 
-  order            Order                      @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  legalEntity      LegalEntity                @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  businessUnit     BusinessUnit               @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  site             Site?                      @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  ownerMembership  Membership?                @relation("ShipmentAftersalesOwner", fields: [ownerMembershipId], references: [id], onDelete: SetNull)
-  events           ShipmentEvent[]
-  followUps        LogisticsFollowUp[]
-  eventAnnotations LogisticsEventAnnotation[]
+  order                  Order                      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  legalEntity            LegalEntity                @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit           BusinessUnit               @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  site                   Site?                      @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  ownerMembership        Membership?                @relation("ShipmentAftersalesOwner", fields: [ownerMembershipId], references: [id], onDelete: SetNull)
+  events                 ShipmentEvent[]
+  followUps              LogisticsFollowUp[]
+  eventAnnotations       LogisticsEventAnnotation[]
+  notificationDeliveries NotificationDelivery[]
 
   @@index([orderId, status])
   @@index([businessUnitId, trackingNo])
@@ -792,9 +802,10 @@ model ShipmentEvent {
   memo              String?
   actorMembershipId String?
 
-  shipment        Shipment                  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
-  actorMembership Membership?               @relation("MembershipShipmentEvents", fields: [actorMembershipId], references: [id], onDelete: SetNull)
-  annotation      LogisticsEventAnnotation?
+  shipment               Shipment                  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  actorMembership        Membership?               @relation("MembershipShipmentEvents", fields: [actorMembershipId], references: [id], onDelete: SetNull)
+  annotation             LogisticsEventAnnotation?
+  notificationDeliveries NotificationDelivery[]
 
   @@unique([shipmentId, source, externalEventKey])
   @@index([shipmentId, occurredAt])
@@ -845,17 +856,46 @@ model LogisticsFollowUp {
 }
 
 model LogisticsWorkbenchSetting {
-  id             String   @id @default(uuid())
-  businessUnitId String   @unique
-  quickTags      String[] @default([])
-  cards          Json
-  alertRules     Json
-  syncIntervalMinutes Int @default(30)
-  updatedByUserId String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                         String   @id @default(uuid())
+  businessUnitId             String   @unique
+  quickTags                  String[] @default([])
+  cards                      Json
+  alertRules                 Json
+  syncIntervalMinutes        Int      @default(30)
+  feishuNotificationsEnabled Boolean  @default(false)
+  feishuHighPriorityOnly     Boolean  @default(true)
+  updatedByUserId            String?
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
 
   businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+}
+
+model NotificationDelivery {
+  id                String                     @id @default(uuid())
+  businessUnitId    String
+  shipmentId        String?
+  shipmentEventId   String?
+  channel           String
+  eventType         String
+  dedupeKey         String                     @unique
+  status            NotificationDeliveryStatus @default(PENDING)
+  attempts          Int                        @default(0)
+  nextAttemptAt     DateTime                   @default(now())
+  lockedAt          DateTime?
+  lastError         String?
+  providerMessageId String?
+  sentAt            DateTime?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+
+  businessUnit  BusinessUnit   @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  shipment      Shipment?      @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  shipmentEvent ShipmentEvent? @relation(fields: [shipmentEventId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@index([businessUnitId, channel, status])
+  @@index([shipmentId, createdAt])
 }
 
 model Expense {

@@ -1,3 +1,5 @@
+import { DEFAULT_ALERT_RULES, type LogisticsAlertRule } from "@/lib/logistics";
+
 export const logisticsQueueKeys = ["all", "critical", "high", "normal", "unhandled"] as const;
 export type LogisticsQueueKey = (typeof logisticsQueueKeys)[number];
 
@@ -13,6 +15,8 @@ export type LogisticsWorkbenchConfig = {
   cards: LogisticsWorkbenchCard[];
   alertRules: LogisticsAlertRule[];
   syncIntervalMinutes: number;
+  feishuNotificationsEnabled: boolean;
+  feishuHighPriorityOnly: boolean;
 };
 
 export const defaultLogisticsWorkbenchConfig: LogisticsWorkbenchConfig = {
@@ -26,9 +30,11 @@ export const defaultLogisticsWorkbenchConfig: LogisticsWorkbenchConfig = {
   ],
   alertRules: DEFAULT_ALERT_RULES,
   syncIntervalMinutes: 30,
+  feishuNotificationsEnabled: false,
+  feishuHighPriorityOnly: true,
 };
 
-export function parseLogisticsWorkbenchConfig(raw: { quickTags?: unknown; cards?: unknown; alertRules?: unknown; syncIntervalMinutes?: unknown } | null | undefined): LogisticsWorkbenchConfig {
+export function parseLogisticsWorkbenchConfig(raw: { quickTags?: unknown; cards?: unknown; alertRules?: unknown; syncIntervalMinutes?: unknown; feishuNotificationsEnabled?: unknown; feishuHighPriorityOnly?: unknown } | null | undefined): LogisticsWorkbenchConfig {
   const quickTags = Array.isArray(raw?.quickTags)
     ? [...new Set(raw.quickTags.filter((item): item is string => typeof item === "string").map((item) => item.trim().slice(0, 30)).filter(Boolean))].slice(0, 20)
     : defaultLogisticsWorkbenchConfig.quickTags;
@@ -63,6 +69,12 @@ export function parseLogisticsWorkbenchConfig(raw: { quickTags?: unknown; cards?
     : defaultLogisticsWorkbenchConfig.alertRules;
   const interval = Number(raw?.syncIntervalMinutes);
   const syncIntervalMinutes = Number.isInteger(interval) && interval >= 5 && interval <= 1440 ? interval : 30;
-  return { quickTags, cards: [...byKey.values()].sort((a, b) => a.sortOrder - b.sortOrder), alertRules, syncIntervalMinutes };
+  return {
+    quickTags,
+    cards: [...byKey.values()].sort((a, b) => a.sortOrder - b.sortOrder),
+    alertRules,
+    syncIntervalMinutes,
+    feishuNotificationsEnabled: raw?.feishuNotificationsEnabled === true,
+    feishuHighPriorityOnly: raw?.feishuHighPriorityOnly !== false,
+  };
 }
-import { DEFAULT_ALERT_RULES, type LogisticsAlertRule } from "@/lib/logistics";

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { Ship24Adapter, ship24ConfigFromEnv } from "@/lib/logistics/ship24-adapter";
 import { parseLogisticsWorkbenchConfig } from "@/lib/logistics-workbench-config";
 import { normalizeProviderEventStatus, providerFollowUpAt, shouldApplyProviderStatus } from "@/lib/logistics/provider";
+import { queueLogisticsNotification } from "@/lib/notifications/logistics-delivery";
 
 async function main() {
   const config = ship24ConfigFromEnv();
@@ -31,6 +32,17 @@ async function main() {
         if (!normalized) continue;
         const created = await prisma.shipmentEvent.createMany({ data: [{ shipmentId: shipment.id, occurredAt: event.occurredAt, eventType: normalized.eventType, statusMilestone: normalized.status, location: event.location, source: adapter.key, externalEventKey: event.externalEventKey, memo: event.description }], skipDuplicates: true });
         inserted += created.count;
+        if (created.count) {
+          await queueLogisticsNotification({
+            businessUnitId: shipment.businessUnitId,
+            shipmentId: shipment.id,
+            source: adapter.key,
+            externalEventKey: event.externalEventKey,
+            eventType: normalized.eventType,
+            priority: normalized.priority,
+            config: configByBusinessUnit.get(shipment.businessUnitId) ?? parseLogisticsWorkbenchConfig(null),
+          });
+        }
         if (created.count && shouldApplyProviderStatus(currentStatus, normalized.status)) {
           await prisma.shipment.update({
             where: { id: shipment.id },

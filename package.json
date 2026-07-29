@@ -22,7 +22,8 @@
     "config:check:local": "node scripts/validate-config.mjs --mode=local --file=.env",
     "config:check:staging": "node scripts/validate-config.mjs --mode=staging --file=.env.staging",
     "deploy:dry-run": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deployment-dry-run.ps1",
-    "ship24:sync": "tsx scripts/ship24-sync.ts"
+    "ship24:sync": "tsx scripts/ship24-sync.ts",
+    "notifications:dispatch": "tsx scripts/dispatch-feishu-notifications.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.14.0",

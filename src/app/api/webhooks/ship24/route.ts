@@ -2,6 +2,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normalizeProviderEventStatus, providerFollowUpAt, shouldApplyProviderStatus } from "@/lib/logistics/provider";
+import { parseLogisticsWorkbenchConfig } from "@/lib/logistics-workbench-config";
+import { queueLogisticsNotification } from "@/lib/notifications/logistics-delivery";
 
 function validSignature(raw: string, signature: string | null) {
   const secret = process.env.SHIP24_WEBHOOK_SECRET?.trim();
@@ -43,6 +45,18 @@ export async function POST(request: NextRequest) {
     skipDuplicates: true,
   });
   if (!created.count) return NextResponse.json({ ok: true, duplicate: true });
+  const workbenchSetting = await prisma.logisticsWorkbenchSetting.findUnique({
+    where: { businessUnitId: shipment.businessUnitId },
+  });
+  const notification = await queueLogisticsNotification({
+    businessUnitId: shipment.businessUnitId,
+    shipmentId: shipment.id,
+    source: "SHIP24_WEBHOOK",
+    externalEventKey: eventKey,
+    eventType: normalized.eventType,
+    priority: normalized.priority,
+    config: parseLogisticsWorkbenchConfig(workbenchSetting),
+  });
 
   const newerEventCount = await prisma.shipmentEvent.count({
     where: { shipmentId: shipment.id, occurredAt: { gt: safeOccurredAt } },
@@ -61,5 +75,5 @@ export async function POST(request: NextRequest) {
         }
       : { lastTrackedAt: new Date() },
   });
-  return NextResponse.json({ ok: true, eventKey, stateUpdated: isLatest });
+  return NextResponse.json({ ok: true, eventKey, stateUpdated: isLatest, notificationQueued: notification.queued });
 }
