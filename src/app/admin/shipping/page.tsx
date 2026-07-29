@@ -33,7 +33,7 @@ export default async function ShippingWorkbenchPage() {
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     }),
-    prisma.logisticsProviderTemplate.findMany({ where: { businessUnitId: membership.businessUnitId, isActive: true }, orderBy: [{ name: "asc" }, { id: "asc" }], select: { id: true, code: true, name: true, carrierName: true } }),
+    prisma.logisticsProviderTemplate.findMany({ where: { businessUnitId: membership.businessUnitId }, orderBy: [{ isActive: "desc" }, { name: "asc" }, { id: "asc" }], select: { id: true, code: true, name: true, carrierName: true, isActive: true, configuration: true } }),
     checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "logistics_template.read", targetBusinessUnitId: membership.businessUnitId }),
     checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "logistics_template.manage", targetBusinessUnitId: membership.businessUnitId }),
     checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "logistics_template.export", targetBusinessUnitId: membership.businessUnitId }),
