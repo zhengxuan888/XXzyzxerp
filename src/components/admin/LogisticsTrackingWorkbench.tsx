@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Mail, MessageCircle, Package, Save, Search, Truck } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Mail, MessageCircle, Package, Save, Search, Truck, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { LogisticsQueueKey, LogisticsWorkbenchConfig } from "@/lib/logistics-workbench-config";
@@ -34,7 +34,7 @@ export default function LogisticsTrackingWorkbench({
       if (queue === "normal" && row.urgency !== "normal") return false;
       if (queue === "unhandled" && !row.events.some((event) => !event.annotation?.isHandled)) return false;
       if (!term) return true;
-      return `${row.trackingNo} ${row.order.orderNo} ${row.order.recipientName} ${row.order.recipientEmail} ${row.order.customerWhatsapp} ${row.order.items.map((item) => item.productName).join(" ")}`.toLowerCase().includes(term);
+      return `${row.trackingNo} ${row.order.orderNo} ${row.order.recipientName} ${row.order.recipientEmail} ${row.order.customerWhatsapp} ${row.order.creatorUser.fullName} ${row.order.creatorUser.username} ${row.order.items.map((item) => item.productName).join(" ")}`.toLowerCase().includes(term);
     });
   }, [keyword, queue, rows]);
   const pageCount = Math.max(1, Math.ceil(visibleRows.length / pageSize));
@@ -48,7 +48,7 @@ export default function LogisticsTrackingWorkbench({
     <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div><div className="flex items-center gap-2 text-violet-700"><Truck size={20} /><span className="text-sm font-semibold">物流与售后</span></div><h1 className="mt-2 text-2xl font-bold text-slate-950">物流追踪工作台</h1><p className="mt-1 text-sm text-slate-500">集中查看客户、订单、产品与物流轨迹；每条轨迹都可以单独备注、打标签和标记处理完成。</p></div>
-        <label className="flex h-11 w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 focus-within:border-violet-400 focus-within:ring-4 focus-within:ring-violet-100 lg:max-w-md"><Search size={17} className="text-slate-400" /><input value={keyword} onChange={(event) => { setKeyword(event.target.value); setPage(1); }} className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder={canViewTrackingNo ? "订单号、物流单号、客户、邮箱、WhatsApp、产品" : "订单号、客户、邮箱、WhatsApp、产品"} /></label>
+        <label className="flex h-11 w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 focus-within:border-violet-400 focus-within:ring-4 focus-within:ring-violet-100 lg:max-w-md"><Search size={17} className="text-slate-400" /><input value={keyword} onChange={(event) => { setKeyword(event.target.value); setPage(1); }} className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder={canViewTrackingNo ? "订单号、物流单号、客户、开单人、产品" : "订单号、客户、开单人、产品"} /></label>
       </div>
     </header>
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -61,7 +61,7 @@ export default function LogisticsTrackingWorkbench({
       <div className="grid gap-4 p-4 xl:grid-cols-[1.2fr_1.3fr_1fr_auto] xl:items-center">
         <div><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.urgency === "critical" ? "bg-rose-50 text-rose-700" : row.urgency === "high" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>{row.urgencyLabel}</span>{row.priorityTag !== "-" && <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">{row.priorityTag}</span>}</div><p className="mt-2 font-mono text-sm font-semibold text-slate-900">{row.trackingNo || "暂无物流单号"}</p><p className="mt-1 text-xs text-slate-500">{row.carrier || "未填写物流商"} · {row.dueStatus}</p></div>
         <div><Link href={`/admin/orders/${row.order.id}`} className="font-semibold text-violet-700 hover:underline">{row.order.orderNo}</Link><p className="mt-1 text-sm text-slate-700">{row.order.customer.name} / {row.order.recipientName || "未填写收件人"}</p><div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span className="inline-flex items-center gap-1"><Mail size={13} />{row.order.recipientEmail || "-"}</span><span className="inline-flex items-center gap-1"><MessageCircle size={13} />{row.order.customerWhatsapp || "-"}</span><span>{row.order.recipientPhone || "-"}</span></div></div>
-        <div><div className="flex items-start gap-2"><Package size={16} className="mt-0.5 shrink-0 text-slate-400" /><div className="text-sm text-slate-700">{row.order.items.map((item) => `${item.productName} × ${item.quantity}`).join("、") || "未记录产品"}</div></div><p className="mt-2 text-xs text-slate-500">COD：<strong className="text-slate-800">{row.order.codAmountLabel}</strong> · 销售：{row.order.creatorUser.fullName || row.order.creatorUser.username}</p></div>
+        <div><div className="flex items-start gap-2"><Package size={16} className="mt-0.5 shrink-0 text-slate-400" /><div className="text-sm text-slate-700">{row.order.items.map((item) => `${item.productName} × ${item.quantity}`).join("、") || "未记录产品"}</div></div><div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500"><span>COD：<strong className="text-slate-800">{row.order.codAmountLabel}</strong></span><span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-1 font-medium text-violet-700"><UserRound size={13} />开单人：{row.order.creatorUser.fullName || row.order.creatorUser.username}</span></div></div>
         {row.canViewTimeline && <button type="button" onClick={() => setExpanded((value) => ({ ...value, [row.id]: !isOpen }))} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">{isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}{isOpen ? "收起轨迹" : `展开轨迹 ${row.events.length}`}</button>}
       </div>
       {row.canViewTimeline && row.events.length > 0 && <div className="border-t border-slate-200 bg-slate-50/60 p-4"><div className="mb-2 text-xs font-medium text-slate-500">{isOpen ? `共 ${row.events.length} 条轨迹，轨迹区域可独立滚动` : "最新物流轨迹"}</div><div className={`${isOpen ? "max-h-[34rem] overflow-y-auto pr-1" : ""} space-y-3`}>{(isOpen ? row.events : row.events.slice(0, 1)).map((event) => <EventEditor key={event.id} shipmentId={row.id} event={event} canAnnotate={row.canAnnotate} quickTags={config.quickTags} />)}</div></div>}
