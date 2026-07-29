@@ -12,7 +12,10 @@ export default async function SitesPage() {
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
 
-  const [canRead, canCreate, canDelete] = await Promise.all([
+  const [canRead, canCreate, canUpdate, canDelete] = await Promise.all([
+    checkPermission({
+      userId: session.userId, membershipId: membership.id, actionKey: "site.update", targetBusinessUnitId: membership.businessUnitId,
+    }),
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
@@ -45,7 +48,9 @@ export default async function SitesPage() {
       resource="sites"
       listTitle="Sites"
       canCreate={canCreate.allowed}
+      canUpdate={canUpdate.allowed}
       canDelete={canDelete.allowed}
+      deleteConfirmation="确定停用该站点吗？库存、订单和物流历史不会被删除。"
       rows={rows}
       createFields={[
         { key: "code", label: "Code", required: true },
@@ -57,6 +62,7 @@ export default async function SitesPage() {
           required: true,
           options: businessUnits.map((unit) => ({ value: unit.id, label: unit.name })),
         },
+        { key: "isActive", label: "启用", type: "checkbox" },
         {
           key: "departmentId",
           label: "Department (optional)",
@@ -67,6 +73,7 @@ export default async function SitesPage() {
       dataColumns={[
         { key: "code", label: "Code" },
         { key: "name", label: "Name" },
+        { key: "isActive", label: "状态", render: (row) => row.isActive ? "启用" : "停用" },
         {
           key: "businessUnit",
           label: "Business Unit",

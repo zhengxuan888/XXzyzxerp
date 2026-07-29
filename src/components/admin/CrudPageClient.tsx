@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { ChevronLeft, ChevronRight, Eye, FileSearch, LoaderCircle, Plus, Search, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, FileSearch, LoaderCircle, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState, type FormEvent } from "react";
 
@@ -12,7 +12,7 @@ export type DataRow = Record<string, DataCellValue>;
 export type FieldSpec = {
   key: string;
   label: string;
-  type?: "text" | "number" | "email" | "password" | "select";
+  type?: "text" | "number" | "email" | "password" | "select" | "checkbox";
   options?: { value: string; label: string }[];
   placeholder?: string;
   required?: boolean;
@@ -27,6 +27,7 @@ export type DataCell = {
 export type CrudPageProps = {
   resource: string;
   canCreate: boolean;
+  canUpdate?: boolean;
   canDelete: boolean;
   apiBase?: string;
   rows: DataRow[];
@@ -37,6 +38,7 @@ export type CrudPageProps = {
   rowClassName?: (row: DataRow) => string;
   showCreate?: boolean;
   detailPath?: string;
+  deleteConfirmation?: string;
 };
 
 const API_BASE = "/api/admin";
@@ -68,6 +70,7 @@ function StatusPill({ value }: { value: DataCellValue }) {
 export default function CrudPage({
   resource,
   canCreate,
+  canUpdate = false,
   canDelete,
   apiBase,
   rows,
@@ -78,10 +81,13 @@ export default function CrudPage({
   rowClassName,
   showCreate = true,
   detailPath,
+  deleteConfirmation = "确定删除该记录吗？删除后无法恢复。",
 }: CrudPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [loadingCreate, setLoadingCreate] = useState(false);
   const [loadingDelete, setLoadingDelete] = useState<string | null>(null);
+  const [loadingUpdate, setLoadingUpdate] = useState(false);
+  const [editingRow, setEditingRow] = useState<DataRow | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [keyword, setKeyword] = useState("");
   const [page, setPage] = useState(1);
@@ -111,6 +117,10 @@ export default function CrudPage({
     const formData = new FormData(event.currentTarget);
     const payload: FormBody = {};
     for (const field of createFields) {
+      if (field.type === "checkbox") {
+        payload[field.key] = formData.get(field.key) === "on";
+        continue;
+      }
       const value = formData.get(field.key);
       if (value === null || value === "") continue;
       if (typeof value === "string" && field.type === "number") {
@@ -142,7 +152,7 @@ export default function CrudPage({
 
   async function handleDelete(id: string) {
     if (!canDelete) return;
-    if (!window.confirm("确定删除该记录吗？删除后无法恢复。")) return;
+    if (!window.confirm(deleteConfirmation)) return;
 
     setLoadingDelete(id);
     setError(null);
@@ -158,6 +168,42 @@ export default function CrudPage({
       setError("网络连接失败，请稍后重试");
     } finally {
       setLoadingDelete(null);
+    }
+  }
+
+  async function handleUpdate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canUpdate || !editingRow) return;
+    setLoadingUpdate(true);
+    setError(null);
+    const data = new FormData(event.currentTarget);
+    const payload: FormBody = {};
+    for (const field of createFields) {
+      if (field.type === "checkbox") {
+        payload[field.key] = data.get(field.key) === "on";
+        continue;
+      }
+      const value = data.get(field.key);
+      if (value === null || value === "") continue;
+      payload[field.key] = field.type === "number" ? Number(value) : String(value);
+    }
+    const id = String(editingRow[rowId]);
+    try {
+      const response = await fetch(`${endpointBase}/${resource}/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        setError(result?.error?.message || result?.error || "修改失败");
+        return;
+      }
+      window.location.reload();
+    } catch {
+      setError("网络连接失败，请稍后重试");
+    } finally {
+      setLoadingUpdate(false);
     }
   }
 
@@ -211,7 +257,9 @@ export default function CrudPage({
             {createFields.map((field) => (
               <label key={field.key} className="space-y-1.5 text-sm text-slate-700">
                 <span className="font-medium">{zh(field.label)}{field.required && <b className="ml-1 text-rose-500">*</b>}</span>
-                {field.type === "select" ? (
+                {field.type === "checkbox" ? (
+                  <input type="checkbox" name={field.key} defaultChecked />
+                ) : field.type === "select" ? (
                   <select name={field.key} className={inputClass} required={field.required}>
                     <option value="">请选择</option>
                     {(field.options ?? []).map((option) => <option key={option.value} value={option.value}>{zh(option.label)}</option>)}
@@ -279,6 +327,16 @@ export default function CrudPage({
                             <Eye size={16} />
                           </Link>
                         )}
+                        {canUpdate && (
+                          <button
+                            type="button"
+                            className="mr-1 inline-flex size-8 items-center justify-center rounded-lg text-amber-600 hover:bg-amber-50"
+                            onClick={() => setEditingRow(row)}
+                            title="编辑"
+                          >
+                            <Pencil size={15} />
+                          </button>
+                        )}
                         {canDelete && (
                           <button
                             className="inline-flex size-8 items-center justify-center rounded-lg text-rose-500 hover:bg-rose-50 disabled:opacity-50"
@@ -322,6 +380,32 @@ export default function CrudPage({
           </div>
         </footer>
       </section>
+      {editingRow && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={() => setEditingRow(null)}>
+          <form onSubmit={handleUpdate} onMouseDown={(event) => event.stopPropagation()} className="grid max-h-[90vh] w-full max-w-3xl grid-cols-1 gap-4 overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl md:grid-cols-2">
+            <h3 className="text-lg font-bold md:col-span-2">编辑记录</h3>
+            {createFields.map((field) => (
+              <label key={field.key} className="space-y-1.5 text-sm text-slate-700">
+                <span className="font-medium">{zh(field.label)}</span>
+                {field.type === "checkbox" ? (
+                  <input type="checkbox" name={field.key} defaultChecked={Boolean(editingRow[field.key])} />
+                ) : field.type === "select" ? (
+                  <select name={field.key} className={inputClass} required={field.required} defaultValue={String(editingRow[field.key] ?? "")}>
+                    <option value="">请选择</option>
+                    {(field.options ?? []).map((option) => <option key={option.value} value={option.value}>{zh(option.label)}</option>)}
+                  </select>
+                ) : (
+                  <input name={field.key} type={field.type ?? "text"} required={field.required} className={inputClass} defaultValue={String(editingRow[field.key] ?? "")} />
+                )}
+              </label>
+            ))}
+            <div className="flex gap-2 md:col-span-2">
+              <button disabled={loadingUpdate} className="inline-flex h-10 items-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white disabled:opacity-50">{loadingUpdate && <LoaderCircle size={15} className="animate-spin" />}保存修改</button>
+              <button type="button" onClick={() => setEditingRow(null)} className="h-10 rounded-xl border border-slate-200 px-4 text-sm">取消</button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

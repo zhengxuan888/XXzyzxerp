@@ -12,7 +12,10 @@ export default async function OrganizationsPage() {
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
 
-  const [canRead, canCreate, canDelete] = await Promise.all([
+  const [canRead, canCreate, canUpdate, canDelete] = await Promise.all([
+    checkPermission({
+      userId: session.userId, membershipId: membership.id, actionKey: "legal_entity.update", targetBusinessUnitId: membership.businessUnitId,
+    }),
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
@@ -42,15 +45,19 @@ export default async function OrganizationsPage() {
       resource="legal-entities"
       listTitle="Legal entities"
       canCreate={canCreate.allowed}
+      canUpdate={canUpdate.allowed}
       canDelete={canDelete.allowed}
+      deleteConfirmation="确定停用该公司吗？历史业务数据会保留，可通过编辑重新启用。"
       rows={rows}
       createFields={[
         { key: "code", label: "Code", required: true },
         { key: "name", label: "Name", required: true },
+        { key: "isActive", label: "启用", type: "checkbox" },
       ]}
       dataColumns={[
         { key: "code", label: "Code" },
         { key: "name", label: "Name" },
+        { key: "isActive", label: "状态", render: (row) => row.isActive ? "启用" : "停用" },
       ]}
     />
   );

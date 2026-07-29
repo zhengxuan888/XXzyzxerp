@@ -34,6 +34,64 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ res
   const params = await props.params;
   const auth = await requireAuthContext(request);
   if (!auth) return NextResponse.json({ error: "Unauthenticated." }, { status: 401 });
+  if (params.resource === "legal-entities" || params.resource === "business-units" || params.resource === "departments" || params.resource === "sites") {
+    const updateBody = await request.json().catch(() => null) as Record<string, unknown> | null;
+    if (!updateBody || typeof updateBody.code !== "string" || typeof updateBody.name !== "string") return invalidBody("编码和名称为必填项。");
+    const code = updateBody.code.trim();
+    const name = updateBody.name.trim();
+    if (!code || !name) return invalidBody("编码和名称不能为空。");
+
+    if (params.resource === "legal-entities") {
+      const current = await prisma.legalEntity.findUnique({ where: { id: params.id } });
+      if (!current) return buildResponseNotFound();
+      const decision = await checkPermission({ userId: auth.userId, membershipId: auth.membership.id, actionKey: "legal_entity.update", targetBusinessUnitId: auth.membership.businessUnitId });
+      if (!decision.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: decision.reasons }, { status: 403 });
+      if (await prisma.legalEntity.findFirst({ where: { code, id: { not: current.id } }, select: { id: true } })) return invalidBody("公司编码已存在。");
+      const row = await prisma.legalEntity.update({ where: { id: current.id }, data: { code, name, isActive: updateBody.isActive === true } });
+      await writeAuditLog({ actorUserId: auth.userId, actorMembershipId: auth.membership.id, module: "admin.legal-entities", action: "legal_entity.update", targetType: "legal_entity", targetId: row.id, roleId: auth.membership.roleId, details: { previous: current, next: row } });
+      return NextResponse.json(row);
+    }
+
+    if (params.resource === "business-units") {
+      const current = await prisma.businessUnit.findUnique({ where: { id: params.id } });
+      if (!current) return buildResponseNotFound();
+      const decision = await checkPermission({ userId: auth.userId, membershipId: auth.membership.id, actionKey: "business_unit.update", targetBusinessUnitId: current.id });
+      if (!decision.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: decision.reasons }, { status: 403 });
+      const legalEntityId = typeof updateBody.legalEntityId === "string" ? updateBody.legalEntityId : current.legalEntityId;
+      if (!await prisma.legalEntity.findUnique({ where: { id: legalEntityId }, select: { id: true } })) return invalidBody("所属公司不存在。");
+      if (await prisma.businessUnit.findFirst({ where: { legalEntityId, code, id: { not: current.id } }, select: { id: true } })) return invalidBody("该公司下业务板块编码已存在。");
+      const row = await prisma.businessUnit.update({ where: { id: current.id }, data: { legalEntityId, code, name, isActive: updateBody.isActive === true } });
+      await writeAuditLog({ actorUserId: auth.userId, actorMembershipId: auth.membership.id, module: "admin.business-units", action: "business_unit.update", targetType: "business_unit", targetId: row.id, businessUnitId: row.id, roleId: auth.membership.roleId, details: { previous: current, next: row } });
+      return NextResponse.json(row);
+    }
+
+    if (params.resource === "departments") {
+      const current = await prisma.department.findUnique({ where: { id: params.id } });
+      if (!current) return buildResponseNotFound();
+      const decision = await checkPermission({ userId: auth.userId, membershipId: auth.membership.id, actionKey: "department.update", targetBusinessUnitId: current.businessUnitId, targetDepartmentId: current.id });
+      if (!decision.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: decision.reasons }, { status: 403 });
+      const businessUnitId = typeof updateBody.businessUnitId === "string" ? updateBody.businessUnitId : current.businessUnitId;
+      if (businessUnitId !== current.businessUnitId) return invalidBody("部门不能直接移动到其他业务板块。");
+      if (await prisma.department.findFirst({ where: { businessUnitId, code, parentId: current.parentId, id: { not: current.id } }, select: { id: true } })) return invalidBody("同级部门编码已存在。");
+      const row = await prisma.department.update({ where: { id: current.id }, data: { code, name, isActive: updateBody.isActive === true } });
+      await writeAuditLog({ actorUserId: auth.userId, actorMembershipId: auth.membership.id, module: "admin.departments", action: "department.update", targetType: "department", targetId: row.id, businessUnitId: row.businessUnitId, roleId: auth.membership.roleId, details: { previous: current, next: row } });
+      return NextResponse.json(row);
+    }
+
+    const current = await prisma.site.findUnique({ where: { id: params.id } });
+    if (!current) return buildResponseNotFound();
+    const decision = await checkPermission({ userId: auth.userId, membershipId: auth.membership.id, actionKey: "site.update", targetBusinessUnitId: current.businessUnitId, targetDepartmentId: current.departmentId, targetSiteId: current.id });
+    if (!decision.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: decision.reasons }, { status: 403 });
+    const businessUnitId = typeof updateBody.businessUnitId === "string" ? updateBody.businessUnitId : current.businessUnitId;
+    if (businessUnitId !== current.businessUnitId) return invalidBody("站点不能直接移动到其他业务板块。");
+    const departmentId = typeof updateBody.departmentId === "string" && updateBody.departmentId ? updateBody.departmentId : null;
+    if (departmentId && !await prisma.department.findFirst({ where: { id: departmentId, businessUnitId }, select: { id: true } })) return invalidBody("部门不属于当前业务板块。");
+    if (await prisma.site.findFirst({ where: { businessUnitId, code, id: { not: current.id } }, select: { id: true } })) return invalidBody("站点编码已存在。");
+    const row = await prisma.site.update({ where: { id: current.id }, data: { code, name, departmentId, isActive: updateBody.isActive === true } });
+    await writeAuditLog({ actorUserId: auth.userId, actorMembershipId: auth.membership.id, module: "admin.sites", action: "site.update", targetType: "site", targetId: row.id, businessUnitId: row.businessUnitId, roleId: auth.membership.roleId, details: { previous: current, next: row } });
+    return NextResponse.json(row);
+  }
+
   if (params.resource === "roles") {
     const canUpdateRole = await checkPermission({
       userId: auth.userId,
@@ -176,12 +234,12 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ re
   }
 
   if (params.resource === "legal-entities") {
-    const row = await prisma.legalEntity.delete({ where: { id: params.id } });
+    const row = await prisma.legalEntity.update({ where: { id: params.id }, data: { isActive: false } });
     await writeAuditLog({
       actorUserId: auth.userId,
       actorMembershipId: auth.membership.id,
       module: "admin.legal-entities",
-      action: "legal_entity.delete",
+      action: "legal_entity.deactivate",
       targetType: "legal_entity",
       targetId: row.id,
       roleId: auth.membership.roleId,
@@ -190,12 +248,12 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ re
   }
 
   if (params.resource === "business-units") {
-    const row = await prisma.businessUnit.delete({ where: { id: params.id } });
+    const row = await prisma.businessUnit.update({ where: { id: params.id }, data: { isActive: false } });
     await writeAuditLog({
       actorUserId: auth.userId,
       actorMembershipId: auth.membership.id,
       module: "admin.business-units",
-      action: "business_unit.delete",
+      action: "business_unit.deactivate",
       targetType: "business_unit",
       targetId: row.id,
       businessUnitId: row.id,
@@ -205,12 +263,12 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ re
   }
 
   if (params.resource === "departments") {
-    const row = await prisma.department.delete({ where: { id: params.id } });
+    const row = await prisma.department.update({ where: { id: params.id }, data: { isActive: false } });
     await writeAuditLog({
       actorUserId: auth.userId,
       actorMembershipId: auth.membership.id,
       module: "admin.departments",
-      action: "department.delete",
+      action: "department.deactivate",
       targetType: "department",
       targetId: row.id,
       businessUnitId: row.businessUnitId,
@@ -220,7 +278,17 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ re
   }
 
   if (params.resource === "sites") {
-    const row = await prisma.site.delete({ where: { id: params.id } });
+    const row = await prisma.site.update({ where: { id: params.id }, data: { isActive: false } });
+    await writeAuditLog({
+      actorUserId: auth.userId,
+      actorMembershipId: auth.membership.id,
+      module: "admin.sites",
+      action: "site.deactivate",
+      targetType: "site",
+      targetId: row.id,
+      businessUnitId: row.businessUnitId,
+      roleId: auth.membership.roleId,
+    });
     return NextResponse.json({ ok: true, deleted: row.id });
   }
 
