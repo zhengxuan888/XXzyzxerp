@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { DemoTrackingAdapter, normalizeShip24, ship24ConfigFromEnv } from "@/lib/logistics/ship24-adapter";
+import { normalizeProviderEventStatus, providerFollowUpAt, shouldApplyProviderStatus } from "@/lib/logistics/provider";
 
 describe("Ship24 tracking adapter", () => {
   it("keeps real provider disabled without explicit config", () => {
@@ -29,5 +30,35 @@ describe("Ship24 tracking adapter", () => {
     await new DemoTrackingAdapter().track("TRACK-2");
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
+  });
+
+  it("maps provider statuses into stable shipment and after-sales states", () => {
+    expect(normalizeProviderEventStatus("out_for_delivery")).toMatchObject({
+      eventType: "OUT_FOR_DELIVERY",
+      status: "OUT_FOR_DELIVERY",
+      workStatus: "IN_PROGRESS",
+      priority: "HIGH",
+    });
+    expect(normalizeProviderEventStatus("地址错误")).toMatchObject({
+      eventType: "ADDRESS_ERROR",
+      status: "EXCEPTION",
+      workStatus: "WAITING_CUSTOMER",
+    });
+    expect(normalizeProviderEventStatus("refused by recipient")).toMatchObject({
+      eventType: "REFUSED",
+      status: "EXCEPTION",
+      priority: "HIGH",
+    });
+    expect(normalizeProviderEventStatus("provider_specific_unknown")).toBeNull();
+  });
+
+  it("schedules urgent and normal follow-ups without reopening delivered shipments", () => {
+    const occurredAt = new Date("2026-07-29T00:00:00.000Z");
+    expect(providerFollowUpAt("OUT_FOR_DELIVERY", occurredAt)?.toISOString()).toBe("2026-07-29T06:00:00.000Z");
+    expect(providerFollowUpAt("IN_TRANSIT", occurredAt)?.toISOString()).toBe("2026-07-30T00:00:00.000Z");
+    expect(providerFollowUpAt("DELIVERED", occurredAt)).toBeNull();
+    expect(shouldApplyProviderStatus("DELIVERED", "IN_TRANSIT")).toBe(false);
+    expect(shouldApplyProviderStatus("CLOSED", "EXCEPTION")).toBe(false);
+    expect(shouldApplyProviderStatus("IN_TRANSIT", "DELIVERED")).toBe(true);
   });
 });

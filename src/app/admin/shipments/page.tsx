@@ -192,7 +192,7 @@ export default async function ShipmentsPage({
   const withDerived = scopedRows
     .map(({ row, trackingNo, timeline, annotate }) => {
       const latest = row.events[0];
-      const latestFollowAt = row.followUps[0]?.nextFollowUpAt ?? null;
+      const latestFollowAt = row.followUps[0]?.nextFollowUpAt ?? row.nextFollowUpAt ?? null;
       const { overdue, dueLabel, overdueHoursLabel, overdueMinutes } = classifyOverdue(latestFollowAt);
       const isHighPriority =
         latest && HIGH_PRIORITY_SHIPMENT_EVENTS.includes(latest.eventType as keyof typeof shipmentEventMeta);
