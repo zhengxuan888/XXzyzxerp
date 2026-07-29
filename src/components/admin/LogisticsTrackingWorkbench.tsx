@@ -7,7 +7,7 @@ import type { LogisticsQueueKey, LogisticsWorkbenchConfig } from "@/lib/logistic
 
 type Annotation = { note: string | null; tags: string[]; isHandled: boolean; handledAt: string | null; handledByMembership?: { user?: { fullName: string | null; username: string } } | null };
 type TrackingEvent = { id: string; occurredAt: string; eventType: string; statusMilestone: string | null; location: string | null; memo: string | null; annotation: Annotation | null };
-type TrackingRow = { id: string; trackingNo: string | null; carrier: string | null; status: string; urgency: "critical" | "high" | "normal"; urgencyLabel: string; priorityTag: string; dueStatus: string; canViewTrackingNo: boolean; canViewTimeline: boolean; canAnnotate: boolean; order: { id: string; orderNo: string; recipientName: string | null; recipientPhone: string | null; recipientEmail: string | null; customerWhatsapp: string | null; codAmountLabel: string; customer: { name: string }; creatorUser: { username: string; fullName: string | null }; items: Array<{ productName: string; quantity: number }> }; events: TrackingEvent[] };
+type TrackingRow = { id: string; trackingNo: string | null; carrier: string | null; status: string; urgency: "critical" | "high" | "normal"; urgencyLabel: string; priorityTag: string; dueStatus: string; canViewTrackingNo: boolean; canViewTimeline: boolean; canAnnotate: boolean; order: { id: string; orderNo: string; recipientName: string | null; recipientPhone: string | null; recipientEmail: string | null; customerWhatsapp: string | null; codAmountLabel: string; customer: { name: string }; creatorUser: { username: string; fullName: string | null }; ownerMembership: { id: string; department: { id: string; name: string } | null; managerMembership: { id: string; user: { username: string; fullName: string | null } } | null }; items: Array<{ productName: string; quantity: number }> }; events: TrackingEvent[] };
 export default function LogisticsTrackingWorkbench({
   rows,
   config,
@@ -24,6 +24,9 @@ export default function LogisticsTrackingWorkbench({
   const [keyword, setKeyword] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [queue, setQueue] = useState<LogisticsQueueKey>("all");
+  const [departmentId, setDepartmentId] = useState("");
+  const [managerMembershipId, setManagerMembershipId] = useState("");
+  const [creatorMembershipId, setCreatorMembershipId] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const visibleRows = useMemo(() => {
@@ -33,16 +36,22 @@ export default function LogisticsTrackingWorkbench({
       if (queue === "high" && row.urgency !== "high") return false;
       if (queue === "normal" && row.urgency !== "normal") return false;
       if (queue === "unhandled" && !row.events.some((event) => !event.annotation?.isHandled)) return false;
+      if (departmentId && row.order.ownerMembership.department?.id !== departmentId) return false;
+      if (managerMembershipId && row.order.ownerMembership.managerMembership?.id !== managerMembershipId) return false;
+      if (creatorMembershipId && row.order.ownerMembership.id !== creatorMembershipId) return false;
       if (!term) return true;
       return `${row.trackingNo} ${row.order.orderNo} ${row.order.recipientName} ${row.order.recipientEmail} ${row.order.customerWhatsapp} ${row.order.creatorUser.fullName} ${row.order.creatorUser.username} ${row.order.items.map((item) => item.productName).join(" ")}`.toLowerCase().includes(term);
     });
-  }, [keyword, queue, rows]);
+  }, [creatorMembershipId, departmentId, keyword, managerMembershipId, queue, rows]);
   const pageCount = Math.max(1, Math.ceil(visibleRows.length / pageSize));
   const safePage = Math.min(page, pageCount);
   const pagedRows = visibleRows.slice((safePage - 1) * pageSize, safePage * pageSize);
   const countFor = (key: LogisticsQueueKey) => key === "all" ? rows.length : key === "unhandled" ? rows.filter((row) => row.events.some((event) => !event.annotation?.isHandled)).length : rows.filter((row) => row.urgency === key).length;
   const toneFor = (key: LogisticsQueueKey) => key === "critical" ? "border-rose-200 bg-rose-50 text-rose-900" : key === "high" ? "border-amber-200 bg-amber-50 text-amber-900" : key === "normal" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : key === "unhandled" ? "border-violet-200 bg-violet-50 text-violet-900" : "border-slate-200 bg-white text-slate-900";
   const queueCards = config.cards.filter((card) => card.isVisible).map((card) => ({ ...card, count: countFor(card.key), tone: toneFor(card.key) }));
+  const departments = [...new Map(rows.flatMap((row) => row.order.ownerMembership.department ? [[row.order.ownerMembership.department.id, row.order.ownerMembership.department] as const] : [])).values()].sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
+  const managers = [...new Map(rows.flatMap((row) => row.order.ownerMembership.managerMembership ? [[row.order.ownerMembership.managerMembership.id, row.order.ownerMembership.managerMembership] as const] : [])).values()].sort((a, b) => (a.user.fullName || a.user.username).localeCompare(b.user.fullName || b.user.username, "zh-CN"));
+  const creators = [...new Map(rows.map((row) => [row.order.ownerMembership.id, { id: row.order.ownerMembership.id, user: row.order.creatorUser }] as const)).values()].sort((a, b) => (a.user.fullName || a.user.username).localeCompare(b.user.fullName || b.user.username, "zh-CN"));
 
   return <div className="space-y-4">
     <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -51,6 +60,11 @@ export default function LogisticsTrackingWorkbench({
         <label className="flex h-11 w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 focus-within:border-violet-400 focus-within:ring-4 focus-within:ring-violet-100 lg:max-w-md"><Search size={17} className="text-slate-400" /><input value={keyword} onChange={(event) => { setKeyword(event.target.value); setPage(1); }} className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder={canViewTrackingNo ? "订单号、物流单号、客户、开单人、产品" : "订单号、客户、开单人、产品"} /></label>
       </div>
     </header>
+    <section className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-3">
+      <label className="grid gap-1 text-xs font-medium text-slate-500">部门<select value={departmentId} onChange={(event) => { setDepartmentId(event.target.value); setManagerMembershipId(""); setCreatorMembershipId(""); setPage(1); }} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部部门</option>{departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select></label>
+      <label className="grid gap-1 text-xs font-medium text-slate-500">直属经理<select value={managerMembershipId} onChange={(event) => { setManagerMembershipId(event.target.value); setCreatorMembershipId(""); setPage(1); }} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部经理</option>{managers.filter((manager) => !departmentId || rows.some((row) => row.order.ownerMembership.department?.id === departmentId && row.order.ownerMembership.managerMembership?.id === manager.id)).map((manager) => <option key={manager.id} value={manager.id}>{manager.user.fullName || manager.user.username}</option>)}</select></label>
+      <label className="grid gap-1 text-xs font-medium text-slate-500">开单人<select value={creatorMembershipId} onChange={(event) => { setCreatorMembershipId(event.target.value); setPage(1); }} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部开单人</option>{creators.filter((creator) => rows.some((row) => row.order.ownerMembership.id === creator.id && (!departmentId || row.order.ownerMembership.department?.id === departmentId) && (!managerMembershipId || row.order.ownerMembership.managerMembership?.id === managerMembershipId))).map((creator) => <option key={creator.id} value={creator.id}>{creator.user.fullName || creator.user.username}</option>)}</select></label>
+    </section>
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
       {queueCards.map((card) => <button key={card.key} type="button" onClick={() => { setQueue(card.key); setPage(1); }} className={`rounded-2xl border p-4 text-left shadow-sm transition ${card.tone} ${queue === card.key ? "ring-2 ring-amber-500 ring-offset-2" : "hover:-translate-y-0.5"}`}><p className="text-xs font-medium opacity-70">{card.label}</p><p className="mt-1 text-2xl font-bold">{card.count}</p></button>)}
     </section>

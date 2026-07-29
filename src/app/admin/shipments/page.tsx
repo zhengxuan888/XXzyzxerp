@@ -150,6 +150,15 @@ export default async function ShipmentsPage({
           currency: true,
           customer: { select: { name: true } },
           creatorUser: { select: { username: true, fullName: true } },
+          ownerMembership: {
+            select: {
+              id: true,
+              department: { select: { id: true, name: true } },
+              managerMembership: {
+                select: { id: true, user: { select: { username: true, fullName: true } } },
+              },
+            },
+          },
           items: { select: { productName: true, quantity: true }, orderBy: { id: "asc" } },
         },
       },
