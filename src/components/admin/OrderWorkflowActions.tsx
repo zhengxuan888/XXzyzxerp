@@ -14,6 +14,9 @@ type Props = {
     ship: boolean;
     cancel?: boolean;
   };
+  reviewClaimedByMe?: boolean;
+  reviewRejectReasons?: string[];
+  voidReasons?: string[];
 };
 
 const actionLabel = {
@@ -24,7 +27,14 @@ const actionLabel = {
   ship: "确认发货",
 } as const;
 
-export default function OrderWorkflowActions({ orderId, currentStatus, permissions }: Props) {
+export default function OrderWorkflowActions({
+  orderId,
+  currentStatus,
+  permissions,
+  reviewClaimedByMe = false,
+  reviewRejectReasons = [],
+  voidReasons = [],
+}: Props) {
   const [action, setAction] = useState<WorkflowAction | null>(null);
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
@@ -35,7 +45,7 @@ export default function OrderWorkflowActions({ orderId, currentStatus, permissio
     available.push("submit");
   }
   if (currentStatus === "SUBMITTED" && permissions.review) {
-    available.push("approve", "reject");
+    if (reviewClaimedByMe) available.push("approve", "reject");
     if (permissions.cancel) available.push("void");
   }
   if (currentStatus === "WAITING_SHIPMENT") {
@@ -73,7 +83,14 @@ export default function OrderWorkflowActions({ orderId, currentStatus, permissio
       <h2 className="font-medium">订单流程</h2>
       <p className="mt-1 text-sm text-gray-500">当前状态：{zh(currentStatus)}</p>
       {available.length === 0 ? (
-        <p className="mt-4 text-sm text-gray-500">当前状态下暂无可执行动作。</p>
+        <>
+          <p className="mt-4 text-sm text-gray-500">当前状态下暂无可执行动作。</p>
+          {currentStatus === "SUBMITTED" && permissions.review && !reviewClaimedByMe && (
+            <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              请先领取该订单；领取人上传核单凭证后才能通过或退回。
+            </p>
+          )}
+        </>
       ) : (
         <>
           <div className="mt-4 flex flex-wrap gap-2">
@@ -92,6 +109,22 @@ export default function OrderWorkflowActions({ orderId, currentStatus, permissio
           {(action === "reject" || action === "void") && (
             <label className="mt-4 grid gap-1 text-sm">
               <span>{action === "reject" ? "请输入核单退回原因" : "请输入作废原因"}</span>
+              <div className="flex flex-wrap gap-2">
+                {(action === "reject" ? reviewRejectReasons : voidReasons).map((reason) => (
+                  <button
+                    key={reason}
+                    type="button"
+                    onClick={() => setNote(reason)}
+                    className={`rounded-full border px-3 py-1.5 text-xs ${
+                      note === reason
+                        ? "border-amber-500 bg-amber-50 font-semibold text-amber-900"
+                        : "border-gray-200 bg-white text-gray-600 hover:border-amber-300"
+                    }`}
+                  >
+                    {reason}
+                  </button>
+                ))}
+              </div>
               <textarea
                 className="min-h-20 rounded border border-gray-300 px-3 py-2"
                 value={note}

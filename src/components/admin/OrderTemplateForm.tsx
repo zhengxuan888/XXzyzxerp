@@ -34,6 +34,8 @@ export default function OrderTemplateForm({ canManage }: { canManage: boolean })
         requireRecipientCity: data.get("requireRecipientCity") === "on",
         requireProductName: data.get("requireProductName") === "on",
         requirePackageWeight: data.get("requirePackageWeight") === "on",
+        reviewRejectReasons: String(data.get("reviewRejectReasons") || "").split("\n").map((item) => item.trim()).filter(Boolean),
+        voidReasons: String(data.get("voidReasons") || "").split("\n").map((item) => item.trim()).filter(Boolean),
         customFields: String(data.get("customFields") || "").split("\n").flatMap((line) => {
           const [key, label, required] = line.split(",").map((part) => part.trim());
           return key && label ? [{ key, label, type: "text", required: required === "必填" }] : [];
@@ -92,6 +94,24 @@ export default function OrderTemplateForm({ canManage }: { canManage: boolean })
           rows={3}
           className={input}
           placeholder={"store_id,店铺ID,必填\nsales_channel,销售渠道"}
+        />
+      </label>
+      <label className="grid gap-1 text-sm md:col-span-2">
+        核单退回快捷原因（每行一个，可在核单时继续补充）
+        <textarea
+          name="reviewRejectReasons"
+          rows={5}
+          className={input}
+          defaultValue={"客户信息不完整\n地址或邮编有误\n商品或数量需确认\nCOD 金额有误\n沟通凭证不完整\n疑似重复订单"}
+        />
+      </label>
+      <label className="grid gap-1 text-sm">
+        作废快捷原因（每行一个）
+        <textarea
+          name="voidReasons"
+          rows={5}
+          className={input}
+          defaultValue={"客户明确取消\n重复订单\n测试或无效订单\n无法联系客户\n不符合发货条件"}
         />
       </label>
       <div className="flex flex-wrap gap-4 text-sm md:col-span-3">

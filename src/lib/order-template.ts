@@ -22,6 +22,8 @@ export type OrderTemplateConfiguration = {
   requireRecipientCity: boolean;
   requireProductName: boolean;
   requirePackageWeight: boolean;
+  reviewRejectReasons: string[];
+  voidReasons: string[];
   customFields: OrderCustomField[];
 };
 
@@ -57,6 +59,16 @@ export function parseOrderTemplateConfiguration(raw: unknown): OrderTemplateConf
     if (value === "false" || value === "0") return false;
     return fallback;
   };
+  const reasonList = (input: unknown, fallback: string[]) => {
+    if (!Array.isArray(input)) return fallback;
+    const unique = new Set(
+      input
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim().slice(0, 100))
+        .filter(Boolean),
+    );
+    return [...unique].slice(0, 20);
+  };
 
   return {
     currency: shortText(value.currency, "CNY").toUpperCase().slice(0, 3),
@@ -75,6 +87,21 @@ export function parseOrderTemplateConfiguration(raw: unknown): OrderTemplateConf
     requireRecipientCity: bool((value as Record<string, unknown>).requireRecipientCity, false),
     requireProductName: bool((value as Record<string, unknown>).requireProductName, true),
     requirePackageWeight: bool((value as Record<string, unknown>).requirePackageWeight, false),
+    reviewRejectReasons: reasonList(value.reviewRejectReasons, [
+      "客户信息不完整",
+      "地址或邮编有误",
+      "商品或数量需确认",
+      "COD 金额有误",
+      "沟通凭证不完整",
+      "疑似重复订单",
+    ]),
+    voidReasons: reasonList(value.voidReasons, [
+      "客户明确取消",
+      "重复订单",
+      "测试或无效订单",
+      "无法联系客户",
+      "不符合发货条件",
+    ]),
     customFields,
   };
 }

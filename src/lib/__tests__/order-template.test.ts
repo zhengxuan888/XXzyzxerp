@@ -18,4 +18,13 @@ describe("order templates", () => {
     expect(sanitizeOrderCustomValues({ ignored: "x" }, fields)).toEqual({ values: {}, missing: ["店铺ID"] });
     expect(sanitizeOrderCustomValues({ store_id: "  A-1 ", ignored: "x" }, fields).values).toEqual({ store_id: "A-1" });
   });
+
+  it("sanitizes configurable review reasons without hard-coded workflow branches", () => {
+    const config = parseOrderTemplateConfiguration({
+      reviewRejectReasons: [" 地址错误 ", "地址错误", "", 123, "客户未确认"],
+      voidReasons: ["重复订单"],
+    });
+    expect(config.reviewRejectReasons).toEqual(["地址错误", "客户未确认"]);
+    expect(config.voidReasons).toEqual(["重复订单"]);
+  });
 });

@@ -13,6 +13,7 @@ import { assertOrderReadScope } from "@/lib/order-access";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { zh } from "@/lib/i18n";
+import { parseOrderTemplateConfiguration } from "@/lib/order-template";
 
 export default async function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -32,7 +33,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     include: {
       customer: { select: { code: true, name: true } },
       creatorUser: { select: { username: true, fullName: true } },
-      orderTemplate: { select: { code: true, name: true } },
+      orderTemplate: { select: { code: true, name: true, configuration: true } },
       items: { include: { product: { select: { code: true, name: true } } } },
       shipments: { include: { events: true } },
       reviewClaimedBy: { include: { user: { select: { fullName: true, username: true } } } },
@@ -93,6 +94,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   ]);
 
   const showTrackingNo = !(order.status === "SUBMITTED" || order.status === "WAITING_SHIPMENT");
+  const templateConfiguration = parseOrderTemplateConfiguration(order.orderTemplate?.configuration);
 
   return (
     <div className="space-y-6">
@@ -155,6 +157,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             ship: canShip.allowed,
             cancel: canCancel.allowed,
           }}
+          reviewClaimedByMe={order.reviewClaimedByMembershipId === membership.id}
+          reviewRejectReasons={templateConfiguration.reviewRejectReasons}
+          voidReasons={templateConfiguration.voidReasons}
         />
       </div>
 
