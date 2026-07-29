@@ -10,9 +10,16 @@ describe("logistics workbench configuration", () => {
         { key: "critical", label: " 立即处理 ", isVisible: true, sortOrder: 1 },
         { key: "unknown", label: "无效" },
       ],
+      alertRules: [
+        { key: "ES", matches: ["西班牙", "Spain"], milestoneEvent: "IN_TRANSIT", silentWorkDaysBeforeMilestone: 2 },
+        { key: "BAD", matches: [], milestoneEvent: "UNKNOWN", silentWorkDaysBeforeMilestone: -1 },
+      ],
+      syncIntervalMinutes: 45,
     });
     expect(config.quickTags).toEqual(["已通知"]);
     expect(config.cards[0]).toMatchObject({ key: "critical", label: "立即处理", sortOrder: 1 });
     expect(config.cards.map((card) => card.key).sort()).toEqual(["all", "critical", "high", "normal", "unhandled"]);
+    expect(config.alertRules).toEqual([{ key: "ES", matches: ["西班牙", "Spain"], milestoneEvent: "IN_TRANSIT", silentWorkDaysBeforeMilestone: 2 }]);
+    expect(config.syncIntervalMinutes).toBe(45);
   });
 });

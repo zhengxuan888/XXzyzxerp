@@ -15,6 +15,7 @@ import {
   shouldSuppressHighPriorityFollowUp,
 } from "@/lib/logistics";
 import { fail, ok } from "@/lib/api-response";
+import { parseLogisticsWorkbenchConfig } from "@/lib/logistics-workbench-config";
 
 function nextFollowUpDate(eventType: keyof typeof shipmentEventMeta, occurredAt: Date) {
   const isHighPriority = shipmentEventMeta[eventType].priority === "HIGH";
@@ -57,6 +58,10 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     targetBusinessUnitId: shipment.businessUnitId,
   });
   if (!canTrack.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: canTrack.reasons }, { status: 403 });
+  const setting = await prisma.logisticsWorkbenchSetting.findUnique({
+    where: { businessUnitId: shipment.businessUnitId },
+  });
+  const alertRules = parseLogisticsWorkbenchConfig(setting).alertRules;
 
   const body = await request.json().catch(() => null);
   let parsed;
@@ -72,9 +77,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       || shipment.order.recipientRegion
       || shipment.order.recipientCity
       || "";
-    const locationRule = getAlertRuleForShipmentLocation(eventLocationHint)
-      ?? getAlertRuleForShipmentLocation(shipment.order.recipientAddress ?? "");
-    const ruleKey = pickAlertRuleKeyFromLocation(eventLocationHint);
+    const locationRule = getAlertRuleForShipmentLocation(eventLocationHint, alertRules)
+      ?? getAlertRuleForShipmentLocation(shipment.order.recipientAddress ?? "", alertRules);
+    const ruleKey = locationRule?.key ?? pickAlertRuleKeyFromLocation(eventLocationHint, alertRules);
 
     const existingHighPriorityEvents = await tx.shipmentEvent.findMany({
       where: { shipmentId: shipment.id, eventType: { in: HIGH_PRIORITY_SHIPMENT_EVENTS } },
@@ -113,6 +118,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       firstTrackedAt: shipment.firstTrackedAt,
       lastTrackedAt: shipment.lastTrackedAt,
       occurredAt: parsed.occurredAt,
+      rules: alertRules,
     });
 
     const event = await tx.shipmentEvent.create({

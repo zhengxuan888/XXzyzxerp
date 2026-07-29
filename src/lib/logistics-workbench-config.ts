@@ -11,6 +11,8 @@ export type LogisticsWorkbenchCard = {
 export type LogisticsWorkbenchConfig = {
   quickTags: string[];
   cards: LogisticsWorkbenchCard[];
+  alertRules: LogisticsAlertRule[];
+  syncIntervalMinutes: number;
 };
 
 export const defaultLogisticsWorkbenchConfig: LogisticsWorkbenchConfig = {
@@ -22,9 +24,11 @@ export const defaultLogisticsWorkbenchConfig: LogisticsWorkbenchConfig = {
     { key: "normal", label: "正常运输", isVisible: true, sortOrder: 40 },
     { key: "unhandled", label: "存在未处理轨迹", isVisible: true, sortOrder: 50 },
   ],
+  alertRules: DEFAULT_ALERT_RULES,
+  syncIntervalMinutes: 30,
 };
 
-export function parseLogisticsWorkbenchConfig(raw: { quickTags?: unknown; cards?: unknown } | null | undefined): LogisticsWorkbenchConfig {
+export function parseLogisticsWorkbenchConfig(raw: { quickTags?: unknown; cards?: unknown; alertRules?: unknown; syncIntervalMinutes?: unknown } | null | undefined): LogisticsWorkbenchConfig {
   const quickTags = Array.isArray(raw?.quickTags)
     ? [...new Set(raw.quickTags.filter((item): item is string => typeof item === "string").map((item) => item.trim().slice(0, 30)).filter(Boolean))].slice(0, 20)
     : defaultLogisticsWorkbenchConfig.quickTags;
@@ -45,5 +49,20 @@ export function parseLogisticsWorkbenchConfig(raw: { quickTags?: unknown; cards?
     });
   }
   for (const fallback of defaultLogisticsWorkbenchConfig.cards) if (!byKey.has(fallback.key)) byKey.set(fallback.key, fallback);
-  return { quickTags, cards: [...byKey.values()].sort((a, b) => a.sortOrder - b.sortOrder) };
+  const alertRules = Array.isArray(raw?.alertRules)
+    ? raw.alertRules.flatMap((item): LogisticsAlertRule[] => {
+        if (!item || typeof item !== "object") return [];
+        const value = item as Record<string, unknown>;
+        const key = typeof value.key === "string" ? value.key.trim().toUpperCase().slice(0, 30) : "";
+        const matches = Array.isArray(value.matches) ? value.matches.filter((match): match is string => typeof match === "string").map((match) => match.trim()).filter(Boolean).slice(0, 10) : [];
+        const milestoneEvent = typeof value.milestoneEvent === "string" ? value.milestoneEvent.trim().toUpperCase() : "";
+        const days = Number(value.silentWorkDaysBeforeMilestone);
+        if (!key || !matches.length || !["PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED", "EXCEPTION", "RETURNING", "RETURNED", "ADDRESS_ERROR", "CUSTOMER_ABSENT", "REFUSED"].includes(milestoneEvent) || !Number.isInteger(days) || days < 0 || days > 30) return [];
+        return [{ key, matches, milestoneEvent: milestoneEvent as LogisticsAlertRule["milestoneEvent"], silentWorkDaysBeforeMilestone: days }];
+      }).slice(0, 100)
+    : defaultLogisticsWorkbenchConfig.alertRules;
+  const interval = Number(raw?.syncIntervalMinutes);
+  const syncIntervalMinutes = Number.isInteger(interval) && interval >= 5 && interval <= 1440 ? interval : 30;
+  return { quickTags, cards: [...byKey.values()].sort((a, b) => a.sortOrder - b.sortOrder), alertRules, syncIntervalMinutes };
 }
+import { DEFAULT_ALERT_RULES, type LogisticsAlertRule } from "@/lib/logistics";

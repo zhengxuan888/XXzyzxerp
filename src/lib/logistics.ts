@@ -197,15 +197,15 @@ export function getHighPrioritySilenceLimit(): number {
   return Math.floor(value);
 }
 
-export function getAlertRuleForShipmentLocation(input: string | null | undefined): LogisticsAlertRule | null {
+export function getAlertRuleForShipmentLocation(input: string | null | undefined, configuredRules?: LogisticsAlertRule[]): LogisticsAlertRule | null {
   const value = input?.trim().toLowerCase();
   if (!value) return null;
-  const { rules } = parseAlertRuleConfig();
+  const rules = configuredRules ?? parseAlertRuleConfig().rules;
   return rules.find((rule) => rule.matches.some((keyword) => value.includes(keyword.toLowerCase()))) ?? null;
 }
 
-export function pickAlertRuleKeyFromLocation(input: string | null | undefined): string | null {
-  const rule = getAlertRuleForShipmentLocation(input);
+export function pickAlertRuleKeyFromLocation(input: string | null | undefined, configuredRules?: LogisticsAlertRule[]): string | null {
+  const rule = getAlertRuleForShipmentLocation(input, configuredRules);
   return rule?.key ?? null;
 }
 
@@ -227,13 +227,14 @@ export function shouldSuppressHighPriorityFollowUp(
     firstTrackedAt: Date | null;
     lastTrackedAt: Date | null;
     occurredAt: Date;
+    rules?: LogisticsAlertRule[];
   },
 ): boolean {
   if (shipmentEventMeta[eventType].priority !== "HIGH") return false;
   if (options.isMilestoneReached) return false;
   if (options.hasActiveHighPriorityFollowUp) return false;
 
-  const rule = options.countryRuleName ? parseAlertRuleConfig().rules.find((entry) => entry.key === options.countryRuleName) : null;
+  const rule = options.countryRuleName ? (options.rules ?? parseAlertRuleConfig().rules).find((entry) => entry.key === options.countryRuleName) : null;
   if (!rule) {
     const silenceLimit = getHighPrioritySilenceLimit();
     const highPriorityIndex = options.highPriorityIndex ?? 0;

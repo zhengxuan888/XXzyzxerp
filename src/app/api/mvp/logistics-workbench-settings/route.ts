@@ -41,12 +41,16 @@ export async function PUT(request: NextRequest) {
     update: {
       quickTags: config.quickTags,
       cards: config.cards as unknown as Prisma.InputJsonValue,
+      alertRules: config.alertRules as unknown as Prisma.InputJsonValue,
+      syncIntervalMinutes: config.syncIntervalMinutes,
       updatedByUserId: auth.userId,
     },
     create: {
       businessUnitId: auth.membership.businessUnitId,
       quickTags: config.quickTags,
       cards: config.cards as unknown as Prisma.InputJsonValue,
+      alertRules: config.alertRules as unknown as Prisma.InputJsonValue,
+      syncIntervalMinutes: config.syncIntervalMinutes,
       updatedByUserId: auth.userId,
     },
   });
@@ -59,7 +63,7 @@ export async function PUT(request: NextRequest) {
     targetId: setting.id,
     businessUnitId: auth.membership.businessUnitId,
     roleId: auth.membership.roleId,
-    details: { quickTagCount: config.quickTags.length, cards: config.cards } as unknown as Prisma.InputJsonObject,
+    details: { quickTagCount: config.quickTags.length, cards: config.cards, alertRuleCount: config.alertRules.length, syncIntervalMinutes: config.syncIntervalMinutes } as unknown as Prisma.InputJsonObject,
   });
   return ok(config);
 }

@@ -19,7 +19,9 @@ pnpm ship24:sync
 
 生产环境使用系统调度器执行，不把脚本常驻在 Web 请求进程中：
 
-- Linux cron：`*/30 * * * * cd /srv/erp-v2 && pnpm ship24:sync >> /var/log/erp-v2/ship24-sync.log 2>&1`
+- Linux cron 建议每 5 分钟触发一次：`*/5 * * * * cd /srv/erp-v2 && pnpm ship24:sync >> /var/log/erp-v2/ship24-sync.log 2>&1`
+- 脚本会读取每个业务板块在 ERP“物流追踪 → 配置工作台”中设置的同步间隔（默认 30 分钟），未到期的记录自动跳过。
+- 未点击“确认发货”的 `PENDING` 物流记录不会提交给 Ship24。
 - Windows 任务计划：每 30 分钟运行 `pnpm ship24:sync`，工作目录指向 V2 项目。
 
 ## 安全与失败处理
