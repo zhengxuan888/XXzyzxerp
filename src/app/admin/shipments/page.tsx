@@ -87,6 +87,26 @@ export default async function ShipmentsPage({
     targetBusinessUnitId: membership.businessUnitId,
   });
   if (!canRead.allowed) redirect("/admin");
+  const [canViewTrackingNo, canViewTimeline, canAnnotate] = await Promise.all([
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "shipment.tracking_no.view",
+      targetBusinessUnitId: membership.businessUnitId,
+    }),
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "shipment.timeline.view",
+      targetBusinessUnitId: membership.businessUnitId,
+    }),
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "shipment.track.update",
+      targetBusinessUnitId: membership.businessUnitId,
+    }),
+  ]);
 
   const queueWhere: Prisma.ShipmentWhereInput | undefined =
     queue === "needs_attention"
@@ -107,6 +127,8 @@ export default async function ShipmentsPage({
       order: {
         select: {
           id: true,
+          departmentId: true,
+          creatorUserId: true,
           orderNo: true,
           recipientName: true,
           recipientPhone: true,
@@ -137,8 +159,26 @@ export default async function ShipmentsPage({
     orderBy: { createdAt: "desc" },
   });
 
-  const withDerived = rows
-    .map((row) => {
+  const scopedRows = (await Promise.all(rows.map(async (row) => {
+    const target = {
+      userId: session.userId,
+      membershipId: membership.id,
+      targetBusinessUnitId: membership.businessUnitId,
+      targetDepartmentId: row.order.departmentId,
+      targetSiteId: row.siteId,
+      targetUserId: row.order.creatorUserId,
+    };
+    const [read, trackingNo, timeline, annotate] = await Promise.all([
+      checkPermission({ ...target, actionKey: "shipment.read" }),
+      checkPermission({ ...target, actionKey: "shipment.tracking_no.view" }),
+      checkPermission({ ...target, actionKey: "shipment.timeline.view" }),
+      checkPermission({ ...target, actionKey: "shipment.track.update" }),
+    ]);
+    return { row, read: read.allowed, trackingNo: trackingNo.allowed, timeline: timeline.allowed, annotate: annotate.allowed };
+  }))).filter((item) => item.read);
+
+  const withDerived = scopedRows
+    .map(({ row, trackingNo, timeline, annotate }) => {
       const latest = row.events[0];
       const latestFollowAt = row.followUps[0]?.nextFollowUpAt ?? null;
       const { overdue, dueLabel, overdueHoursLabel, overdueMinutes } = classifyOverdue(latestFollowAt);
@@ -161,6 +201,9 @@ export default async function ShipmentsPage({
         priorityTag: isHighPriority ? "高优先级" : "-",
         urgencyScore: urgencyScore(urgency),
         followUpAt: latestFollowAt ? new Date(latestFollowAt).toLocaleString("zh-CN") : "-",
+        canViewTrackingNo: trackingNo,
+        canViewTimeline: timeline,
+        canAnnotate: timeline && annotate,
       };
     })
     .filter((item) => (overdueOnly ? item.isOverdue === "YES" : true))
@@ -172,9 +215,15 @@ export default async function ShipmentsPage({
 
   return (
     <LogisticsTrackingWorkbench
+      canViewTrackingNo={canViewTrackingNo.allowed}
+      canViewTimeline={canViewTimeline.allowed}
+      canAnnotate={canViewTimeline.allowed && canAnnotate.allowed}
       rows={withDerived.map((row) => ({
         id: row.id,
-        trackingNo: row.trackingNo,
+        trackingNo: row.canViewTrackingNo ? row.trackingNo : null,
+        canViewTrackingNo: row.canViewTrackingNo,
+        canViewTimeline: row.canViewTimeline,
+        canAnnotate: row.canAnnotate,
         carrier: row.carrier,
         status: row.status,
         urgency: row.urgency,
@@ -185,7 +234,7 @@ export default async function ShipmentsPage({
           ...row.order,
           codAmountLabel: formatMoneyCents(row.order.codAmountCents, row.order.currency),
         },
-        events: row.events.map((event) => ({
+        events: row.canViewTimeline ? row.events.map((event) => ({
           id: event.id,
           occurredAt: event.occurredAt.toISOString(),
           eventType: event.eventType,
@@ -199,7 +248,7 @@ export default async function ShipmentsPage({
             handledAt: event.annotation.handledAt?.toISOString() ?? null,
             handledByMembership: event.annotation.handledByMembership,
           } : null,
-        })),
+        })) : [],
       }))}
     />
   );
