@@ -65,6 +65,7 @@ export async function POST(request: NextRequest) {
         description: typeof body?.description === "string" ? body.description.trim().slice(0, 300) : null,
         configuration: configuration as unknown as Prisma.InputJsonValue,
         isDefault,
+        isActive: body?.isActive !== false,
       },
     });
   });

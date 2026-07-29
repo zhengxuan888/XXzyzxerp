@@ -26,9 +26,10 @@ export default async function OrderTemplatesPage() {
       {templates.map((item) => {
         const config = parseOrderTemplateConfiguration(item.configuration);
         return <article key={item.id} className="rounded-xl border border-gray-200 bg-white p-4">
-          <div className="flex justify-between"><strong>{item.name}</strong>{item.isDefault && <span className="rounded-full bg-violet-50 px-2 py-1 text-xs text-violet-700">默认</span>}</div>
+          <div className="flex justify-between"><strong>{item.name}</strong><div className="flex gap-2">{item.isDefault && <span className="rounded-full bg-violet-50 px-2 py-1 text-xs text-violet-700">默认</span>}<span className={`rounded-full px-2 py-1 text-xs ${item.isActive ? "bg-emerald-50 text-emerald-700" : "bg-gray-100 text-gray-500"}`}>{item.isActive ? "启用" : "停用"}</span></div></div>
           <p className="mt-1 text-xs text-gray-500">{item.code}</p>
           <dl className="mt-3 grid grid-cols-2 gap-2 text-sm"><dt>币种</dt><dd>{config.currency}</dd><dt>物流渠道</dt><dd>{config.logisticsChannel || "未设置"}</dd><dt>运费</dt><dd>{(config.defaultShippingFeeCents / 100).toFixed(2)}</dd><dt>自定义字段</dt><dd>{config.customFields.length} 个</dd></dl>
+          {manage.allowed && <details className="mt-4 border-t border-gray-100 pt-3"><summary className="cursor-pointer text-sm font-semibold text-violet-700">编辑模板</summary><div className="mt-3"><OrderTemplateForm canManage initial={{ id: item.id, code: item.code, name: item.name, description: item.description, isDefault: item.isDefault, isActive: item.isActive, configuration: config }} /></div></details>}
         </article>;
       })}
     </div>
