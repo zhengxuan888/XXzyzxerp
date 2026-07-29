@@ -32,6 +32,7 @@ const actionDefs: SeedAction[] = [
   { key: "membership.reporting_line.manage", name: "配置员工汇报关系", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "role.read", name: "Role read", namespace: "erp", scope: "ALL" },
   { key: "role.create", name: "Role create", namespace: "erp", scope: "ALL" },
+  { key: "role.update", name: "Role update", namespace: "erp", scope: "ALL" },
   { key: "role.delete", name: "Role delete", namespace: "erp", scope: "ALL" },
   { key: "menu.read", name: "Menu read", namespace: "erp", scope: "ALL" },
   { key: "menu.create", name: "Menu create", namespace: "erp", scope: "ALL" },

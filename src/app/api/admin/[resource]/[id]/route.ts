@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ADMIN_RESOURCE_MAP, type AdminResource } from "@/lib/admin-rules";
 import { requireAuthContext } from "@/lib/api-auth";
-import { checkPermission } from "@/lib/permission";
+import { assertGrantRule, normalizeScope, checkPermission, type PermissionScope } from "@/lib/permission";
 import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 
@@ -34,6 +34,71 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ res
   const params = await props.params;
   const auth = await requireAuthContext(request);
   if (!auth) return NextResponse.json({ error: "Unauthenticated." }, { status: 401 });
+  if (params.resource === "roles") {
+    const canUpdateRole = await checkPermission({
+      userId: auth.userId,
+      membershipId: auth.membership.id,
+      actionKey: "role.update",
+      targetBusinessUnitId: auth.membership.businessUnitId,
+    });
+    if (!canUpdateRole.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: canUpdateRole.reasons }, { status: 403 });
+    const role = await prisma.role.findUnique({ where: { id: params.id }, include: { rolePermissions: true } });
+    if (!role) return buildResponseNotFound();
+    const roleBody = await request.json().catch(() => null) as Record<string, unknown> | null;
+    if (!roleBody || typeof roleBody.code !== "string" || typeof roleBody.name !== "string" || !Array.isArray(roleBody.permissions)) return invalidBody("角色编码、名称和权限列表为必填项。");
+    const requested = roleBody.permissions.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const value = item as Record<string, unknown>;
+      const scope = normalizeScope(typeof value.scope === "string" ? value.scope : null);
+      return typeof value.actionKey === "string" && scope !== "NONE" ? [{ actionKey: value.actionKey, scope }] : [];
+    });
+    if (new Set(requested.map((item) => item.actionKey)).size !== requested.length) return invalidBody("权限动作不能重复。");
+    const actionCount = await prisma.action.count({ where: { key: { in: requested.map((item) => item.actionKey) } } });
+    if (actionCount !== requested.length) return invalidBody("权限列表包含不存在的动作。");
+    for (const permission of requested) {
+      const decision = await assertGrantRule({
+        actorMembershipId: auth.membership.id,
+        actorUserId: auth.userId,
+        actionKey: permission.actionKey,
+        requestedScope: permission.scope as PermissionScope,
+        target: { businessUnitId: auth.membership.businessUnitId, departmentId: auth.membership.departmentId, siteId: auth.membership.siteId },
+      });
+      if (!decision.allowed) return NextResponse.json({ error: "ROLE_PERMISSION_EXCEEDS_AUTHORITY", actionKey: permission.actionKey, reasons: decision.reasons }, { status: 403 });
+    }
+    const code = roleBody.code.trim();
+    const name = roleBody.name.trim();
+    if (!code || !name) return invalidBody("角色编码和名称不能为空。");
+    if (role.isSystem && code !== role.code) return invalidBody("系统角色编码不能修改。");
+    const duplicate = await prisma.role.findFirst({ where: { code, id: { not: role.id } }, select: { id: true } });
+    if (duplicate) return invalidBody("角色编码已存在。");
+    const updated = await prisma.$transaction(async (tx) => {
+      const next = await tx.role.update({ where: { id: role.id }, data: { code, name, description: typeof roleBody.description === "string" && roleBody.description.trim() ? roleBody.description.trim() : null } });
+      await tx.rolePermission.deleteMany({ where: { roleId: role.id } });
+      if (requested.length) await tx.rolePermission.createMany({ data: requested.map((permission) => ({ roleId: role.id, actionKey: permission.actionKey, scope: permission.scope, isAllowed: true })) });
+      const menus = await tx.menu.findMany({ select: { id: true, requiredActionKey: true } });
+      const selected = new Set(requested.map((permission) => permission.actionKey));
+      for (const menu of menus) {
+        await tx.menuPermission.upsert({
+          where: { menuId_roleId: { menuId: menu.id, roleId: role.id } },
+          update: { isEnabled: Boolean(menu.requiredActionKey && selected.has(menu.requiredActionKey)) },
+          create: { menuId: menu.id, roleId: role.id, isEnabled: Boolean(menu.requiredActionKey && selected.has(menu.requiredActionKey)) },
+        });
+      }
+      return next;
+    });
+    await writeAuditLog({
+      actorUserId: auth.userId,
+      actorMembershipId: auth.membership.id,
+      module: "admin.roles",
+      action: "role.update",
+      targetType: "role",
+      targetId: role.id,
+      roleId: auth.membership.roleId,
+      details: { previous: { code: role.code, name: role.name, permissions: role.rolePermissions }, next: { code: updated.code, name: updated.name, permissions: requested } },
+    });
+    return NextResponse.json(updated);
+  }
+
   if (params.resource !== "menus") return buildResponseNotFound();
 
   const canUpdate = await checkPermission({

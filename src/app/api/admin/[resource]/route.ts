@@ -442,29 +442,64 @@ export async function POST(request: NextRequest, props: RouteParams) {
     if (typeof body.code !== "string" || typeof body.name !== "string") {
       return invalidBody("code and name are required.");
     }
-
-    const row = await prisma.role.create({
-      data: {
-        code: body.code,
-        name: body.name,
-        description: typeof body.description === "string" ? body.description : null,
-      },
-    });
-
-    const actionKeys = (Array.isArray(body.actionKeys) ? body.actionKeys : []).filter(
-      (item): item is string => typeof item === "string",
-    );
-    if (actionKeys.length > 0) {
-      const actions = await prisma.action.findMany({ where: { key: { in: actionKeys } } });
-      await prisma.rolePermission.createMany({
-        data: actions.map((action) => ({
-          roleId: row.id,
-          actionKey: action.key,
-          scope: "BUSINESS_UNIT",
-          isAllowed: true,
-        })),
+    const requested = Array.isArray(body.permissions)
+      ? body.permissions.flatMap((item) => {
+          if (!item || typeof item !== "object") return [];
+          const value = item as Record<string, unknown>;
+          const scope = parsePermissionScope(value.scope);
+          return typeof value.actionKey === "string" ? [{ actionKey: value.actionKey, scope }] : [];
+        })
+      : (Array.isArray(body.actionKeys) ? body.actionKeys : []).flatMap((item) =>
+          typeof item === "string" ? [{ actionKey: item, scope: "BUSINESS_UNIT" as PermissionScope }] : [],
+        );
+    if (new Set(requested.map((item) => item.actionKey)).size !== requested.length) return invalidBody("permission actions must be unique.");
+    const actionCount = await prisma.action.count({ where: { key: { in: requested.map((item) => item.actionKey) } } });
+    if (actionCount !== requested.length) return invalidBody("permission list contains unknown action.");
+    for (const permission of requested) {
+      const delegation = await assertGrantRule({
+        actorMembershipId: auth.membership.id,
+        actorUserId: auth.userId,
+        actionKey: permission.actionKey,
+        requestedScope: permission.scope,
+        target: {
+          businessUnitId: auth.membership.businessUnitId,
+          departmentId: auth.membership.departmentId,
+          siteId: auth.membership.siteId,
+        },
       });
+      if (!delegation.allowed) {
+        return NextResponse.json(
+          { error: "ROLE_PERMISSION_EXCEEDS_AUTHORITY", actionKey: permission.actionKey, reasons: delegation.reasons },
+          { status: 403 },
+        );
+      }
     }
+    const code = body.code.trim();
+    const name = body.name.trim();
+    if (!code || !name) return invalidBody("code and name cannot be empty.");
+    if (await prisma.role.findUnique({ where: { code }, select: { id: true } })) return invalidBody("role code already exists.");
+    const row = await prisma.$transaction(async (tx) => {
+      const created = await tx.role.create({
+        data: { code, name, description: typeof body.description === "string" && body.description.trim() ? body.description.trim() : null },
+      });
+      if (requested.length) {
+        await tx.rolePermission.createMany({
+          data: requested.map((permission) => ({ roleId: created.id, actionKey: permission.actionKey, scope: permission.scope, isAllowed: true })),
+        });
+      }
+      const selected = new Set(requested.map((permission) => permission.actionKey));
+      const menus = await tx.menu.findMany({ select: { id: true, requiredActionKey: true } });
+      if (menus.length) {
+        await tx.menuPermission.createMany({
+          data: menus.map((menu) => ({
+            menuId: menu.id,
+            roleId: created.id,
+            isEnabled: Boolean(menu.requiredActionKey && selected.has(menu.requiredActionKey)),
+          })),
+        });
+      }
+      return created;
+    });
 
     await writeAuditLog({
       actorUserId: auth.userId,
@@ -474,7 +509,7 @@ export async function POST(request: NextRequest, props: RouteParams) {
       targetType: "role",
       targetId: row.id,
       roleId: auth.membership.roleId,
-      details: { resource: "roles", payload: body },
+      details: { resource: "roles", payload: { code, name, permissions: requested } },
     });
     return NextResponse.json(row);
   }

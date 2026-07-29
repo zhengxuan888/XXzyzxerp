@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import CrudPage from "@/components/admin/CrudPage";
+import RolePermissionManager from "@/components/admin/RolePermissionManager";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
@@ -12,7 +12,7 @@ export default async function RolesPage() {
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
 
-  const [canRead, canCreate, canDelete] = await Promise.all([
+  const [canRead, canCreate, canUpdate] = await Promise.all([
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
@@ -28,42 +28,23 @@ export default async function RolesPage() {
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
-      actionKey: "role.delete",
+      actionKey: "role.update",
       targetBusinessUnitId: membership.businessUnitId,
     }),
   ]);
   if (!canRead.allowed) redirect("/admin");
 
-  const rows = await prisma.role.findMany({
-      orderBy: { createdAt: "desc" },
-      include: { rolePermissions: { include: { action: true } } },
-    });
+  const [rows, actions] = await Promise.all([
+    prisma.role.findMany({ orderBy: { createdAt: "desc" }, include: { rolePermissions: { where: { isAllowed: true } } } }),
+    prisma.action.findMany({ orderBy: [{ namespace: "asc" }, { key: "asc" }] }),
+  ]);
 
   return (
-    <CrudPage
-      resource="roles"
-      listTitle="Roles"
+    <RolePermissionManager
       canCreate={canCreate.allowed}
-      canDelete={canDelete.allowed}
-      rows={rows}
-      createFields={[
-        { key: "code", label: "Code", required: true },
-        { key: "name", label: "Name", required: true },
-        { key: "description", label: "Description" },
-      ]}
-      dataColumns={[
-        { key: "code", label: "Code" },
-        { key: "name", label: "Name" },
-        { key: "description", label: "Description" },
-        {
-          key: "rolePermissions",
-          label: "Permissions",
-          render: (row) => {
-            const permissions = row.rolePermissions as Array<unknown> | undefined;
-            return `${permissions?.length ?? 0}`;
-          },
-        },
-      ]}
+      canUpdate={canUpdate.allowed}
+      roles={rows.map((role) => ({ id: role.id, code: role.code, name: role.name, description: role.description, isSystem: role.isSystem, permissions: role.rolePermissions.map((permission) => ({ actionKey: permission.actionKey, scope: permission.scope })) }))}
+      actions={actions.map((action) => ({ key: action.key, name: action.name, namespace: action.namespace, defaultScope: "BUSINESS_UNIT" }))}
     />
   );
 }
