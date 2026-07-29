@@ -36,13 +36,19 @@ export async function POST(request: NextRequest) {
   if (!permission.allowed) return fail("FORBIDDEN", "没有管理订单模板的权限。", 403);
 
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
-  const code = typeof body?.code === "string" ? body.code.trim().toUpperCase() : "";
+  const code = typeof body?.code === "string" ? body.code.trim().toLocaleUpperCase("en-US") : "";
   const name = typeof body?.name === "string" ? body.name.trim() : "";
-  if (!/^[A-Z0-9_-]{2,40}$/.test(code) || !name || name.length > 80) {
-    return fail("INVALID_TEMPLATE", "模板编码或名称不正确。", 400);
-  }
+  if (!code) return fail("TEMPLATE_CODE_REQUIRED", "请填写模板编码。", 400);
+  if (!/^[\p{L}\p{N}_-]{2,40}$/u.test(code)) return fail("TEMPLATE_CODE_INVALID", "模板编码需为 2–40 个中英文字母、数字、下划线或短横线，不能包含空格。", 400);
+  if (!name) return fail("TEMPLATE_NAME_REQUIRED", "请填写模板名称。", 400);
+  if (name.length > 80) return fail("TEMPLATE_NAME_TOO_LONG", "模板名称不能超过 80 个字符。", 400);
   const configuration = parseOrderTemplateConfiguration(body?.configuration);
   const isDefault = body?.isDefault === true;
+  const existing = await prisma.orderTemplate.findUnique({
+    where: { businessUnitId_code: { businessUnitId: auth.membership.businessUnitId, code } },
+    select: { id: true },
+  });
+  if (existing) return fail("TEMPLATE_CODE_CONFLICT", `模板编码“${code}”已存在，请更换编码。`, 409);
   const created = await prisma.$transaction(async (tx) => {
     if (isDefault) {
       await tx.orderTemplate.updateMany({

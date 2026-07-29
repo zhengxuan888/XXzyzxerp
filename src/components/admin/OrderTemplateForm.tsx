@@ -9,12 +9,17 @@ export default function OrderTemplateForm({ canManage }: { canManage: boolean })
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSaving(true);
     setError("");
     const data = new FormData(event.currentTarget);
+    const code = String(data.get("code") || "").trim();
+    const name = String(data.get("name") || "").trim();
+    if (!code) { setError("请填写模板编码。"); return; }
+    if (!/^[\p{L}\p{N}_-]{2,40}$/u.test(code)) { setError("模板编码需为 2–40 个中英文字母、数字、下划线或短横线，不能包含空格。"); return; }
+    if (!name) { setError("请填写模板名称。"); return; }
+    setSaving(true);
     const payload = {
-      code: data.get("code"),
-      name: data.get("name"),
+      code,
+      name,
       description: data.get("description"),
       isDefault: data.get("isDefault") === "on",
       configuration: {
@@ -61,11 +66,12 @@ export default function OrderTemplateForm({ canManage }: { canManage: boolean })
     <form onSubmit={submit} className="grid gap-3 rounded-xl border border-gray-200 bg-white p-4 md:grid-cols-3">
       <label className="grid gap-1 text-sm">
         模板编码
-        <input name="code" required placeholder="例如：GERMANY_COD" className={input} />
+        <input name="code" required maxLength={40} placeholder="例如：通用_COD 或 GERMANY_COD" className={input} />
+        <span className="text-xs text-gray-500">支持中文、英文、数字、下划线和短横线，不允许空格。</span>
       </label>
       <label className="grid gap-1 text-sm">
         模板名称
-        <input name="name" required placeholder="例如：德国 COD 订单" className={input} />
+        <input name="name" required maxLength={80} placeholder="例如：德国 COD 订单" className={input} />
       </label>
       <label className="grid gap-1 text-sm">
         默认币种
