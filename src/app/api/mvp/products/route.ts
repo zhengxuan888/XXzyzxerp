@@ -58,14 +58,35 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "code and name are required." }, { status: 400 });
   }
 
+  const code = body.code.trim();
+  const name = body.name.trim();
+  if (!code || !name) {
+    return NextResponse.json({ error: "商品编码和商品名称不能为空。" }, { status: 400 });
+  }
+  const duplicateProduct = await prisma.product.findFirst({
+    where: { businessUnitId: targetBusinessUnitId, code },
+    select: { id: true },
+  });
+  if (duplicateProduct) {
+    return NextResponse.json({ error: "当前业务板块已存在相同商品编码。" }, { status: 409 });
+  }
+
   type SkuInput = { code?: unknown; barcode?: unknown };
   const skusInput = Array.isArray(body.skus) ? (body.skus as SkuInput[]) : [];
+  const skuCodes = skusInput
+    .filter((sku): sku is SkuInput => sku !== null && typeof sku === "object")
+    .map((sku) => String(sku.code || "").trim())
+    .filter(Boolean);
+  if (new Set(skuCodes).size !== skuCodes.length) {
+    return NextResponse.json({ error: "同一商品内不能填写重复的 SKU 编码。" }, { status: 409 });
+  }
+
   const product = await prisma.product.create({
     data: {
       legalEntityId: auth.membership.legalEntityId,
       businessUnitId: targetBusinessUnitId,
-      code: String(body.code).trim(),
-      name: String(body.name).trim(),
+      code,
+      name,
       description: typeof body.description === "string" ? body.description : null,
       category: typeof body.category === "string" ? body.category : null,
       unit: typeof body.unit === "string" ? body.unit : null,
@@ -74,7 +95,7 @@ export async function POST(request: NextRequest) {
         create: skusInput
           .filter((sku): sku is SkuInput => sku !== null && typeof sku === "object")
           .map((sku: SkuInput) => ({
-            code: String((sku.code as unknown) || ""),
+            code: String((sku.code as unknown) || "").trim(),
             barcode: typeof sku.barcode === "string" ? sku.barcode : null,
             attributes: undefined,
             isActive: true,

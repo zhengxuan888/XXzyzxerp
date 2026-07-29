@@ -24,14 +24,18 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
   }
 
   const body = await request.json().catch(() => null);
-  if (!body || typeof body.code !== "string") {
+  if (!body || typeof body.code !== "string" || !body.code.trim()) {
     return NextResponse.json({ error: "sku code is required." }, { status: 400 });
+  }
+  const code = body.code.trim();
+  if (await prisma.productSku.findUnique({ where: { productId_code: { productId: id, code } }, select: { id: true } })) {
+    return NextResponse.json({ error: "SKU 编码已存在。" }, { status: 409 });
   }
 
   const row = await prisma.productSku.create({
     data: {
       productId: id,
-      code: String(body.code).trim(),
+      code,
       barcode: typeof body.barcode === "string" ? body.barcode : null,
       attributes: typeof body.attributes === "object" && body.attributes !== null ? body.attributes : null,
       isActive: body.isActive !== false,

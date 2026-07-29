@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import AttachmentPanel from "@/components/admin/AttachmentPanel";
+import ProductSkuManager from "@/components/admin/ProductSkuManager";
 import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
 import { checkPermission } from "@/lib/permission";
@@ -12,8 +13,8 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
   const { id } = await params;
-  const [read, upload, remove] = await Promise.all(
-    ["attachment.read", "attachment.create", "attachment.delete"].map((actionKey) =>
+  const [productRead, attachmentRead, upload, remove, skuCreate, skuUpdate] = await Promise.all(
+    ["product.read", "attachment.read", "attachment.create", "attachment.delete", "sku.create", "sku.update"].map((actionKey) =>
       checkPermission({
         userId: session.userId,
         membershipId: membership.id,
@@ -27,7 +28,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     where: { id, businessUnitId: membership.businessUnitId, isActive: true },
     include: { skus: true },
   });
-  if (!product || !read.allowed) notFound();
+  if (!product || !productRead.allowed) notFound();
   return (
     <main className="space-y-5">
       <Link href="/admin/products" className="text-sm font-semibold text-violet-700">← 返回商品管理</Link>
@@ -36,7 +37,8 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         <h1 className="mt-2 text-2xl font-black text-slate-950">{product.name}</h1>
         <p className="mt-1 text-sm text-slate-500">{product.code} · {product.category ?? "未分类"} · {product.skus.length} 个 SKU</p>
       </header>
-      <AttachmentPanel targetType="PRODUCT" targetId={product.id} canUpload={upload.allowed} canDelete={remove.allowed} title="商品图片与资料" />
+      <ProductSkuManager productId={product.id} skus={product.skus.map((sku) => ({ id: sku.id, code: sku.code, barcode: sku.barcode, isActive: sku.isActive }))} canCreate={skuCreate.allowed} canUpdate={skuUpdate.allowed} />
+      {attachmentRead.allowed && <AttachmentPanel targetType="PRODUCT" targetId={product.id} canUpload={upload.allowed} canDelete={remove.allowed} title="商品图片与资料" />}
     </main>
   );
 }

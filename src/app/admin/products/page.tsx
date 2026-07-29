@@ -12,7 +12,10 @@ export default async function ProductsPage() {
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
 
-  const [canRead, canCreate, canDelete] = await Promise.all([
+  const [canRead, canCreate, canUpdate, canDelete] = await Promise.all([
+    checkPermission({
+      userId: session.userId, membershipId: membership.id, actionKey: "product.update", targetBusinessUnitId: membership.businessUnitId,
+    }),
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
@@ -35,7 +38,7 @@ export default async function ProductsPage() {
   if (!canRead.allowed) redirect("/admin");
 
   const rows = await prisma.product.findMany({
-    where: { isActive: true, businessUnitId: membership.businessUnitId },
+    where: { businessUnitId: membership.businessUnitId },
     orderBy: { createdAt: "desc" },
     include: { skus: true },
   });
@@ -47,7 +50,9 @@ export default async function ProductsPage() {
       listTitle="Products"
       detailPath="/admin/products"
       canCreate={canCreate.allowed}
+      canUpdate={canUpdate.allowed}
       canDelete={canDelete.allowed}
+      deleteConfirmation="确定停用该商品吗？历史订单、库存和物流记录不会删除。"
       rows={rows}
       createFields={[
         { key: "code", label: "Product Code", required: true },
@@ -55,6 +60,7 @@ export default async function ProductsPage() {
         { key: "description", label: "Description" },
         { key: "category", label: "Category" },
         { key: "unit", label: "Unit" },
+        { key: "isActive", label: "启用商品", type: "checkbox" },
       ]}
       dataColumns={[
         { key: "code", label: "Code" },
@@ -62,6 +68,7 @@ export default async function ProductsPage() {
         { key: "category", label: "Category" },
         { key: "unit", label: "Unit" },
         { key: "description", label: "Description" },
+        { key: "isActive", label: "状态", render: (row) => row.isActive ? "启用" : "停用" },
       ]}
     />
   );
