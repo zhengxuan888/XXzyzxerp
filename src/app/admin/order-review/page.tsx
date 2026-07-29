@@ -1,31 +1,193 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import CrudPage from "@/components/admin/CrudPage";
-import { getActiveMembershipById } from "@/lib/auth";
+
 import { formatMoneyCents } from "@/lib/money";
+import { getActiveMembershipById } from "@/lib/auth";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookie } from "@/lib/session";
 
-const tabs = [{ key: "ALL", label: "全部" }, { key: "SUBMITTED", label: "待核单" }, { key: "REVIEWING", label: "审核中" }, { key: "REPEAT", label: "复购" }, { key: "DUPLICATE", label: "重单" }];
+const tabs = [
+  { key: "ALL", label: "全部" },
+  { key: "PENDING", label: "待核单" },
+  { key: "REVIEWING", label: "审核中" },
+  { key: "REPEAT", label: "复购" },
+  { key: "DUPLICATE", label: "重单" },
+] as const;
+type TabKey = (typeof tabs)[number]["key"];
 
-export default async function OrderReviewWorkbenchPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+type Params = {
+  tab?: string;
+  search?: string;
+  employee?: string;
+  product?: string;
+  country?: string;
+  start?: string;
+  end?: string;
+  page?: string;
+  pageSize?: string;
+};
+
+function validDate(value?: string) {
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00.000Z`) : null;
+}
+
+function duplicateKey(order: { recipientEmail: string | null; recipientPhone: string | null; customerWhatsapp: string | null; recipientCountryCode: string | null }) {
+  const contact = (order.recipientEmail || order.customerWhatsapp || order.recipientPhone || "").trim().toLowerCase().replace(/\s+/g, "");
+  return contact ? `${order.recipientCountryCode || "?"}:${contact}` : "";
+}
+
+export default async function OrderReviewWorkbenchPage({ searchParams }: { searchParams: Promise<Params> }) {
   const session = await getSessionFromCookie();
   if (!session?.activeMembershipId) redirect("/login");
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
-  const permission = await checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "order.review", targetBusinessUnitId: membership.businessUnitId });
+  const permission = await checkPermission({
+    userId: session.userId,
+    membershipId: membership.id,
+    actionKey: "order.review",
+    targetBusinessUnitId: membership.businessUnitId,
+  });
   if (!permission.allowed) redirect("/admin");
+
   const params = await searchParams;
-  const tab = params.tab && tabs.some((item) => item.key === params.tab) ? params.tab : "SUBMITTED";
-  const base = { businessUnitId: membership.businessUnitId };
-  const statuses = tab === "ALL" ? undefined : tab === "SUBMITTED" || tab === "REVIEWING" ? { status: "SUBMITTED" as const } : undefined;
-  const where = { ...base, ...(statuses ?? {}) };
-  const [rows, grouped] = await Promise.all([
-    prisma.order.findMany({ where, include: { customer: { select: { name: true } }, creatorUser: { select: { username: true } } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: 50 }),
-    prisma.order.groupBy({ by: ["status"], where: base, _count: { _all: true } }),
+  const tab = (tabs.some((item) => item.key === params.tab) ? params.tab : "PENDING") as TabKey;
+  const search = params.search?.trim() || "";
+  const employee = params.employee?.trim() || "";
+  const product = params.product?.trim() || "";
+  const country = params.country?.trim().toUpperCase() || "";
+  const start = validDate(params.start);
+  const end = validDate(params.end);
+  const endExclusive = end ? new Date(end.getTime() + 86_400_000) : null;
+  const page = Math.max(1, Number(params.page) || 1);
+  const pageSize = [10, 20, 50, 100].includes(Number(params.pageSize)) ? Number(params.pageSize) : 20;
+
+  const where = {
+    businessUnitId: membership.businessUnitId,
+    status: "SUBMITTED" as const,
+    ...(employee ? { creatorUserId: employee } : {}),
+    ...(country ? { recipientCountryCode: country } : {}),
+    ...(product ? { items: { some: { productName: { contains: product, mode: "insensitive" as const } } } } : {}),
+    ...(search ? { OR: [
+      { orderNo: { contains: search, mode: "insensitive" as const } },
+      { recipientName: { contains: search, mode: "insensitive" as const } },
+      { recipientEmail: { contains: search, mode: "insensitive" as const } },
+      { recipientPhone: { contains: search, mode: "insensitive" as const } },
+      { customerWhatsapp: { contains: search, mode: "insensitive" as const } },
+    ] } : {}),
+    ...((start || endExclusive) ? { createdAt: { ...(start ? { gte: start } : {}), ...(endExclusive ? { lt: endExclusive } : {}) } } : {}),
+  };
+
+  const [candidateRows, employees, countries, customerCounts] = await Promise.all([
+    prisma.order.findMany({
+      where,
+      include: {
+        customer: { select: { id: true, name: true } },
+        creatorUser: { select: { id: true, username: true, fullName: true } },
+        reviewClaimedBy: { include: { user: { select: { fullName: true, username: true } } } },
+        items: { select: { productName: true, quantity: true } },
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: 10_000,
+    }),
+    prisma.user.findMany({
+      where: { memberships: { some: { businessUnitId: membership.businessUnitId, isActive: true } } },
+      select: { id: true, username: true, fullName: true },
+      orderBy: { fullName: "asc" },
+    }),
+    prisma.country.findMany({ where: { isActive: true }, select: { code: true, name: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+    prisma.order.groupBy({
+      by: ["customerId"],
+      where: { businessUnitId: membership.businessUnitId, status: { notIn: ["DRAFT", "CANCELLED"] } },
+      _count: { _all: true },
+    }),
   ]);
-  const submittedCount = grouped.find((item) => item.status === "SUBMITTED")?._count._all ?? 0;
-  const countFor = (key: string) => key === "ALL" ? grouped.reduce((sum, item) => sum + item._count._all, 0) : key === "SUBMITTED" || key === "REVIEWING" ? submittedCount : 0;
-  return <div className="space-y-6"><header><h1 className="text-2xl font-bold text-slate-950">核单工作台</h1><p className="mt-1 text-sm text-slate-500">快捷筛选订单状态，选择订单进入详情并完成核单。</p></header><nav className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">{tabs.map((item) => <Link key={item.key} href={`/admin/order-review?tab=${item.key}`} className={`rounded-xl px-4 py-2 text-sm font-semibold ${tab === item.key ? "bg-violet-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}>{item.label} <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">{countFor(item.key)}</span></Link>)}</nav><CrudPage apiBase="/api/mvp" resource="orders" listTitle="待核单订单" detailPath="/admin/orders" showCreate={false} canCreate={false} canDelete={false} rows={rows} createFields={[]} dataColumns={[{ key: "orderNo", label: "订单号" }, { key: "creator", label: "录单员工", render: (row) => (row.creatorUser as { username?: string })?.username ?? "-" }, { key: "customer", label: "客户", render: (row) => (row.customer as { name?: string })?.name ?? "-" }, { key: "amount", label: "COD金额", render: (row) => formatMoneyCents(Number(row.codAmountCents ?? 0), String(row.currency ?? "CNY")) }, { key: "createdAt", label: "提交时间", render: (row) => new Date(String(row.createdAt)).toLocaleString("zh-CN") }]} /></div>;
+
+  const repeatCustomers = new Set(customerCounts.filter((item) => item._count._all > 1).map((item) => item.customerId));
+  const duplicateCounts = new Map<string, number>();
+  candidateRows.forEach((order) => {
+    const key = duplicateKey(order);
+    if (key) duplicateCounts.set(key, (duplicateCounts.get(key) ?? 0) + 1);
+  });
+  const isDuplicate = (order: (typeof candidateRows)[number]) => {
+    const key = duplicateKey(order);
+    return Boolean(key && (duplicateCounts.get(key) ?? 0) > 1);
+  };
+  const classified = {
+    ALL: candidateRows,
+    PENDING: candidateRows.filter((order) => !order.reviewClaimedByMembershipId),
+    REVIEWING: candidateRows.filter((order) => Boolean(order.reviewClaimedByMembershipId)),
+    REPEAT: candidateRows.filter((order) => repeatCustomers.has(order.customerId)),
+    DUPLICATE: candidateRows.filter(isDuplicate),
+  };
+  const selected = classified[tab];
+  const totalPages = Math.max(1, Math.ceil(selected.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const rows = selected.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  const query = (overrides: Partial<Params>) => {
+    const next = new URLSearchParams({
+      tab,
+      search,
+      employee,
+      product,
+      country,
+      start: params.start || "",
+      end: params.end || "",
+      page: String(safePage),
+      pageSize: String(pageSize),
+      ...Object.fromEntries(Object.entries(overrides).map(([key, value]) => [key, value ?? ""])),
+    });
+    return `/admin/order-review?${next}`;
+  };
+
+  return (
+    <div className="space-y-5">
+      <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <p className="text-xs font-semibold text-amber-700">销售与订单</p>
+        <h1 className="mt-1 text-2xl font-bold text-slate-950">核单工作台</h1>
+        <p className="mt-1 text-sm text-slate-500">领取后进入审核中；复购和重单由真实历史订单与客户联系方式自动识别。</p>
+      </header>
+
+      <nav className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+        {tabs.map((item) => <Link key={item.key} href={query({ tab: item.key, page: "1" })} className={`rounded-xl px-4 py-2 text-sm font-semibold ${tab === item.key ? "bg-amber-600 text-white" : "text-slate-600 hover:bg-amber-50"}`}>{item.label}<span className={`ml-2 rounded-full px-2 py-0.5 text-xs ${tab === item.key ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"}`}>{classified[item.key].length}</span></Link>)}
+      </nav>
+
+      <form method="get" className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-4 xl:grid-cols-8">
+        <input type="hidden" name="tab" value={tab} />
+        <input name="search" defaultValue={search} placeholder="订单号、客户、邮箱、电话、WhatsApp" className="h-10 rounded-xl border border-slate-200 px-3 text-sm lg:col-span-2" />
+        <select name="employee" defaultValue={employee} className="h-10 rounded-xl border border-slate-200 px-3 text-sm"><option value="">全部录单员工</option>{employees.map((item) => <option key={item.id} value={item.id}>{item.fullName || item.username}</option>)}</select>
+        <input name="product" defaultValue={product} placeholder="产品名称" className="h-10 rounded-xl border border-slate-200 px-3 text-sm" />
+        <select name="country" defaultValue={country} className="h-10 rounded-xl border border-slate-200 px-3 text-sm"><option value="">全部目的地</option>{countries.map((item) => <option key={item.code} value={item.code}>{item.name} ({item.code})</option>)}</select>
+        <input type="date" name="start" defaultValue={params.start || ""} aria-label="开始日期" className="h-10 rounded-xl border border-slate-200 px-3 text-sm" />
+        <input type="date" name="end" defaultValue={params.end || ""} aria-label="结束日期" className="h-10 rounded-xl border border-slate-200 px-3 text-sm" />
+        <button className="h-10 rounded-xl bg-amber-600 px-4 text-sm font-semibold text-white hover:bg-amber-700">筛选</button>
+      </form>
+
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1180px] text-left text-sm">
+            <thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-4 py-3">订单号</th><th className="px-4 py-3">状态</th><th className="px-4 py-3">录单人</th><th className="px-4 py-3">收件人</th><th className="px-4 py-3">商品</th><th className="px-4 py-3">国家</th><th className="px-4 py-3">COD</th><th className="px-4 py-3">提交时间</th><th className="px-4 py-3">操作</th></tr></thead>
+            <tbody>{rows.map((order) => <tr key={order.id} className="border-t border-slate-100">
+              <td className="px-4 py-3 font-semibold text-amber-800">{order.orderNo}</td>
+              <td className="px-4 py-3">{order.reviewClaimedBy ? <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">审核中 · {order.reviewClaimedBy.user.fullName || order.reviewClaimedBy.user.username}</span> : <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">待核单</span>}</td>
+              <td className="px-4 py-3">{order.creatorUser.fullName || order.creatorUser.username}</td>
+              <td className="px-4 py-3"><p>{order.recipientName || order.customer.name}</p><p className="text-xs text-slate-400">{order.recipientEmail || order.customerWhatsapp || order.recipientPhone || "-"}</p></td>
+              <td className="px-4 py-3">{order.items.map((item) => `${item.productName} × ${item.quantity}`).join("、") || "-"}</td>
+              <td className="px-4 py-3">{order.recipientCountryCode || "-"}</td>
+              <td className="px-4 py-3 font-semibold">{formatMoneyCents(order.codAmountCents, order.currency)}</td>
+              <td className="px-4 py-3">{order.createdAt.toLocaleString("zh-CN")}</td>
+              <td className="px-4 py-3"><Link href={`/admin/orders/${order.id}`} className="rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-50">{order.reviewClaimedByMembershipId === membership.id ? "继续审核" : "查看并领取"}</Link></td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+        {!rows.length && <p className="px-4 py-12 text-center text-sm text-slate-400">当前筛选暂无待核单订单</p>}
+        <footer className="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+          <form method="get" className="flex items-center gap-2">{Object.entries({ tab, search, employee, product, country, start: params.start || "", end: params.end || "" }).map(([key, value]) => <input key={key} type="hidden" name={key} value={value} />)}<span>共 {selected.length} 条</span><select name="pageSize" defaultValue={String(pageSize)} className="h-9 rounded-lg border border-slate-200 px-2"><option value="10">10 / 页</option><option value="20">20 / 页</option><option value="50">50 / 页</option><option value="100">100 / 页</option></select><button className="rounded-lg border border-slate-200 px-3 py-2">应用</button></form>
+          <div className="flex items-center gap-2"><span>第 {safePage}/{totalPages} 页</span>{safePage > 1 && <Link className="rounded-lg border border-slate-200 px-3 py-2" href={query({ page: String(safePage - 1) })}>上一页</Link>}{safePage < totalPages && <Link className="rounded-lg border border-slate-200 px-3 py-2" href={query({ page: String(safePage + 1) })}>下一页</Link>}</div>
+        </footer>
+      </section>
+      {candidateRows.length >= 10_000 && <p className="text-xs text-amber-700">当前待核单数据超过 10,000 条，请缩小日期或员工范围。</p>}
+    </div>
+  );
 }
