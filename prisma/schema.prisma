@@ -376,15 +376,16 @@ model Membership {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  legalEntity       LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  businessUnit      BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  department        Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  site              Site?        @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  role              Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
-  managerMembership Membership?  @relation("MembershipHierarchy", fields: [managerMembershipId], references: [id], onDelete: SetNull)
-  directReports     Membership[] @relation("MembershipHierarchy")
-  orders            Order[]      @relation("OrderOwner")
+  user                User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  legalEntity         LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit        BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department          Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  site                Site?        @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  role                Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  managerMembership   Membership?  @relation("MembershipHierarchy", fields: [managerMembershipId], references: [id], onDelete: SetNull)
+  directReports       Membership[] @relation("MembershipHierarchy")
+  orders              Order[]      @relation("OrderOwner")
+  claimedOrderReviews Order[]      @relation("OrderReviewClaim")
 
   grantedAccess  AccessGrant[] @relation("GrantedAccess")
   receivedAccess AccessGrant[] @relation("ReceivedAccess")
@@ -547,46 +548,48 @@ model ProductSku {
 }
 
 model Order {
-  id                    String      @id @default(uuid())
-  legalEntityId         String
-  businessUnitId        String
-  departmentId          String?
-  siteId                String?
-  customerId            String
-  orderNo               String
-  creatorUserId         String
-  ownedByMembershipId   String
-  shopId                String?
-  orderTemplateId       String?
-  status                OrderStatus @default(DRAFT)
-  currency              String      @default("CNY")
-  productValueCents     Int         @default(0)
-  shippingFeeCents      Int         @default(0)
-  codAmountCents        Int         @default(0)
-  paidAmountCents       Int         @default(0)
-  logisticsChannel      String?
-  recipientName         String?
-  recipientPhone        String?
-  recipientEmail        String?
-  emailValidationStatus String?
-  emailValidatedAt      DateTime?
-  recipientCountryCode  String?
-  recipientPostalCode   String?
-  recipientRegion       String?
-  recipientCity         String?
-  recipientAddress      String?
-  packageWeightGrams    Int?
-  paymentMethod         String?
-  customerWhatsapp      String?
-  staffWhatsapp         String?
-  orderedAt             DateTime    @default(now())
-  note                  String?
-  exceptionNote         String?
-  customFields          Json?
-  templateSnapshot      Json?
-  deliveredAt           DateTime?
-  createdAt             DateTime    @default(now())
-  updatedAt             DateTime    @updatedAt
+  id                          String      @id @default(uuid())
+  legalEntityId               String
+  businessUnitId              String
+  departmentId                String?
+  siteId                      String?
+  customerId                  String
+  orderNo                     String
+  creatorUserId               String
+  ownedByMembershipId         String
+  shopId                      String?
+  orderTemplateId             String?
+  status                      OrderStatus @default(DRAFT)
+  currency                    String      @default("CNY")
+  productValueCents           Int         @default(0)
+  shippingFeeCents            Int         @default(0)
+  codAmountCents              Int         @default(0)
+  paidAmountCents             Int         @default(0)
+  logisticsChannel            String?
+  recipientName               String?
+  recipientPhone              String?
+  recipientEmail              String?
+  emailValidationStatus       String?
+  emailValidatedAt            DateTime?
+  recipientCountryCode        String?
+  recipientPostalCode         String?
+  recipientRegion             String?
+  recipientCity               String?
+  recipientAddress            String?
+  packageWeightGrams          Int?
+  paymentMethod               String?
+  customerWhatsapp            String?
+  staffWhatsapp               String?
+  orderedAt                   DateTime    @default(now())
+  note                        String?
+  exceptionNote               String?
+  customFields                Json?
+  templateSnapshot            Json?
+  deliveredAt                 DateTime?
+  reviewClaimedByMembershipId String?
+  reviewClaimedAt             DateTime?
+  createdAt                   DateTime    @default(now())
+  updatedAt                   DateTime    @updatedAt
 
   legalEntity           LegalEntity            @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
   businessUnit          BusinessUnit           @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
@@ -595,6 +598,7 @@ model Order {
   customer              Customer               @relation(fields: [customerId], references: [id], onDelete: Restrict)
   creatorUser           User                   @relation("OrderCreator", fields: [creatorUserId], references: [id], onDelete: Restrict)
   ownerMembership       Membership             @relation("OrderOwner", fields: [ownedByMembershipId], references: [id], onDelete: Restrict)
+  reviewClaimedBy       Membership?            @relation("OrderReviewClaim", fields: [reviewClaimedByMembershipId], references: [id], onDelete: SetNull)
   orderTemplate         OrderTemplate?         @relation(fields: [orderTemplateId], references: [id], onDelete: SetNull)
   items                 OrderItem[]
   shipments             Shipment[]
@@ -607,6 +611,7 @@ model Order {
   @@index([customerId, status])
   @@index([orderTemplateId])
   @@index([businessUnitId, recipientEmail])
+  @@index([businessUnitId, status, reviewClaimedByMembershipId])
 }
 
 model OrderTemplate {

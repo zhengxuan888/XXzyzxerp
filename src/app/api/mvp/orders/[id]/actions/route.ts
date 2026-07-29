@@ -65,6 +65,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     const proofPermission = await checkPermission({ userId: auth.userId, membershipId: auth.membership.id, actionKey: "order.review.proof.upload", targetBusinessUnitId: order.businessUnitId, targetDepartmentId: order.departmentId, targetSiteId: order.siteId });
     if (!proofPermission.allowed) return fail("FORBIDDEN", "当前角色未配置核单凭证权限", 403);
   }
+  if ((action === "approve" || action === "reject") && order.reviewClaimedByMembershipId !== auth.membership.id) {
+    return fail("ORDER_REVIEW_CLAIM_REQUIRED", "请先领取该订单，且只能由领取人完成核单。", 409);
+  }
 
   if (!config.from.includes(order.status) || !canTransitionOrder(order.status, config.to)) {
     return fail(
@@ -235,6 +238,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
           status: config.to,
           note: note || undefined,
           exceptionNote: action === "reject" || action === "void" ? note : undefined,
+          reviewClaimedByMembershipId: action === "approve" || action === "reject" || action === "void" ? null : undefined,
+          reviewClaimedAt: action === "approve" || action === "reject" || action === "void" ? null : undefined,
         },
       });
 

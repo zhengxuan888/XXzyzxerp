@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { format } from "date-fns";
 
 import OrderWorkflowActions from "@/components/admin/OrderWorkflowActions";
+import OrderReviewClaimButton from "@/components/admin/OrderReviewClaimButton";
 import AttachmentPanel from "@/components/admin/AttachmentPanel";
 import { formatMoneyCents } from "@/lib/money";
 import { getSessionFromCookie } from "@/lib/session";
@@ -34,6 +35,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       orderTemplate: { select: { code: true, name: true } },
       items: { include: { product: { select: { code: true, name: true } } } },
       shipments: { include: { events: true } },
+      reviewClaimedBy: { include: { user: { select: { fullName: true, username: true } } } },
     },
   });
   if (!order) notFound();
@@ -135,6 +137,15 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           </ul>
         </section>
 
+        {order.status === "SUBMITTED" && canReview.allowed && (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <OrderReviewClaimButton
+              orderId={order.id}
+              claimedByMe={order.reviewClaimedByMembershipId === membership.id}
+              claimedByName={order.reviewClaimedBy?.user.fullName ?? order.reviewClaimedBy?.user.username}
+            />
+          </div>
+        )}
         <OrderWorkflowActions
           orderId={order.id}
           currentStatus={order.status}
@@ -161,7 +172,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <AttachmentPanel
           targetType="ORDER_REVIEW"
           targetId={order.id}
-          canUpload
+          canUpload={order.reviewClaimedByMembershipId === membership.id}
           canDelete={canDeleteAttachments.allowed}
           title="核单凭证（审核通过前必传，由当前审核人员上传）"
         />
