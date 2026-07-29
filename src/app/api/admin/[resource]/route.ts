@@ -565,10 +565,19 @@ export async function POST(request: NextRequest, props: RouteParams) {
     }
 
     const requestedScope = parsePermissionScope(body.scope);
-    const grantee = await prisma.membership.findFirst({
+    const [grantee, department, site] = await Promise.all([
+      prisma.membership.findFirst({
       where: { id: body.granteeMembershipId, isActive: true, OR: [{ endedAt: null }, { endedAt: { gt: new Date() } }] },
-    });
-    if (!grantee) return invalidBody("grantee membership is not active.");
+      }),
+      typeof body.departmentId === "string" && body.departmentId
+        ? prisma.department.findFirst({ where: { id: body.departmentId, businessUnitId: body.businessUnitId, isActive: true } })
+        : null,
+      typeof body.siteId === "string" && body.siteId
+        ? prisma.site.findFirst({ where: { id: body.siteId, businessUnitId: body.businessUnitId, isActive: true } })
+        : null,
+    ]);
+    if (!grantee || grantee.businessUnitId !== body.businessUnitId) return invalidBody("grantee membership is not active in target business unit.");
+    if ((body.departmentId && !department) || (body.siteId && !site)) return invalidBody("grant department or site is outside target business unit.");
     let expiresAt: Date | null = null;
     if (typeof body.expiresAt === "string") {
       expiresAt = new Date(body.expiresAt);

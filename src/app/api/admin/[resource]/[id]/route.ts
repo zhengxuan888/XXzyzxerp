@@ -202,6 +202,58 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ res
     return NextResponse.json(row);
   }
 
+  if (params.resource === "access-grants") {
+    const grantBody = await request.json().catch(() => null) as Record<string, unknown> | null;
+    const current = await prisma.accessGrant.findUnique({ where: { id: params.id } });
+    if (!current) return buildResponseNotFound();
+    if (!grantBody) return invalidBody("授权内容不能为空。");
+    if ((typeof grantBody.granteeMembershipId === "string" && grantBody.granteeMembershipId !== current.granteeMembershipId) ||
+        (typeof grantBody.actionKey === "string" && grantBody.actionKey !== current.actionKey) ||
+        (typeof grantBody.businessUnitId === "string" && grantBody.businessUnitId !== current.businessUnitId)) {
+      return invalidBody("员工、动作和业务板块不能直接修改；请撤销后重新授权。");
+    }
+    const canUpdateGrant = await checkPermission({
+      userId: auth.userId,
+      membershipId: auth.membership.id,
+      actionKey: "access_grant.update",
+      targetBusinessUnitId: current.businessUnitId,
+      targetDepartmentId: current.departmentId,
+      targetSiteId: current.siteId,
+    });
+    if (!canUpdateGrant.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: canUpdateGrant.reasons }, { status: 403 });
+    const scope = normalizeScope(typeof grantBody.scope === "string" ? grantBody.scope : current.scope);
+    if (scope === "NONE") return invalidBody("授权范围无效。");
+    const departmentId = typeof grantBody.departmentId === "string" && grantBody.departmentId ? grantBody.departmentId : null;
+    const siteId = typeof grantBody.siteId === "string" && grantBody.siteId ? grantBody.siteId : null;
+    const [department, site] = await Promise.all([
+      departmentId ? prisma.department.findFirst({ where: { id: departmentId, businessUnitId: current.businessUnitId, isActive: true } }) : null,
+      siteId ? prisma.site.findFirst({ where: { id: siteId, businessUnitId: current.businessUnitId, isActive: true } }) : null,
+    ]);
+    if ((departmentId && !department) || (siteId && !site)) return invalidBody("部门或站点不属于授权业务板块。");
+    const delegation = await assertGrantRule({
+      actorMembershipId: auth.membership.id,
+      actorUserId: auth.userId,
+      actionKey: current.actionKey,
+      requestedScope: scope,
+      target: { businessUnitId: current.businessUnitId, departmentId, siteId },
+    });
+    if (!delegation.allowed) return NextResponse.json({ error: "GRANT_EXCEEDS_AUTHORITY", reasons: delegation.reasons }, { status: 403 });
+    let expiresAt = current.expiresAt;
+    if (typeof grantBody.expiresAt === "string") {
+      expiresAt = grantBody.expiresAt.trim() ? new Date(grantBody.expiresAt) : null;
+      if (expiresAt && (Number.isNaN(expiresAt.getTime()) || expiresAt <= new Date())) return invalidBody("到期时间必须是未来的有效时间。");
+    }
+    const reason = typeof grantBody.reason === "string" ? grantBody.reason.trim() : current.reason;
+    if (!reason) return invalidBody("授权原因不能为空。");
+    const isActive = grantBody.isActive === true;
+    const row = await prisma.accessGrant.update({
+      where: { id: current.id },
+      data: { scope, departmentId, siteId, reason, expiresAt, isActive, revokedAt: isActive ? null : new Date() },
+    });
+    await writeAuditLog({ actorUserId: auth.userId, actorMembershipId: auth.membership.id, module: "admin.access-grants", action: isActive ? "access_grant.update" : "access_grant.revoke", targetType: "access_grant", targetId: row.id, businessUnitId: row.businessUnitId, roleId: auth.membership.roleId, details: { previous: current, next: row } });
+    return NextResponse.json(row);
+  }
+
   if (params.resource === "roles") {
     const canUpdateRole = await checkPermission({
       userId: auth.userId,

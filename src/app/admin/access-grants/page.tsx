@@ -19,7 +19,13 @@ export default async function AccessGrantsPage() {
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
 
-  const [canRead, canCreate, canDelete] = await Promise.all([
+  const [canRead, canCreate, canUpdate, canDelete] = await Promise.all([
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "access_grant.update",
+      targetBusinessUnitId: membership.businessUnitId,
+    }),
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
@@ -41,17 +47,22 @@ export default async function AccessGrantsPage() {
   ]);
   if (!canRead.allowed) redirect("/admin");
 
-  const [rows, actions, memberships] = await Promise.all([
+  const canSeeAll = canRead.reasons.includes("SCOPE_ALL");
+  const [rows, actions, memberships, businessUnits, departments, sites] = await Promise.all([
     prisma.accessGrant.findMany({
+      where: canSeeAll ? {} : { businessUnitId: membership.businessUnitId },
       orderBy: { grantedAt: "desc" },
-      include: { action: true, granteeMembership: { include: { user: true, businessUnit: true, role: true } } },
+      include: { action: true, granteeMembership: { include: { user: true, businessUnit: true, role: true } }, granterMembership: { include: { user: true } } },
     }),
     prisma.action.findMany({ orderBy: { key: "asc" } }),
     prisma.membership.findMany({
-      where: { isActive: true },
+      where: { isActive: true, ...(canSeeAll ? {} : { businessUnitId: membership.businessUnitId }) },
       include: { user: true, businessUnit: true, role: true },
       orderBy: { createdAt: "desc" },
     }),
+    prisma.businessUnit.findMany({ where: canSeeAll ? {} : { id: membership.businessUnitId }, orderBy: { name: "asc" } }),
+    prisma.department.findMany({ where: canSeeAll ? {} : { businessUnitId: membership.businessUnitId }, orderBy: { name: "asc" } }),
+    prisma.site.findMany({ where: canSeeAll ? {} : { businessUnitId: membership.businessUnitId }, orderBy: { name: "asc" } }),
   ]);
 
   const actionOptions = actions.map((action) => ({ value: action.key, label: action.key }));
@@ -65,7 +76,9 @@ export default async function AccessGrantsPage() {
       resource="access-grants"
       listTitle="Access Grants"
       canCreate={canCreate.allowed}
+      canUpdate={canUpdate.allowed}
       canDelete={canDelete.allowed}
+      deleteConfirmation="确定撤销这条额外授权吗？撤销后菜单和 API 权限会立即失效。"
       rows={rows}
       createFields={[
         {
@@ -84,9 +97,10 @@ export default async function AccessGrantsPage() {
         },
         {
           key: "businessUnitId",
-          label: "Business Unit ID",
+          label: "业务板块",
           required: true,
-          type: "text",
+          type: "select",
+          options: businessUnits.map((unit) => ({ value: unit.id, label: unit.name })),
         },
         {
           key: "scope",
@@ -97,14 +111,17 @@ export default async function AccessGrantsPage() {
         },
         {
           key: "departmentId",
-          label: "Department ID (optional)",
-          type: "text",
+          label: "部门（可选）",
+          type: "select",
+          options: departments.map((department) => ({ value: department.id, label: department.name })),
         },
         {
           key: "siteId",
-          label: "Site ID (optional)",
-          type: "text",
+          label: "站点（可选）",
+          type: "select",
+          options: sites.map((site) => ({ value: site.id, label: site.name })),
         },
+        { key: "isActive", label: "启用授权", type: "checkbox" },
         {
           key: "reason",
           label: "Reason",
@@ -135,6 +152,12 @@ export default async function AccessGrantsPage() {
         { key: "scope", label: "Scope" },
         { key: "businessUnitId", label: "Business Unit ID" },
         { key: "reason", label: "Reason" },
+        { key: "expiresAt", label: "到期时间", render: (row) => row.expiresAt instanceof Date ? row.expiresAt.toLocaleString("zh-CN") : "长期有效" },
+        { key: "isActive", label: "状态", render: (row) => {
+          if (!row.isActive || row.revokedAt) return "已撤销";
+          if (row.expiresAt instanceof Date && row.expiresAt <= new Date()) return "已到期";
+          return "有效";
+        } },
       ]}
     />
   );

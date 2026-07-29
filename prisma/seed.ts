@@ -46,6 +46,7 @@ const actionDefs: SeedAction[] = [
   { key: "menu.delete", name: "Menu delete", namespace: "erp", scope: "ALL" },
   { key: "access_grant.read", name: "Access grant read", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "access_grant.create", name: "Access grant create", namespace: "erp", scope: "BUSINESS_UNIT" },
+  { key: "access_grant.update", name: "Access grant update", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "access_grant.delete", name: "Access grant delete", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "delegation.manage", name: "Delegation manage", namespace: "erp", scope: "ALL" },
 
@@ -609,6 +610,7 @@ async function main() {
     "menu.update",
     "access_grant.read",
     "access_grant.create",
+    "access_grant.update",
     "access_grant.delete",
     "delegation.manage",
     "customer.read",
