@@ -3,28 +3,27 @@
 import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Mail, MessageCircle, Package, Save, Search, Truck } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import type { LogisticsQueueKey, LogisticsWorkbenchConfig } from "@/lib/logistics-workbench-config";
 
 type Annotation = { note: string | null; tags: string[]; isHandled: boolean; handledAt: string | null; handledByMembership?: { user?: { fullName: string | null; username: string } } | null };
 type TrackingEvent = { id: string; occurredAt: string; eventType: string; statusMilestone: string | null; location: string | null; memo: string | null; annotation: Annotation | null };
 type TrackingRow = { id: string; trackingNo: string | null; carrier: string | null; status: string; urgency: "critical" | "high" | "normal"; urgencyLabel: string; priorityTag: string; dueStatus: string; canViewTrackingNo: boolean; canViewTimeline: boolean; canAnnotate: boolean; order: { id: string; orderNo: string; recipientName: string | null; recipientPhone: string | null; recipientEmail: string | null; customerWhatsapp: string | null; codAmountLabel: string; customer: { name: string }; creatorUser: { username: string; fullName: string | null }; items: Array<{ productName: string; quantity: number }> }; events: TrackingEvent[] };
-const QUICK_TAGS = ["已通知客户", "无人接听", "等待客户回复", "地址已确认", "需再次跟进"];
-
-type QueueFilter = "all" | "critical" | "high" | "normal" | "unhandled";
-
 export default function LogisticsTrackingWorkbench({
   rows,
+  config,
   canViewTrackingNo,
   canViewTimeline,
   canAnnotate,
 }: {
   rows: TrackingRow[];
+  config: LogisticsWorkbenchConfig;
   canViewTrackingNo: boolean;
   canViewTimeline: boolean;
   canAnnotate: boolean;
 }) {
   const [keyword, setKeyword] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [queue, setQueue] = useState<QueueFilter>("all");
+  const [queue, setQueue] = useState<LogisticsQueueKey>("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const visibleRows = useMemo(() => {
@@ -41,13 +40,9 @@ export default function LogisticsTrackingWorkbench({
   const pageCount = Math.max(1, Math.ceil(visibleRows.length / pageSize));
   const safePage = Math.min(page, pageCount);
   const pagedRows = visibleRows.slice((safePage - 1) * pageSize, safePage * pageSize);
-  const queueCards: Array<{ key: QueueFilter; label: string; count: number; tone: string }> = [
-    { key: "all", label: "全部追踪", count: rows.length, tone: "border-slate-200 bg-white text-slate-900" },
-    { key: "critical", label: "超期高风险", count: rows.filter((row) => row.urgency === "critical").length, tone: "border-rose-200 bg-rose-50 text-rose-900" },
-    { key: "high", label: "需立即跟进", count: rows.filter((row) => row.urgency === "high").length, tone: "border-amber-200 bg-amber-50 text-amber-900" },
-    { key: "normal", label: "正常运输", count: rows.filter((row) => row.urgency === "normal").length, tone: "border-emerald-200 bg-emerald-50 text-emerald-900" },
-    { key: "unhandled", label: "存在未处理轨迹", count: rows.filter((row) => row.events.some((event) => !event.annotation?.isHandled)).length, tone: "border-violet-200 bg-violet-50 text-violet-900" },
-  ];
+  const countFor = (key: LogisticsQueueKey) => key === "all" ? rows.length : key === "unhandled" ? rows.filter((row) => row.events.some((event) => !event.annotation?.isHandled)).length : rows.filter((row) => row.urgency === key).length;
+  const toneFor = (key: LogisticsQueueKey) => key === "critical" ? "border-rose-200 bg-rose-50 text-rose-900" : key === "high" ? "border-amber-200 bg-amber-50 text-amber-900" : key === "normal" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : key === "unhandled" ? "border-violet-200 bg-violet-50 text-violet-900" : "border-slate-200 bg-white text-slate-900";
+  const queueCards = config.cards.filter((card) => card.isVisible).map((card) => ({ ...card, count: countFor(card.key), tone: toneFor(card.key) }));
 
   return <div className="space-y-4">
     <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -69,14 +64,14 @@ export default function LogisticsTrackingWorkbench({
         <div><div className="flex items-start gap-2"><Package size={16} className="mt-0.5 shrink-0 text-slate-400" /><div className="text-sm text-slate-700">{row.order.items.map((item) => `${item.productName} × ${item.quantity}`).join("、") || "未记录产品"}</div></div><p className="mt-2 text-xs text-slate-500">COD：<strong className="text-slate-800">{row.order.codAmountLabel}</strong> · 销售：{row.order.creatorUser.fullName || row.order.creatorUser.username}</p></div>
         {row.canViewTimeline && <button type="button" onClick={() => setExpanded((value) => ({ ...value, [row.id]: !isOpen }))} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">{isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}{isOpen ? "收起轨迹" : `展开轨迹 ${row.events.length}`}</button>}
       </div>
-      {row.canViewTimeline && row.events.length > 0 && <div className="border-t border-slate-200 bg-slate-50/60 p-4"><div className="mb-2 text-xs font-medium text-slate-500">{isOpen ? `共 ${row.events.length} 条轨迹，轨迹区域可独立滚动` : "最新物流轨迹"}</div><div className={`${isOpen ? "max-h-[34rem] overflow-y-auto pr-1" : ""} space-y-3`}>{(isOpen ? row.events : row.events.slice(0, 1)).map((event) => <EventEditor key={event.id} shipmentId={row.id} event={event} canAnnotate={row.canAnnotate} />)}</div></div>}
+      {row.canViewTimeline && row.events.length > 0 && <div className="border-t border-slate-200 bg-slate-50/60 p-4"><div className="mb-2 text-xs font-medium text-slate-500">{isOpen ? `共 ${row.events.length} 条轨迹，轨迹区域可独立滚动` : "最新物流轨迹"}</div><div className={`${isOpen ? "max-h-[34rem] overflow-y-auto pr-1" : ""} space-y-3`}>{(isOpen ? row.events : row.events.slice(0, 1)).map((event) => <EventEditor key={event.id} shipmentId={row.id} event={event} canAnnotate={row.canAnnotate} quickTags={config.quickTags} />)}</div></div>}
     </article>; })}
     {!visibleRows.length && <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center text-sm text-slate-500">没有找到匹配的物流订单。</div>}
     {visibleRows.length > 0 && <footer className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2"><span>共 {visibleRows.length} 条</span><select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }} className="h-9 rounded-lg border border-slate-200 px-2"><option value={10}>10 / 页</option><option value={20}>20 / 页</option><option value={50}>50 / 页</option></select></div><div className="flex items-center gap-2"><span>第 {safePage}/{pageCount} 页</span><button type="button" disabled={safePage <= 1} onClick={() => setPage(safePage - 1)} className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 disabled:opacity-40"><ChevronLeft size={15} />上一页</button><button type="button" disabled={safePage >= pageCount} onClick={() => setPage(safePage + 1)} className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 disabled:opacity-40">下一页<ChevronRight size={15} /></button></div></footer>}
   </div>;
 }
 
-function EventEditor({ shipmentId, event, canAnnotate }: { shipmentId: string; event: TrackingEvent; canAnnotate: boolean }) {
+function EventEditor({ shipmentId, event, canAnnotate, quickTags }: { shipmentId: string; event: TrackingEvent; canAnnotate: boolean; quickTags: string[] }) {
   const [note, setNote] = useState(event.annotation?.note ?? "");
   const [tagsText, setTagsText] = useState((event.annotation?.tags ?? []).join("、"));
   const [isHandled, setIsHandled] = useState(event.annotation?.isHandled ?? false);
@@ -98,6 +93,6 @@ function EventEditor({ shipmentId, event, canAnnotate }: { shipmentId: string; e
   };
   const currentTags = tagsText.split(/[,，、]/).map((item) => item.trim()).filter(Boolean);
   return <section className={`rounded-xl border p-4 ${isHandled ? "border-emerald-200 bg-emerald-50/50" : "border-slate-200 bg-white"}`}>
-    <div className="flex flex-col gap-3 lg:flex-row lg:items-start"><span className={`mt-1 size-3 shrink-0 rounded-full ${isHandled ? "bg-emerald-500" : /FAILED|EXCEPTION|ADDRESS|RETURN|REFUS/i.test(event.eventType) ? "bg-rose-500" : "bg-violet-500"}`} /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><strong className="text-sm text-slate-900">{event.eventType}</strong>{event.statusMilestone && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{event.statusMilestone}</span>}<span className="text-xs text-slate-400">{new Date(event.occurredAt).toLocaleString("zh-CN")} · {event.location || "位置未知"}</span></div><p className="mt-1 text-sm text-slate-600">{event.memo || "暂无轨迹说明"}</p>{canAnnotate ? <><div className="mt-3 grid gap-2 lg:grid-cols-[1fr_0.7fr_auto]"><input value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} className="h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100" placeholder="记录本次联系客户的结果或处理备注" /><input value={tagsText} onChange={(e) => setTagsText(e.target.value)} className="h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100" placeholder="标签，用逗号分隔，如：已通知、无人接听" /><div className="flex gap-2"><button type="button" disabled={saving} onClick={() => save()} className="inline-flex h-10 items-center gap-1 rounded-lg bg-violet-600 px-3 text-sm font-semibold text-white disabled:opacity-50"><Save size={14} />保存</button><button type="button" disabled={saving} onClick={() => save(!isHandled)} className={`inline-flex h-10 items-center gap-1 rounded-lg px-3 text-sm font-semibold ${isHandled ? "bg-slate-200 text-slate-700" : "bg-emerald-600 text-white"}`}><CheckCircle2 size={14} />{isHandled ? "重新处理" : "标记完成"}</button></div></div><div className="mt-2 flex flex-wrap gap-2"><span className="text-xs font-medium text-slate-500">快捷标签：</span>{QUICK_TAGS.map((tag) => <button key={tag} type="button" disabled={saving} onClick={() => toggleQuickTag(tag)} className={`rounded-full border px-2.5 py-1 text-xs ${currentTags.includes(tag) ? "border-violet-400 bg-violet-50 text-violet-700" : "border-slate-200 bg-white text-slate-600 hover:border-violet-300"}`}>{tag}</button>)}</div></> : <p className="mt-3 text-xs text-slate-400">当前角色仅可查看，不能填写备注或处理轨迹。</p>}<div className="mt-2 flex items-center gap-2 text-xs">{message && <span className={message === "已保存" ? "text-emerald-600" : "text-rose-600"}>{message}</span>}{event.annotation?.handledByMembership?.user && <span className="text-slate-400">上次处理：{event.annotation.handledByMembership.user.fullName || event.annotation.handledByMembership.user.username}</span>}</div></div></div>
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-start"><span className={`mt-1 size-3 shrink-0 rounded-full ${isHandled ? "bg-emerald-500" : /FAILED|EXCEPTION|ADDRESS|RETURN|REFUS/i.test(event.eventType) ? "bg-rose-500" : "bg-violet-500"}`} /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><strong className="text-sm text-slate-900">{event.eventType}</strong>{event.statusMilestone && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{event.statusMilestone}</span>}<span className="text-xs text-slate-400">{new Date(event.occurredAt).toLocaleString("zh-CN")} · {event.location || "位置未知"}</span></div><p className="mt-1 text-sm text-slate-600">{event.memo || "暂无轨迹说明"}</p>{canAnnotate ? <><div className="mt-3 grid gap-2 lg:grid-cols-[1fr_0.7fr_auto]"><input value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} className="h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100" placeholder="记录本次联系客户的结果或处理备注" /><input value={tagsText} onChange={(e) => setTagsText(e.target.value)} className="h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100" placeholder="标签，用逗号分隔，如：已通知、无人接听" /><div className="flex gap-2"><button type="button" disabled={saving} onClick={() => save()} className="inline-flex h-10 items-center gap-1 rounded-lg bg-violet-600 px-3 text-sm font-semibold text-white disabled:opacity-50"><Save size={14} />保存</button><button type="button" disabled={saving} onClick={() => save(!isHandled)} className={`inline-flex h-10 items-center gap-1 rounded-lg px-3 text-sm font-semibold ${isHandled ? "bg-slate-200 text-slate-700" : "bg-emerald-600 text-white"}`}><CheckCircle2 size={14} />{isHandled ? "重新处理" : "标记完成"}</button></div></div><div className="mt-2 flex flex-wrap gap-2"><span className="text-xs font-medium text-slate-500">快捷标签：</span>{quickTags.map((tag) => <button key={tag} type="button" disabled={saving} onClick={() => toggleQuickTag(tag)} className={`rounded-full border px-2.5 py-1 text-xs ${currentTags.includes(tag) ? "border-violet-400 bg-violet-50 text-violet-700" : "border-slate-200 bg-white text-slate-600 hover:border-violet-300"}`}>{tag}</button>)}</div></> : <p className="mt-3 text-xs text-slate-400">当前角色仅可查看，不能填写备注或处理轨迹。</p>}<div className="mt-2 flex items-center gap-2 text-xs">{message && <span className={message === "已保存" ? "text-emerald-600" : "text-rose-600"}>{message}</span>}{event.annotation?.handledByMembership?.user && <span className="text-slate-400">上次处理：{event.annotation.handledByMembership.user.fullName || event.annotation.handledByMembership.user.username}</span>}</div></div></div>
   </section>;
 }

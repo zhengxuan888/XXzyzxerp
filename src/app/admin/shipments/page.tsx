@@ -1,6 +1,7 @@
 ﻿import { redirect } from "next/navigation";
 
 import LogisticsTrackingWorkbench from "@/components/admin/LogisticsTrackingWorkbench";
+import LogisticsWorkbenchSettings from "@/components/admin/LogisticsWorkbenchSettings";
 import type { Prisma } from "@prisma/client";
 import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
@@ -8,6 +9,7 @@ import { checkPermission } from "@/lib/permission";
 import { HIGH_PRIORITY_SHIPMENT_EVENTS, shipmentEventMeta } from "@/lib/logistics";
 import { prisma } from "@/lib/prisma";
 import { formatMoneyCents } from "@/lib/money";
+import { parseLogisticsWorkbenchConfig } from "@/lib/logistics-workbench-config";
 
 type ShipmentQueue = "high_priority" | "needs_attention" | "in_transit" | "all";
 type Urgency = "critical" | "high" | "normal";
@@ -107,6 +109,16 @@ export default async function ShipmentsPage({
       targetBusinessUnitId: membership.businessUnitId,
     }),
   ]);
+  const canConfigure = await checkPermission({
+    userId: session.userId,
+    membershipId: membership.id,
+    actionKey: "shipment.workbench.configure",
+    targetBusinessUnitId: membership.businessUnitId,
+  });
+  const workbenchSetting = await prisma.logisticsWorkbenchSetting.findUnique({
+    where: { businessUnitId: membership.businessUnitId },
+  });
+  const workbenchConfig = parseLogisticsWorkbenchConfig(workbenchSetting);
 
   const queueWhere: Prisma.ShipmentWhereInput | undefined =
     queue === "needs_attention"
@@ -214,7 +226,10 @@ export default async function ShipmentsPage({
     });
 
   return (
+    <div className="space-y-4">
+    {canConfigure.allowed && <LogisticsWorkbenchSettings initial={workbenchConfig} />}
     <LogisticsTrackingWorkbench
+      config={workbenchConfig}
       canViewTrackingNo={canViewTrackingNo.allowed}
       canViewTimeline={canViewTimeline.allowed}
       canAnnotate={canViewTimeline.allowed && canAnnotate.allowed}
@@ -251,5 +266,6 @@ export default async function ShipmentsPage({
         })) : [],
       }))}
     />
+    </div>
   );
 }

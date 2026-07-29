@@ -183,6 +183,7 @@ model BusinessUnit {
   logisticsTemplates        LogisticsProviderTemplate[]
   logisticsFollowUps        LogisticsFollowUp[]
   logisticsEventAnnotations LogisticsEventAnnotation[]
+  logisticsWorkbenchSetting LogisticsWorkbenchSetting?
   channelConnections        ChannelConnection[]
   contactIdentities         ContactIdentity[]
   conversations             Conversation[]
@@ -841,6 +842,18 @@ model LogisticsFollowUp {
 
   @@index([shipmentId, createdAt])
   @@index([businessUnitId, toStatus, createdAt])
+}
+
+model LogisticsWorkbenchSetting {
+  id             String   @id @default(uuid())
+  businessUnitId String   @unique
+  quickTags      String[] @default([])
+  cards          Json
+  updatedByUserId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
 }
 
 model Expense {
