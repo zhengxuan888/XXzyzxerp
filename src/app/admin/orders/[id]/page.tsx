@@ -183,6 +183,17 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         />
       )}
 
+      {canReadAttachments.allowed && order.status === "WAITING_SHIPMENT" && order.shipments.filter((shipment) => shipment.status === "PENDING").map((shipment) => (
+        <AttachmentPanel
+          key={shipment.id}
+          targetType="SHIPMENT"
+          targetId={shipment.id}
+          canUpload={canCreateAttachments.allowed && canShip.allowed}
+          canDelete={canDeleteAttachments.allowed && canShip.allowed}
+          title={`出货凭证 · ${shipment.carrier || "待填写物流商"} · ${shipment.trackingNo || "待回填运单号"}`}
+        />
+      ))}
+
       <section className="rounded border border-gray-200 p-4">
         <h2 className="mb-3 font-medium">物流信息</h2>
         {order.shipments.length === 0 ? (
