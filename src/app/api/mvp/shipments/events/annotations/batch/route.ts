@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 
 import { requireAuthContext } from "@/lib/api-auth";
 import { fail, ok } from "@/lib/api-response";
@@ -6,7 +7,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 
-type BatchItem = { shipmentId: string; eventId: string };
+type BatchItem = { shipmentId: string; eventId: string; expectedUpdatedAt: string | null };
 
 export async function PATCH(request: NextRequest) {
   const auth = await requireAuthContext(request);
@@ -19,7 +20,12 @@ export async function PATCH(request: NextRequest) {
       .filter((item: unknown): item is BatchItem => {
         if (!item || typeof item !== "object") return false;
         const value = item as Partial<BatchItem>;
-        return typeof value.shipmentId === "string" && typeof value.eventId === "string";
+        return typeof value.shipmentId === "string"
+          && typeof value.eventId === "string"
+          && (
+            value.expectedUpdatedAt === null
+            || (typeof value.expectedUpdatedAt === "string" && !Number.isNaN(Date.parse(value.expectedUpdatedAt)))
+          );
       })
       .map((item: BatchItem) => [`${item.shipmentId}:${item.eventId}`, item]),
   ).values()];
@@ -75,52 +81,81 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
-  const handledAt = isHandled ? new Date() : null;
-  const annotations = await prisma.$transaction(
-    events.map((event) => prisma.logisticsEventAnnotation.upsert({
-      where: { shipmentEventId: event.id },
-      update: {
-        note,
-        tags,
-        isHandled,
-        handledAt,
-        handledByMembershipId: isHandled ? auth.membership.id : null,
-      },
-      create: {
-        shipmentId: event.shipmentId,
-        shipmentEventId: event.id,
-        businessUnitId: event.shipment.businessUnitId,
-        note,
-        tags,
-        isHandled,
-        handledAt,
-        handledByMembershipId: isHandled ? auth.membership.id : null,
-      },
-      include: {
-        handledByMembership: {
-          include: { user: { select: { username: true, fullName: true } } },
-        },
-      },
-    })),
-  );
+  const itemByEventId = new Map(items.map((item) => [item.eventId, item]));
+  let annotations;
+  try {
+    annotations = await prisma.$transaction(async (tx) => {
+      const saved = [];
+      for (const event of events) {
+        const expected = itemByEventId.get(event.id)!.expectedUpdatedAt;
+        const existing = await tx.logisticsEventAnnotation.findUnique({
+          where: { shipmentEventId: event.id },
+          select: { updatedAt: true },
+        });
+        const isStale = expected === null
+          ? Boolean(existing)
+          : !existing || existing.updatedAt.getTime() !== new Date(expected).getTime();
+        if (isStale) throw new Error("ANNOTATION_BATCH_CONCURRENTLY_CHANGED");
 
-  await Promise.all(events.map((event) => writeAuditLog({
-    actorUserId: auth.userId,
-    actorMembershipId: auth.membership.id,
-    module: "logistics.event_annotation",
-    action: "shipment.event.annotate.batch",
-    targetType: "shipment_event",
-    targetId: event.id,
-    businessUnitId: event.shipment.businessUnitId,
-    roleId: auth.membership.roleId,
-    details: {
-      shipmentId: event.shipmentId,
-      batchSize: events.length,
-      tags,
-      isHandled,
-      noteLength: note.length,
-    },
-  })));
+        const annotation = await tx.logisticsEventAnnotation.upsert({
+          where: { shipmentEventId: event.id },
+          update: {
+            note,
+            tags,
+            isHandled,
+            handledAt: isHandled ? new Date() : null,
+            handledByMembershipId: isHandled ? auth.membership.id : null,
+          },
+          create: {
+            shipmentId: event.shipmentId,
+            shipmentEventId: event.id,
+            businessUnitId: event.shipment.businessUnitId,
+            note,
+            tags,
+            isHandled,
+            handledAt: isHandled ? new Date() : null,
+            handledByMembershipId: isHandled ? auth.membership.id : null,
+          },
+          include: {
+            handledByMembership: {
+              include: { user: { select: { username: true, fullName: true } } },
+            },
+          },
+        });
+        await writeAuditLog({
+          actorUserId: auth.userId,
+          actorMembershipId: auth.membership.id,
+          module: "logistics.event_annotation",
+          action: "shipment.event.annotate.batch",
+          targetType: "shipment_event",
+          targetId: event.id,
+          businessUnitId: event.shipment.businessUnitId,
+          roleId: auth.membership.roleId,
+          details: {
+            shipmentId: event.shipmentId,
+            batchSize: events.length,
+            tags,
+            isHandled,
+            noteLength: note.length,
+          },
+        }, tx);
+        saved.push(annotation);
+      }
+      return saved;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  } catch (error) {
+    if (
+      (error instanceof Error && error.message === "ANNOTATION_BATCH_CONCURRENTLY_CHANGED")
+      || (error instanceof Prisma.PrismaClientKnownRequestError && ["P2002", "P2034"].includes(error.code))
+    ) {
+      return fail(
+        "ANNOTATION_BATCH_CONCURRENTLY_CHANGED",
+        "所选轨迹中有内容已被其他员工更新，本次批量操作未写入，请刷新后重新选择。",
+        409,
+      );
+    }
+    throw error;
+  }
 
   return ok({ updated: annotations.length, annotations });
 }

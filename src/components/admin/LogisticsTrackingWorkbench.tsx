@@ -235,7 +235,10 @@ function TrackingEventsPanel({
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        items: selected.map((eventId) => ({ shipmentId, eventId })),
+        items: selected.map((eventId) => {
+          const event = events.find((item) => item.id === eventId);
+          return { shipmentId, eventId, expectedUpdatedAt: event?.annotation?.updatedAt ?? null };
+        }),
         note: batchNote,
         tags: batchTags.split(/[,，、]/).map((tag) => tag.trim()).filter(Boolean),
         isHandled: true,
