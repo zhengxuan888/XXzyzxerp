@@ -11,7 +11,19 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ id
   const auth = await requireAuthContext(request);
   if (!auth) return NextResponse.json({ error: "Unauthenticated." }, { status: 401 });
 
-  const row = await prisma.order.findUnique({ where: { id } });
+  const row = await prisma.order.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      orderNo: true,
+      status: true,
+      businessUnitId: true,
+      departmentId: true,
+      siteId: true,
+      creatorUserId: true,
+      ownedByMembershipId: true,
+    },
+  });
   if (!row) return NextResponse.json({ error: "Order not found." }, { status: 404 });
   if (row.businessUnitId !== auth.membership.businessUnitId) {
     return NextResponse.json({ error: "Order not found." }, { status: 404 });
@@ -28,20 +40,46 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ id
     membershipId: auth.membership.id,
     actionKey: "order.delete",
     targetBusinessUnitId: row.businessUnitId,
+    targetDepartmentId: row.departmentId,
+    targetSiteId: row.siteId,
+    targetUserId: row.creatorUserId,
   });
   if (!canDelete.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: canDelete.reasons }, { status: 403 });
 
-  await prisma.order.delete({ where: { id } });
-  await writeAuditLog({
-    actorUserId: auth.userId,
-    actorMembershipId: auth.membership.id,
-    module: "mvp.orders",
-    action: "order.delete",
-    targetType: "order",
-    targetId: id,
-    businessUnitId: row.businessUnitId,
-    roleId: auth.membership.roleId,
+  const deleted = await prisma.$transaction(async (tx) => {
+    const result = await tx.order.deleteMany({
+      where: {
+        id,
+        businessUnitId: row.businessUnitId,
+        status: "DRAFT",
+      },
+    });
+    if (result.count !== 1) return false;
+
+    await writeAuditLog({
+      actorUserId: auth.userId,
+      actorMembershipId: auth.membership.id,
+      module: "mvp.orders",
+      action: "order.delete",
+      targetType: "order",
+      targetId: id,
+      businessUnitId: row.businessUnitId,
+      roleId: auth.membership.roleId,
+      details: {
+        orderNo: row.orderNo,
+        previousStatus: row.status,
+        creatorUserId: row.creatorUserId,
+        ownedByMembershipId: row.ownedByMembershipId,
+      },
+    }, tx);
+    return true;
   });
+  if (!deleted) {
+    return NextResponse.json(
+      { ok: false, error: { code: "ORDER_DELETE_CONFLICT", message: "订单状态已变化，请刷新后重试。" } },
+      { status: 409 },
+    );
+  }
 
   return NextResponse.json({ ok: true, deleted: id });
 }

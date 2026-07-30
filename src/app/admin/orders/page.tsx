@@ -9,7 +9,7 @@ import { formatMoneyCents } from "@/lib/money";
 import { resolveOrderReadScope, withOrderReadScope } from "@/lib/order-access";
 import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
-import { checkPermission } from "@/lib/permission";
+import { checkPermission, getEffectiveActions } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import type { OrderStatus } from "@prisma/client";
 import { zh } from "@/lib/i18n";
@@ -51,7 +51,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const requestedPage = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
   const pageSize = [10, 20, 50, 100].includes(Number(params.pageSize)) ? Number(params.pageSize) : 20;
 
-  const [canRead, canCreate, canDelete] = await Promise.all([
+  const [canRead, canCreate, effectiveActions] = await Promise.all([
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
@@ -65,13 +65,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       actionKey: "order.create",
       targetBusinessUnitId: membership.businessUnitId,
     }),
-    checkPermission({
-      userId: session.userId,
-      membershipId: membership.id,
-      actionKey: "order.delete",
-      targetBusinessUnitId: membership.businessUnitId,
-    }),
+    getEffectiveActions(membership.id),
   ]);
+  const canDelete = effectiveActions.has("order.delete");
   if (!canRead.allowed) redirect("/admin");
 
   const orderReadScope = await resolveOrderReadScope(membership, session.userId);
@@ -192,7 +188,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         detailPath="/admin/orders"
         showCreate={false}
         canCreate={canCreate.allowed}
-        canDelete={canDelete.allowed}
+        canDelete={canDelete}
         rows={rows}
         rowId="id"
         createFields={[
