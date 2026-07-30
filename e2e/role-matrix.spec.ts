@@ -223,3 +223,51 @@ test("订单动作按归属、角色和状态机拒绝越权", async ({ page }) 
   );
   expect(shippingReviewProof.status()).toBe(403);
 });
+
+test("物流列表按字段权限脱敏，普通处理人员不能抢走他人待办", async ({ page }) => {
+  const login = async (username: string) => {
+    const response = await page.request.post("/api/auth/login", { data: { username, password } });
+    expect(response.ok(), `${username}: ${await response.text()}`).toBe(true);
+  };
+  const currentMembershipId = async () => {
+    const response = await page.request.get("/api/auth/me");
+    expect(response.ok(), await response.text()).toBe(true);
+    const body = await response.json() as {
+      session: { activeMembershipId: string };
+    };
+    return body.session.activeMembershipId;
+  };
+
+  await login("demo_after_sales");
+  const afterSalesMembershipId = await currentMembershipId();
+  const visibleResponse = await page.request.get("/api/mvp/shipments?page=1&pageSize=100");
+  expect(visibleResponse.ok(), await visibleResponse.text()).toBe(true);
+  const visibleBody = await visibleResponse.json() as {
+    data: Array<{ id: string; ownerMembershipId: string | null; trackingNo: string | null; events: unknown[] }>;
+  };
+  const assignedShipment = visibleBody.data.find((shipment) => shipment.ownerMembershipId === afterSalesMembershipId);
+  expect(assignedShipment).toBeTruthy();
+  expect(assignedShipment!.trackingNo).not.toBeNull();
+  expect(assignedShipment!.events.length).toBeGreaterThan(0);
+
+  await login("demo_shipping");
+  const shippingMembershipId = await currentMembershipId();
+  const maskedResponse = await page.request.get("/api/mvp/shipments?page=1&pageSize=100");
+  expect(maskedResponse.ok(), await maskedResponse.text()).toBe(true);
+  const maskedBody = await maskedResponse.json() as {
+    data: Array<{ id: string; trackingNo: string | null; events: unknown[] }>;
+  };
+  expect(maskedBody.data.length).toBeGreaterThan(0);
+  expect(maskedBody.data.every((shipment) => shipment.trackingNo === null && shipment.events.length === 0)).toBe(true);
+
+  const forbiddenTakeover = await page.request.post(`/api/mvp/shipments/${assignedShipment!.id}/follow-ups`, {
+    data: {
+      ownerMembershipId: shippingMembershipId,
+      workStatus: "IN_PROGRESS",
+      note: "越权抢占测试，不应写入",
+    },
+  });
+  expect(forbiddenTakeover.status()).toBe(403);
+  const forbiddenBody = await forbiddenTakeover.json() as { error: { code: string } };
+  expect(forbiddenBody.error.code).toBe("FOLLOW_UP_REASSIGN_FORBIDDEN");
+});

@@ -653,6 +653,7 @@ async function main() {
     "shipment.read",
     "shipment.create",
     "shipment.track.update",
+    "shipment.followup.assign",
     "shipment.workbench.configure",
     "logistics_template.read",
     "logistics_template.manage",
