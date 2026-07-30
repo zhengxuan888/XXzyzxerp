@@ -28,30 +28,56 @@ export async function PUT(request: NextRequest, { params }: Props) {
   if (!permission.allowed) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   if (order.status !== "SUBMITTED") return NextResponse.json({ error: "ORDER_NOT_REVIEWABLE" }, { status: 409 });
 
-  if (body.action === "claim") {
-    const updated = await prisma.order.updateMany({
-      where: { id: order.id, status: "SUBMITTED", OR: [{ reviewClaimedByMembershipId: null }, { reviewClaimedByMembershipId: auth.membership.id }] },
-      data: { reviewClaimedByMembershipId: auth.membership.id, reviewClaimedAt: new Date() },
-    });
-    if (updated.count !== 1) return NextResponse.json({ error: "ORDER_ALREADY_CLAIMED" }, { status: 409 });
-  } else {
-    const updated = await prisma.order.updateMany({
-      where: { id: order.id, status: "SUBMITTED", reviewClaimedByMembershipId: auth.membership.id },
-      data: { reviewClaimedByMembershipId: null, reviewClaimedAt: null },
-    });
-    if (updated.count !== 1) return NextResponse.json({ error: "NOT_CLAIM_OWNER" }, { status: 409 });
-  }
+  const changed = await prisma.$transaction(async (tx) => {
+    const updated = body.action === "claim"
+      ? await tx.order.updateMany({
+          where: {
+            id: order.id,
+            status: "SUBMITTED",
+            OR: [
+              { reviewClaimedByMembershipId: null },
+              { reviewClaimedByMembershipId: auth.membership.id },
+            ],
+          },
+          data: {
+            reviewClaimedByMembershipId: auth.membership.id,
+            reviewClaimedAt: new Date(),
+          },
+        })
+      : await tx.order.updateMany({
+          where: {
+            id: order.id,
+            status: "SUBMITTED",
+            reviewClaimedByMembershipId: auth.membership.id,
+          },
+          data: {
+            reviewClaimedByMembershipId: null,
+            reviewClaimedAt: null,
+          },
+        });
+    if (updated.count !== 1) return false;
 
-  await writeAuditLog({
-    actorUserId: auth.userId,
-    actorMembershipId: auth.membership.id,
-    module: "sales.order_review",
-    action: `order.review.${body.action}`,
-    targetType: "order",
-    targetId: order.id,
-    businessUnitId: order.businessUnitId,
-    roleId: auth.membership.roleId,
-    details: { claimedByMembershipId: body.action === "claim" ? auth.membership.id : null },
+    await writeAuditLog({
+      actorUserId: auth.userId,
+      actorMembershipId: auth.membership.id,
+      module: "sales.order_review",
+      action: `order.review.${body.action}`,
+      targetType: "order",
+      targetId: order.id,
+      businessUnitId: order.businessUnitId,
+      roleId: auth.membership.roleId,
+      details: {
+        previousClaimedByMembershipId: order.reviewClaimedByMembershipId,
+        claimedByMembershipId: body.action === "claim" ? auth.membership.id : null,
+      },
+    }, tx);
+    return true;
   });
+  if (!changed) {
+    return NextResponse.json(
+      { error: body.action === "claim" ? "ORDER_ALREADY_CLAIMED" : "NOT_CLAIM_OWNER" },
+      { status: 409 },
+    );
+  }
   return NextResponse.json({ ok: true });
 }
