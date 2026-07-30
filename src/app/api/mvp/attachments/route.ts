@@ -127,35 +127,43 @@ export async function POST(request: NextRequest) {
 
   await localDemoStorage.put({ storageKey: validated.storageKey, bytes });
   try {
-    const attachment = await prisma.attachment.create({
-      data: {
-        legalEntityId: auth.membership.legalEntityId,
-        businessUnitId: target.businessUnitId,
-        departmentId: target.departmentId,
-        targetType: target.targetType,
+    const attachment = await prisma.$transaction(async (tx) => {
+      const created = await tx.attachment.create({
+        data: {
+          legalEntityId: auth.membership.legalEntityId,
+          businessUnitId: target.businessUnitId,
+          departmentId: target.departmentId,
+          targetType: target.targetType,
+          targetId: target.targetId,
+          originalName: validated.originalName,
+          storageProvider: localDemoStorage.providerKey,
+          storageKey: validated.storageKey,
+          mimeType: validated.mimeType,
+          extension: validated.extension,
+          sizeBytes: validated.sizeBytes,
+          sha256: validated.sha256,
+          uploadedByUserId: auth.userId,
+          uploadedByMembershipId: auth.membership.id,
+        },
+        select: safeSelect,
+      });
+      await writeAuditLog({
+        actorUserId: auth.userId,
+        actorMembershipId: auth.membership.id,
+        module: "mvp.attachments",
+        action: "attachment.create",
+        targetType: target.targetType.toLowerCase(),
         targetId: target.targetId,
-        originalName: validated.originalName,
-        storageProvider: localDemoStorage.providerKey,
-        storageKey: validated.storageKey,
-        mimeType: validated.mimeType,
-        extension: validated.extension,
-        sizeBytes: validated.sizeBytes,
-        sha256: validated.sha256,
-        uploadedByUserId: auth.userId,
-        uploadedByMembershipId: auth.membership.id,
-      },
-      select: safeSelect,
-    });
-    await writeAuditLog({
-      actorUserId: auth.userId,
-      actorMembershipId: auth.membership.id,
-      module: "mvp.attachments",
-      action: "attachment.create",
-      targetType: target.targetType.toLowerCase(),
-      targetId: target.targetId,
-      businessUnitId: target.businessUnitId,
-      roleId: auth.membership.roleId,
-      details: { attachmentId: attachment.id, mimeType: attachment.mimeType, sizeBytes: attachment.sizeBytes, sha256: attachment.sha256 },
+        businessUnitId: target.businessUnitId,
+        roleId: auth.membership.roleId,
+        details: {
+          attachmentId: created.id,
+          mimeType: created.mimeType,
+          sizeBytes: created.sizeBytes,
+          sha256: created.sha256,
+        },
+      }, tx);
+      return created;
     });
     return ok(attachment, { status: 201 });
   } catch (error) {

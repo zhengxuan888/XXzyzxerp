@@ -54,18 +54,30 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ id
       return fail("FORBIDDEN", "只能删除自己上传的出货凭证。", 403);
     }
   }
-  await localDemoStorage.delete(attachment.storageKey);
-  await prisma.attachment.update({ where: { id: attachment.id }, data: { status: "DELETED", deletedAt: new Date() } });
-  await writeAuditLog({
-    actorUserId: auth.userId,
-    actorMembershipId: auth.membership.id,
-    module: "mvp.attachments",
-    action: "attachment.delete",
-    targetType: attachment.targetType.toLowerCase(),
-    targetId: attachment.targetId,
-    businessUnitId: attachment.businessUnitId,
-    roleId: auth.membership.roleId,
-    details: { attachmentId: attachment.id, sha256: attachment.sha256 },
+  const deleted = await prisma.$transaction(async (tx) => {
+    const updated = await tx.attachment.updateMany({
+      where: {
+        id: attachment.id,
+        businessUnitId: attachment.businessUnitId,
+        status: "ACTIVE",
+      },
+      data: { status: "DELETED", deletedAt: new Date() },
+    });
+    if (updated.count !== 1) return false;
+    await writeAuditLog({
+      actorUserId: auth.userId,
+      actorMembershipId: auth.membership.id,
+      module: "mvp.attachments",
+      action: "attachment.delete",
+      targetType: attachment.targetType.toLowerCase(),
+      targetId: attachment.targetId,
+      businessUnitId: attachment.businessUnitId,
+      roleId: auth.membership.roleId,
+      details: { attachmentId: attachment.id, sha256: attachment.sha256 },
+    }, tx);
+    return true;
   });
+  if (!deleted) return fail("ATTACHMENT_DELETE_CONFLICT", "附件刚刚已被其他人处理，请刷新后重试。", 409);
+  await localDemoStorage.delete(attachment.storageKey);
   return ok({ deleted: attachment.id });
 }

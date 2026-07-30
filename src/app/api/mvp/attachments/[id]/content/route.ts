@@ -3,6 +3,7 @@ import { requireAuthContext } from "@/lib/api-auth";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { localDemoStorage } from "@/lib/storage/local-demo";
+import { resolveAttachmentTarget } from "@/lib/attachments";
 
 export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const auth = await requireAuthContext(request);
@@ -12,12 +13,16 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
     where: { id, businessUnitId: auth.membership.businessUnitId, status: "ACTIVE" },
   });
   if (!attachment) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  const target = await resolveAttachmentTarget(auth, attachment.targetType, attachment.targetId);
+  if (!target) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   const decision = await checkPermission({
     userId: auth.userId,
     membershipId: auth.membership.id,
     actionKey: "attachment.read",
-    targetBusinessUnitId: attachment.businessUnitId,
-    targetDepartmentId: attachment.departmentId,
+    targetBusinessUnitId: target.businessUnitId,
+    targetDepartmentId: target.departmentId,
+    targetSiteId: target.siteId,
+    targetUserId: target.ownerUserId,
   });
   if (!decision.allowed) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   const bytes = await localDemoStorage.get(attachment.storageKey);
