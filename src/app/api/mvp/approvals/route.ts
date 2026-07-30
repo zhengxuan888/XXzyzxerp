@@ -9,29 +9,23 @@ export async function GET(request: NextRequest) {
   const auth = await requireAuthContext(request);
   if (!auth) return NextResponse.json({ error: "Unauthenticated." }, { status: 401 });
 
-  const canReview = await checkPermission({
+  const canRead = await checkPermission({
     userId: auth.userId,
     membershipId: auth.membership.id,
-    actionKey: "approval.review",
+    actionKey: "approval.read",
     targetBusinessUnitId: auth.membership.businessUnitId,
   });
-  const canSubmit = await checkPermission({
-    userId: auth.userId,
-    membershipId: auth.membership.id,
-    actionKey: "approval.submit",
-    targetBusinessUnitId: auth.membership.businessUnitId,
-  });
-  if (!canReview.allowed && !canSubmit.allowed) {
+  if (!canRead.allowed) {
     return NextResponse.json(
-      { error: "FORBIDDEN", reasons: [...canReview.reasons, ...canSubmit.reasons] },
+      { error: "FORBIDDEN", reasons: canRead.reasons },
       { status: 403 },
     );
   }
 
   const shouldReadAll =
-    canReview.reasons.includes("SCOPE_ALL") ||
-    canReview.reasons.includes("SCOPE_ALL_OK") ||
-    canReview.reasons.includes("SCOPE_BUSINESS_UNIT_OK");
+    canRead.reasons.includes("SCOPE_ALL") ||
+    canRead.reasons.includes("SCOPE_ALL_OK") ||
+    canRead.reasons.includes("SCOPE_BUSINESS_UNIT_OK");
 
   const rows = await prisma.approvalRecord.findMany({
     where: shouldReadAll

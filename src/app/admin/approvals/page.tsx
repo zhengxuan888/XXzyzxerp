@@ -16,7 +16,7 @@ export default async function ApprovalsPage() {
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
-      actionKey: "approval.submit",
+      actionKey: "approval.read",
       targetBusinessUnitId: membership.businessUnitId,
     }),
     checkPermission({

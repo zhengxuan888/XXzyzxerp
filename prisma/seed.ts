@@ -120,6 +120,7 @@ const actionDefs: SeedAction[] = [
   { key: "document.create", name: "Document create", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "document.delete", name: "Document delete", namespace: "erp", scope: "BUSINESS_UNIT" },
 
+  { key: "approval.read", name: "查看审批", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "approval.submit", name: "Approval submit", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "approval.review", name: "Approval review", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "inbox.read", name: "统一收件箱查看", namespace: "inbox", scope: "DEPARTMENT" },
@@ -227,7 +228,7 @@ const menuDefs = [
     path: "/admin/inbox",
     requiredActionKey: "inbox.read",
     sortOrder: 95,
-    isActive: false,
+    isActive: true,
   },
   {
     key: "customers",
@@ -313,7 +314,7 @@ const menuDefs = [
     key: "approvals",
     label: "审批管理",
     path: "/admin/approvals",
-    requiredActionKey: "approval.submit",
+    requiredActionKey: "approval.read",
     sortOrder: 150,
     isActive: true,
   },
@@ -719,10 +720,10 @@ async function main() {
   // Local-only role templates for acceptance testing. Names and permissions remain data-driven.
   const roleProfiles = [
     { code: "demo_sales", name: "演示销售录单员", username: "demo_sales", email: "demo.sales@local.erp", allowed: ["dashboard.view", "daily_goal.read", "daily_goal.create", "team_goal.read", "customer.read", "customer.create", "product.read", "order.read", "order.create", "order.update", "order.submit", "attachment.read", "attachment.create", "leave_request.read", "leave_request.create"] },
-    { code: "demo_reviewer", name: "演示核单员", username: "demo_reviewer", email: "demo.reviewer@local.erp", allowed: ["dashboard.view", "customer.read", "product.read", "order.read", "order.review", "order.review.proof.upload", "order.status.update", "attachment.read", "attachment.create", "approval.review"] },
+    { code: "demo_reviewer", name: "演示核单员", username: "demo_reviewer", email: "demo.reviewer@local.erp", allowed: ["dashboard.view", "customer.read", "product.read", "order.read", "order.review", "order.review.proof.upload", "order.status.update", "attachment.read", "attachment.create", "approval.read", "approval.review"] },
     { code: "demo_shipping", name: "演示发货员", username: "demo_shipping", email: "demo.shipping@local.erp", allowed: ["dashboard.view", "product.read", "order.read", "order.ship", "shipment.read", "shipment.create", "shipment.track.update", "logistics_template.read", "logistics_template.export", "attachment.read", "attachment.create"] },
     { code: "demo_after_sales", name: "演示物流售后员", username: "demo_after_sales", email: "demo.after.sales@local.erp", allowed: ["dashboard.view", "customer.read", "order.read", "shipment.read", "shipment.tracking_no.view", "shipment.timeline.view", "shipment.track.update", "inbox.read", "inbox.manage", "inbox.assign", "inbox.customer.link", "attachment.read", "attachment.create"] },
-    { code: "demo_finance", name: "演示财务员", username: "demo_finance", email: "demo.finance@local.erp", allowed: ["dashboard.view", "order.read", "expense.read", "expense.create", "approval.review"] },
+    { code: "demo_finance", name: "演示财务员", username: "demo_finance", email: "demo.finance@local.erp", allowed: ["dashboard.view", "order.read", "expense.read", "expense.create", "approval.read", "approval.review"] },
     { code: "demo_hr", name: "演示人事员", username: "demo_hr", email: "demo.hr@local.erp", allowed: ["dashboard.view", "daily_goal.read", "daily_goal.manage", "team_goal.read", "user.read", "user.create", "user.import", "user.update", "membership.read", "membership.create", "membership.update", "department.read", "attendance.read", "attendance.create", "attendance.approve", "leave_request.read", "leave_request.approve", "announcement.read", "announcement.create"] },
   ];
   const demoRoles = new Map<string, { id: string }>();
