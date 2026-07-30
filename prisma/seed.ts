@@ -29,6 +29,7 @@ const actionDefs: SeedAction[] = [
   { key: "site.delete", name: "Site delete", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "user.read", name: "User read", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "user.create", name: "User create", namespace: "erp", scope: "BUSINESS_UNIT" },
+  { key: "user.import", name: "User import", namespace: "erp", scope: "DEPARTMENT_TREE" },
   { key: "user.update", name: "User update", namespace: "erp", scope: "DEPARTMENT_TREE" },
   { key: "user.delete", name: "User delete", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "membership.read", name: "Membership read", namespace: "erp", scope: "BUSINESS_UNIT" },
@@ -722,7 +723,7 @@ async function main() {
     { code: "demo_shipping", name: "演示发货员", username: "demo_shipping", email: "demo.shipping@local.erp", allowed: ["dashboard.view", "product.read", "order.read", "order.ship", "shipment.read", "shipment.create", "shipment.track.update", "logistics_template.read", "logistics_template.export", "attachment.read", "attachment.create"] },
     { code: "demo_after_sales", name: "演示物流售后员", username: "demo_after_sales", email: "demo.after.sales@local.erp", allowed: ["dashboard.view", "customer.read", "order.read", "shipment.read", "shipment.tracking_no.view", "shipment.timeline.view", "shipment.track.update", "inbox.read", "inbox.manage", "inbox.assign", "inbox.customer.link", "attachment.read", "attachment.create"] },
     { code: "demo_finance", name: "演示财务员", username: "demo_finance", email: "demo.finance@local.erp", allowed: ["dashboard.view", "order.read", "expense.read", "expense.create", "approval.review"] },
-    { code: "demo_hr", name: "演示人事员", username: "demo_hr", email: "demo.hr@local.erp", allowed: ["dashboard.view", "daily_goal.read", "daily_goal.manage", "team_goal.read", "user.read", "user.create", "user.update", "membership.read", "membership.create", "membership.update", "department.read", "attendance.read", "attendance.create", "attendance.approve", "leave_request.read", "leave_request.approve", "announcement.read", "announcement.create"] },
+    { code: "demo_hr", name: "演示人事员", username: "demo_hr", email: "demo.hr@local.erp", allowed: ["dashboard.view", "daily_goal.read", "daily_goal.manage", "team_goal.read", "user.read", "user.create", "user.import", "user.update", "membership.read", "membership.create", "membership.update", "department.read", "attendance.read", "attendance.create", "attendance.approve", "leave_request.read", "leave_request.approve", "announcement.read", "announcement.create"] },
   ];
   const demoRoles = new Map<string, { id: string }>();
   for (const profile of roleProfiles) {
