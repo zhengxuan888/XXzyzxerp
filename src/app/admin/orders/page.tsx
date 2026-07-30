@@ -37,6 +37,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       membershipId: membership.id,
       actionKey: "order.read",
       targetBusinessUnitId: membership.businessUnitId,
+      targetUserId: session.userId,
     }),
     checkPermission({
       userId: session.userId,
@@ -65,6 +66,14 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const baseWhere = { businessUnitId: membership.businessUnitId, ...(status ? { status } : {}), ...(employee ? { creatorUserId: employee } : {}), ...(country ? { recipientCountryCode: country } : {}), ...(product ? { items: { some: { productName: { contains: product, mode: "insensitive" as const } } } } : {}) };
   const scopedWhere = withOrderReadScope(baseWhere, orderReadScope, membership, session.userId);
   const statusScopeWhere = withOrderReadScope({ businessUnitId: membership.businessUnitId, ...(employee ? { creatorUserId: employee } : {}), ...(country ? { recipientCountryCode: country } : {}), ...(product ? { items: { some: { productName: { contains: product, mode: "insensitive" as const } } } } : {}) }, orderReadScope, membership, session.userId);
+  const employeeWhere =
+    orderReadScope === "SELF"
+      ? { id: session.userId }
+      : orderReadScope === "DEPARTMENT"
+        ? { memberships: { some: { businessUnitId: membership.businessUnitId, departmentId: membership.departmentId, isActive: true } } }
+        : orderReadScope === "SITE"
+          ? { memberships: { some: { businessUnitId: membership.businessUnitId, siteId: membership.siteId, isActive: true } } }
+          : { memberships: { some: { businessUnitId: membership.businessUnitId, isActive: true } } };
   const [rows, totalCount, statusGroups, templates, employees, countries] = await Promise.all([
     prisma.order.findMany({
       where: scopedWhere as Record<string, unknown>,
@@ -84,14 +93,14 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
       select: { id: true, code: true, name: true, configuration: true, isDefault: true },
     }),
-    prisma.user.findMany({ where: { memberships: { some: { businessUnitId: membership.businessUnitId, isActive: true } } }, orderBy: { username: "asc" }, select: { id: true, username: true, fullName: true } }),
+    prisma.user.findMany({ where: employeeWhere, orderBy: { username: "asc" }, select: { id: true, username: true, fullName: true } }),
     prisma.country.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { code: true, name: true } }),
   ]);
 
-  const myOrderStats = rows.reduce((stats, row) => {
-    stats.total += 1;
-    const key = row.status.toLowerCase() as keyof typeof stats;
-    if (key in stats && key !== "total") stats[key] += 1;
+  const myOrderStats = statusGroups.reduce((stats, group) => {
+    stats.total += group._count._all;
+    const key = group.status.toLowerCase() as keyof typeof stats;
+    if (key in stats && key !== "total") stats[key] = group._count._all;
     return stats;
   }, { total: 0, draft: 0, submitted: 0, waiting_shipment: 0, shipped: 0, delivered: 0, exception: 0, completed: 0, cancelled: 0 });
 

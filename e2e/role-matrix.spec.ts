@@ -103,3 +103,34 @@ test("业务负责人只能查看当前组织上下文，不能创建公司或�
   });
   expect(businessUnitCreate.status()).toBe(403);
 });
+
+test("销售只能读取自己的订单，业务负责人可以读取本板块订单", async ({ page }) => {
+  const login = async (username: string) => {
+    const response = await page.request.post("/api/auth/login", { data: { username, password } });
+    expect(response.ok(), `${username}: ${await response.text()}`).toBe(true);
+  };
+  const readOrders = async () => {
+    const response = await page.request.get("/api/mvp/orders?page=1&pageSize=100");
+    expect(response.ok(), await response.text()).toBe(true);
+    return await response.json() as { data: Array<{ id: string; orderNo: string; creatorUser: { username: string } }> };
+  };
+
+  await login("demo_manager");
+  const managerOrders = await readOrders();
+  const peerOrder = managerOrders.data.find((order) => order.orderNo === "DEMO-PEER-ORDER-001");
+  expect(peerOrder).toBeTruthy();
+  expect(managerOrders.data.some((order) => order.orderNo === "DEMO-ORDER-001")).toBe(true);
+
+  await login("demo_sales");
+  const salesOrders = await readOrders();
+  expect(salesOrders.data.length).toBeGreaterThan(0);
+  expect(salesOrders.data.every((order) => order.creatorUser.username === "demo_sales")).toBe(true);
+  expect(salesOrders.data.some((order) => order.orderNo === "DEMO-PEER-ORDER-001")).toBe(false);
+  const peerDetail = await page.request.get(`/api/mvp/orders/${peerOrder!.id}`);
+  expect(peerDetail.status()).toBe(403);
+
+  await login("demo_sales_peer");
+  const peerOrders = await readOrders();
+  expect(peerOrders.data.some((order) => order.orderNo === "DEMO-PEER-ORDER-001")).toBe(true);
+  expect(peerOrders.data.some((order) => order.orderNo === "DEMO-ORDER-001")).toBe(false);
+});

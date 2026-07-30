@@ -717,8 +717,15 @@ async function main() {
   }
 
   // Local-only role templates for acceptance testing. Names and permissions remain data-driven.
-  const roleProfiles = [
-    { code: "demo_sales", name: "演示销售录单员", username: "demo_sales", email: "demo.sales@local.erp", allowed: ["dashboard.view", "daily_goal.read", "daily_goal.create", "team_goal.read", "customer.read", "customer.create", "product.read", "order.read", "order.create", "order.update", "order.submit", "attachment.read", "attachment.create", "leave_request.read", "leave_request.create"] },
+  const roleProfiles: Array<{
+    code: string;
+    name: string;
+    username: string;
+    email: string;
+    allowed: string[];
+    scopes?: Partial<Record<string, SeedAction["scope"]>>;
+  }> = [
+    { code: "demo_sales", name: "演示销售录单员", username: "demo_sales", email: "demo.sales@local.erp", allowed: ["dashboard.view", "daily_goal.read", "daily_goal.create", "team_goal.read", "customer.read", "customer.create", "product.read", "order.read", "order.create", "order.update", "order.submit", "attachment.read", "attachment.create", "leave_request.read", "leave_request.create"], scopes: { "order.read": "SELF", "order.update": "SELF", "order.submit": "SELF" } },
     { code: "demo_reviewer", name: "演示核单员", username: "demo_reviewer", email: "demo.reviewer@local.erp", allowed: ["dashboard.view", "customer.read", "product.read", "order.read", "order.review", "order.review.proof.upload", "order.status.update", "attachment.read", "attachment.create", "approval.read", "approval.review"] },
     { code: "demo_shipping", name: "演示发货员", username: "demo_shipping", email: "demo.shipping@local.erp", allowed: ["dashboard.view", "product.read", "order.read", "order.ship", "shipment.read", "shipment.create", "shipment.track.update", "logistics_template.read", "logistics_template.export", "attachment.read", "attachment.create"] },
     { code: "demo_after_sales", name: "演示物流售后员", username: "demo_after_sales", email: "demo.after.sales@local.erp", allowed: ["dashboard.view", "customer.read", "order.read", "shipment.read", "shipment.tracking_no.view", "shipment.timeline.view", "shipment.track.update", "inbox.read", "inbox.manage", "inbox.assign", "inbox.customer.link", "attachment.read", "attachment.create"] },
@@ -742,8 +749,8 @@ async function main() {
     for (const action of actions) {
       await prisma.rolePermission.upsert({
         where: { roleId_actionKey: { roleId: role.id, actionKey: action.key } },
-        update: { isAllowed: allowed.has(action.key), scope: allowed.has(action.key) ? actionSeedMap.get(action.key)?.scope ?? "BUSINESS_UNIT" : "SELF" },
-        create: { roleId: role.id, actionKey: action.key, scope: allowed.has(action.key) ? actionSeedMap.get(action.key)?.scope ?? "BUSINESS_UNIT" : "SELF", isAllowed: allowed.has(action.key) },
+        update: { isAllowed: allowed.has(action.key), scope: allowed.has(action.key) ? profile.scopes?.[action.key] ?? actionSeedMap.get(action.key)?.scope ?? "BUSINESS_UNIT" : "SELF" },
+        create: { roleId: role.id, actionKey: action.key, scope: allowed.has(action.key) ? profile.scopes?.[action.key] ?? actionSeedMap.get(action.key)?.scope ?? "BUSINESS_UNIT" : "SELF", isAllowed: allowed.has(action.key) },
       });
     }
   }
@@ -906,6 +913,31 @@ async function main() {
     }
   }
 
+  const demoSalesRole = demoRoles.get("demo_sales");
+  if (!demoSalesRole) throw new Error("demo_sales role was not created");
+  const demoSalesPeerUser = await prisma.user.upsert({
+    where: { username: "demo_sales_peer" },
+    update: { fullName: "演示销售同事", email: "demo.sales.peer@local.erp", passwordHash: demoPassword, isActive: true },
+    create: { username: "demo_sales_peer", email: "demo.sales.peer@local.erp", fullName: "演示销售同事", passwordHash: demoPassword, isActive: true },
+  });
+  let demoSalesPeerMembership = await prisma.membership.findFirst({
+    where: { userId: demoSalesPeerUser.id, businessUnitId: businessUnit.id, roleId: demoSalesRole.id, isPrimary: true },
+  });
+  demoSalesPeerMembership ??= await prisma.membership.create({
+    data: {
+      userId: demoSalesPeerUser.id,
+      legalEntityId: legalEntity.id,
+      businessUnitId: businessUnit.id,
+      departmentId: rootDepartment.id,
+      siteId: site.id,
+      roleId: demoSalesRole.id,
+      isPrimary: true,
+      isActive: true,
+      scope: "SELF",
+      startedAt: new Date(),
+    },
+  });
+
   const demoCustomer = await prisma.customer.upsert({
     where: { businessUnitId_code: { businessUnitId: businessUnit.id, code: "DEMO-CUSTOMER-001" } },
     update: {
@@ -1053,6 +1085,36 @@ async function main() {
   // A complete fictitious shipment is included so every role can verify the tracking workflow locally.
   const demoSalesUser = await prisma.user.findUniqueOrThrow({ where: { username: "demo_sales" } });
   const demoSalesMembership = await prisma.membership.findFirstOrThrow({ where: { userId: demoSalesUser.id, businessUnitId: businessUnit.id, isPrimary: true, isActive: true } });
+  await prisma.order.upsert({
+    where: { businessUnitId_orderNo: { businessUnitId: businessUnit.id, orderNo: "DEMO-PEER-ORDER-001" } },
+    update: {
+      creatorUserId: demoSalesPeerUser.id,
+      ownedByMembershipId: demoSalesPeerMembership.id,
+      status: "SUBMITTED",
+    },
+    create: {
+      legalEntityId: legalEntity.id,
+      businessUnitId: businessUnit.id,
+      departmentId: rootDepartment.id,
+      siteId: site.id,
+      customerId: demoCustomer.id,
+      orderNo: "DEMO-PEER-ORDER-001",
+      creatorUserId: demoSalesPeerUser.id,
+      ownedByMembershipId: demoSalesPeerMembership.id,
+      status: "SUBMITTED",
+      currency: "EUR",
+      productValueCents: 1999,
+      codAmountCents: 1999,
+      recipientName: "演示同事客户",
+      recipientPhone: "+34111111111",
+      recipientEmail: "peer.customer@example.com",
+      recipientCountryCode: "ES",
+      recipientCity: "Madrid",
+      recipientAddress: "Peer Demo Street 1",
+      customerWhatsapp: "+34111111111",
+      paymentMethod: "COD",
+    },
+  });
   const demoOrder = await prisma.order.upsert({
     where: { businessUnitId_orderNo: { businessUnitId: businessUnit.id, orderNo: "DEMO-ORDER-001" } },
     update: { status: "SHIPPED", recipientEmail: "demo.customer@example.com", customerWhatsapp: "+34123456789" },

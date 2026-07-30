@@ -90,6 +90,7 @@ export async function GET(request: NextRequest) {
     membershipId: auth.membership.id,
     actionKey: "order.read",
     targetBusinessUnitId: auth.membership.businessUnitId,
+    targetUserId: auth.userId,
   });
   if (!canRead.allowed) {
     return NextResponse.json({ error: "FORBIDDEN", reasons: canRead.reasons }, { status: 403 });
