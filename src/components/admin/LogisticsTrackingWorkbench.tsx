@@ -143,6 +143,11 @@ function TrackingEventsPanel({
   const [total, setTotal] = useState(initialTotal);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [selected, setSelected] = useState<string[]>([]);
+  const [batchNote, setBatchNote] = useState("");
+  const [batchTags, setBatchTags] = useState("");
+  const [batchSaving, setBatchSaving] = useState(false);
+  const [batchMessage, setBatchMessage] = useState("");
   const hasMore = events.length < total;
 
   async function loadMore() {
@@ -170,18 +175,68 @@ function TrackingEventsPanel({
     setTotal(payload?.meta?.total ?? total);
   }
 
+  async function saveBatch() {
+    if (!selected.length || !batchNote.trim()) {
+      setBatchMessage(selected.length ? "请填写本次批量处理备注" : "请先勾选需要处理的轨迹");
+      return;
+    }
+    setBatchSaving(true);
+    setBatchMessage("");
+    const response = await fetch("/api/mvp/shipments/events/annotations/batch", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        items: selected.map((eventId) => ({ shipmentId, eventId })),
+        note: batchNote,
+        tags: batchTags.split(/[,，、]/).map((tag) => tag.trim()).filter(Boolean),
+        isHandled: true,
+      }),
+    });
+    const payload = await response.json().catch(() => null) as {
+      data?: { updated: number; annotations: Array<Annotation & { shipmentEventId: string }> };
+      error?: { message?: string };
+    } | null;
+    setBatchSaving(false);
+    if (!response.ok) {
+      setBatchMessage(payload?.error?.message ?? "批量处理失败");
+      return;
+    }
+    const annotationByEvent = new Map((payload?.data?.annotations ?? []).map((item) => [item.shipmentEventId, item]));
+    setEvents((current) => current.map((event) => ({
+      ...event,
+      annotation: annotationByEvent.get(event.id) ?? event.annotation,
+    })));
+    setBatchMessage(`已完成 ${payload?.data?.updated ?? selected.length} 条轨迹`);
+    setSelected([]);
+    setBatchNote("");
+    setBatchTags("");
+  }
+
   const visibleEvents = expanded ? events : events.slice(0, 1);
   return <div className="border-t border-slate-200 bg-slate-50/60 p-4">
     <div className="mb-2 text-xs font-medium text-slate-500">{expanded ? `已加载 ${events.length} / ${total} 条轨迹，轨迹区域可独立滚动` : "最新物流轨迹"}</div>
+    {expanded && canAnnotate && <div className="mb-3 rounded-xl border border-violet-200 bg-violet-50 p-3">
+      <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-violet-900">
+        <span>批量处理</span><span className="rounded-full bg-white px-2 py-0.5 text-xs">已选 {selected.length} 条</span>
+        <button type="button" onClick={() => setSelected(visibleEvents.filter((event) => !event.annotation?.isHandled).map((event) => event.id))} className="text-xs text-violet-700 underline">选择当前未处理</button>
+        <button type="button" onClick={() => setSelected([])} className="text-xs text-slate-500 underline">清空</button>
+      </div>
+      <div className="mt-2 grid gap-2 lg:grid-cols-[1fr_0.7fr_auto]">
+        <input value={batchNote} onChange={(event) => setBatchNote(event.target.value)} maxLength={1000} className="h-10 rounded-lg border border-violet-200 bg-white px-3 text-sm outline-none focus:border-violet-400" placeholder="统一填写本次联系客户的结果（必填）" />
+        <input value={batchTags} onChange={(event) => setBatchTags(event.target.value)} className="h-10 rounded-lg border border-violet-200 bg-white px-3 text-sm outline-none focus:border-violet-400" placeholder="统一标签，如：已通知、等待回复" />
+        <button type="button" disabled={batchSaving || !selected.length} onClick={() => void saveBatch()} className="inline-flex h-10 items-center justify-center gap-1 rounded-lg bg-violet-600 px-4 text-sm font-semibold text-white disabled:opacity-50"><CheckCircle2 size={15} />{batchSaving ? "处理中…" : "批量标记完成"}</button>
+      </div>
+      {batchMessage && <p className={`mt-2 text-xs ${batchMessage.startsWith("已完成") ? "text-emerald-700" : "text-rose-600"}`}>{batchMessage}</p>}
+    </div>}
     <div className={`${expanded ? "max-h-[34rem] overflow-y-auto pr-1" : ""} space-y-3`}>
-      {visibleEvents.map((event) => <EventEditor key={event.id} shipmentId={shipmentId} event={event} canAnnotate={canAnnotate} quickTags={quickTags} />)}
+      {visibleEvents.map((event) => <EventEditor key={`${event.id}:${event.annotation?.handledAt ?? "open"}:${event.annotation?.note ?? ""}`} shipmentId={shipmentId} event={event} canAnnotate={canAnnotate} quickTags={quickTags} selected={selected.includes(event.id)} onToggleSelection={() => setSelected((current) => current.includes(event.id) ? current.filter((id) => id !== event.id) : [...current, event.id])} />)}
       {expanded && hasMore && <button type="button" disabled={loading} onClick={() => void loadMore()} className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{loading ? "正在加载…" : "加载更早轨迹"}</button>}
       {expanded && error && <p className="text-center text-xs text-rose-600">{error}</p>}
     </div>
   </div>;
 }
 
-function EventEditor({ shipmentId, event, canAnnotate, quickTags }: { shipmentId: string; event: TrackingEvent; canAnnotate: boolean; quickTags: string[] }) {
+function EventEditor({ shipmentId, event, canAnnotate, quickTags, selected, onToggleSelection }: { shipmentId: string; event: TrackingEvent; canAnnotate: boolean; quickTags: string[]; selected: boolean; onToggleSelection: () => void }) {
   const [note, setNote] = useState(event.annotation?.note ?? "");
   const [tagsText, setTagsText] = useState((event.annotation?.tags ?? []).join("、"));
   const [isHandled, setIsHandled] = useState(event.annotation?.isHandled ?? false);
@@ -214,6 +269,7 @@ function EventEditor({ shipmentId, event, canAnnotate, quickTags }: { shipmentId
   };
   const currentTags = tagsText.split(/[,，、]/).map((item) => item.trim()).filter(Boolean);
   return <section className={`rounded-xl border p-4 ${isHandled ? "border-emerald-200 bg-emerald-50/50" : "border-slate-200 bg-white"}`}>
+    {canAnnotate && <label className="mb-2 inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-600"><input type="checkbox" checked={selected} onChange={onToggleSelection} aria-label={`选择轨迹 ${event.eventType}`} className="size-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500" />加入批量处理</label>}
     <div className="flex flex-col gap-3 lg:flex-row lg:items-start"><span className={`mt-1 size-3 shrink-0 rounded-full ${isHandled ? "bg-emerald-500" : /FAILED|EXCEPTION|ADDRESS|RETURN|REFUS/i.test(event.eventType) ? "bg-rose-500" : "bg-violet-500"}`} /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><strong className="text-sm text-slate-900">{event.eventType}</strong>{event.statusMilestone && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{event.statusMilestone}</span>}<span className="text-xs text-slate-400">{new Date(event.occurredAt).toLocaleString("zh-CN")} · {event.location || "位置未知"}</span></div><p className="mt-1 text-sm text-slate-600">{event.memo || "暂无轨迹说明"}</p>{canAnnotate ? <><div className="mt-3 grid gap-2 lg:grid-cols-[1fr_0.7fr_auto]"><input value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} className="h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100" placeholder="记录本次联系客户的结果或处理备注" /><input value={tagsText} onChange={(e) => setTagsText(e.target.value)} className="h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100" placeholder="标签，用逗号分隔，如：已通知、无人接听" /><div className="flex gap-2"><button type="button" disabled={saving} onClick={() => save()} className="inline-flex h-10 items-center gap-1 rounded-lg bg-violet-600 px-3 text-sm font-semibold text-white disabled:opacity-50"><Save size={14} />保存</button><button type="button" disabled={saving} onClick={() => save(!isHandled)} className={`inline-flex h-10 items-center gap-1 rounded-lg px-3 text-sm font-semibold ${isHandled ? "bg-slate-200 text-slate-700" : "bg-emerald-600 text-white"}`}><CheckCircle2 size={14} />{isHandled ? "重新处理" : "标记完成"}</button></div></div><div className="mt-2 flex flex-wrap gap-2"><span className="text-xs font-medium text-slate-500">快捷标签：</span>{quickTags.map((tag) => <button key={tag} type="button" disabled={saving} onClick={() => toggleQuickTag(tag)} className={`rounded-full border px-2.5 py-1 text-xs ${currentTags.includes(tag) ? "border-violet-400 bg-violet-50 text-violet-700" : "border-slate-200 bg-white text-slate-600 hover:border-violet-300"}`}>{tag}</button>)}</div></> : <p className="mt-3 text-xs text-slate-400">当前角色仅可查看，不能填写备注或处理轨迹。</p>}<div className="mt-2 flex flex-wrap items-center gap-2 text-xs">{message && <span className={message === "已保存" ? "text-emerald-600" : "text-rose-600"}>{message}</span>}{handledBy && <span className="text-slate-500">处理人：{handledBy.fullName || handledBy.username}</span>}{handledAt && <span className="text-slate-400">处理时间：{new Date(handledAt).toLocaleString("zh-CN")}</span>}</div></div></div>
   </section>;
 }
