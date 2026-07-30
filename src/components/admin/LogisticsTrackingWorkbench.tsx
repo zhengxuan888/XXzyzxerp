@@ -7,7 +7,7 @@ import type { LogisticsQueueKey, LogisticsWorkbenchConfig } from "@/lib/logistic
 
 type Annotation = { note: string | null; tags: string[]; isHandled: boolean; handledAt: string | null; handledByMembership?: { user?: { fullName: string | null; username: string } } | null };
 type TrackingEvent = { id: string; occurredAt: string; eventType: string; statusMilestone: string | null; location: string | null; memo: string | null; annotation: Annotation | null };
-type TrackingRow = { id: string; trackingNo: string | null; carrier: string | null; status: string; urgency: "critical" | "high" | "normal"; urgencyLabel: string; priorityTag: string; dueStatus: string; canViewTrackingNo: boolean; canViewTimeline: boolean; canAnnotate: boolean; order: { id: string; orderNo: string; recipientName: string | null; recipientPhone: string | null; recipientEmail: string | null; customerWhatsapp: string | null; codAmountLabel: string; customer: { name: string }; creatorUser: { username: string; fullName: string | null }; ownerMembership: { id: string; department: { id: string; name: string } | null; managerMembership: { id: string; user: { username: string; fullName: string | null } } | null }; items: Array<{ productName: string; quantity: number }> }; events: TrackingEvent[] };
+type TrackingRow = { id: string; trackingNo: string | null; carrier: string | null; status: string; urgency: "critical" | "high" | "normal"; urgencyLabel: string; priorityTag: string; dueStatus: string; canViewTrackingNo: boolean; canViewTimeline: boolean; canAnnotate: boolean; eventTotal: number; order: { id: string; orderNo: string; recipientName: string | null; recipientPhone: string | null; recipientEmail: string | null; customerWhatsapp: string | null; recipientCountryCode: string | null; codAmountLabel: string; customer: { name: string }; creatorUser: { username: string; fullName: string | null }; ownerMembership: { id: string; department: { id: string; name: string } | null; managerMembership: { id: string; user: { username: string; fullName: string | null } } | null }; items: Array<{ productName: string; quantity: number }> }; events: TrackingEvent[] };
 export default function LogisticsTrackingWorkbench({
   rows,
   config,
@@ -27,6 +27,9 @@ export default function LogisticsTrackingWorkbench({
   const [departmentId, setDepartmentId] = useState("");
   const [managerMembershipId, setManagerMembershipId] = useState("");
   const [creatorMembershipId, setCreatorMembershipId] = useState("");
+  const [shipmentStatus, setShipmentStatus] = useState("");
+  const [carrier, setCarrier] = useState("");
+  const [destination, setDestination] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const visibleRows = useMemo(() => {
@@ -39,10 +42,13 @@ export default function LogisticsTrackingWorkbench({
       if (departmentId && row.order.ownerMembership.department?.id !== departmentId) return false;
       if (managerMembershipId && row.order.ownerMembership.managerMembership?.id !== managerMembershipId) return false;
       if (creatorMembershipId && row.order.ownerMembership.id !== creatorMembershipId) return false;
+      if (shipmentStatus && row.status !== shipmentStatus) return false;
+      if (carrier && row.carrier !== carrier) return false;
+      if (destination && row.order.recipientCountryCode !== destination) return false;
       if (!term) return true;
       return `${row.trackingNo} ${row.order.orderNo} ${row.order.recipientName} ${row.order.recipientEmail} ${row.order.customerWhatsapp} ${row.order.creatorUser.fullName} ${row.order.creatorUser.username} ${row.order.items.map((item) => item.productName).join(" ")}`.toLowerCase().includes(term);
     });
-  }, [creatorMembershipId, departmentId, keyword, managerMembershipId, queue, rows]);
+  }, [carrier, creatorMembershipId, departmentId, destination, keyword, managerMembershipId, queue, rows, shipmentStatus]);
   const pageCount = Math.max(1, Math.ceil(visibleRows.length / pageSize));
   const safePage = Math.min(page, pageCount);
   const pagedRows = visibleRows.slice((safePage - 1) * pageSize, safePage * pageSize);
@@ -52,6 +58,9 @@ export default function LogisticsTrackingWorkbench({
   const departments = [...new Map(rows.flatMap((row) => row.order.ownerMembership.department ? [[row.order.ownerMembership.department.id, row.order.ownerMembership.department] as const] : [])).values()].sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
   const managers = [...new Map(rows.flatMap((row) => row.order.ownerMembership.managerMembership ? [[row.order.ownerMembership.managerMembership.id, row.order.ownerMembership.managerMembership] as const] : [])).values()].sort((a, b) => (a.user.fullName || a.user.username).localeCompare(b.user.fullName || b.user.username, "zh-CN"));
   const creators = [...new Map(rows.map((row) => [row.order.ownerMembership.id, { id: row.order.ownerMembership.id, user: row.order.creatorUser }] as const)).values()].sort((a, b) => (a.user.fullName || a.user.username).localeCompare(b.user.fullName || b.user.username, "zh-CN"));
+  const shipmentStatuses = [...new Set(rows.map((row) => row.status))].sort();
+  const carriers = [...new Set(rows.map((row) => row.carrier).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b, "zh-CN"));
+  const destinations = [...new Set(rows.map((row) => row.order.recipientCountryCode).filter((value): value is string => Boolean(value)))].sort();
 
   return <div className="space-y-4">
     <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -60,10 +69,13 @@ export default function LogisticsTrackingWorkbench({
         <label className="flex h-11 w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 focus-within:border-violet-400 focus-within:ring-4 focus-within:ring-violet-100 lg:max-w-md"><Search size={17} className="text-slate-400" /><input value={keyword} onChange={(event) => { setKeyword(event.target.value); setPage(1); }} className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder={canViewTrackingNo ? "订单号、物流单号、客户、销售、产品" : "订单号、客户、销售、产品"} /></label>
       </div>
     </header>
-    <section className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-3">
+    <section className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 xl:grid-cols-6">
       <label className="grid gap-1 text-xs font-medium text-slate-500">部门<select value={departmentId} onChange={(event) => { setDepartmentId(event.target.value); setManagerMembershipId(""); setCreatorMembershipId(""); setPage(1); }} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部部门</option>{departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select></label>
       <label className="grid gap-1 text-xs font-medium text-slate-500">直属经理<select value={managerMembershipId} onChange={(event) => { setManagerMembershipId(event.target.value); setCreatorMembershipId(""); setPage(1); }} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部经理</option>{managers.filter((manager) => !departmentId || rows.some((row) => row.order.ownerMembership.department?.id === departmentId && row.order.ownerMembership.managerMembership?.id === manager.id)).map((manager) => <option key={manager.id} value={manager.id}>{manager.user.fullName || manager.user.username}</option>)}</select></label>
       <label className="grid gap-1 text-xs font-medium text-slate-500">销售<select value={creatorMembershipId} onChange={(event) => { setCreatorMembershipId(event.target.value); setPage(1); }} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部销售</option>{creators.filter((creator) => rows.some((row) => row.order.ownerMembership.id === creator.id && (!departmentId || row.order.ownerMembership.department?.id === departmentId) && (!managerMembershipId || row.order.ownerMembership.managerMembership?.id === managerMembershipId))).map((creator) => <option key={creator.id} value={creator.id}>{creator.user.fullName || creator.user.username}</option>)}</select></label>
+      <label className="grid gap-1 text-xs font-medium text-slate-500">物流状态<select value={shipmentStatus} onChange={(event) => { setShipmentStatus(event.target.value); setPage(1); }} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部状态</option>{shipmentStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
+      <label className="grid gap-1 text-xs font-medium text-slate-500">物流商<select value={carrier} onChange={(event) => { setCarrier(event.target.value); setPage(1); }} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部物流商</option>{carriers.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+      <label className="grid gap-1 text-xs font-medium text-slate-500">目的地<select value={destination} onChange={(event) => { setDestination(event.target.value); setPage(1); }} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部目的地</option>{destinations.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
     </section>
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
       {queueCards.map((card) => <button key={card.key} type="button" onClick={() => { setQueue(card.key); setPage(1); }} className={`rounded-2xl border p-4 text-left shadow-sm transition ${card.tone} ${queue === card.key ? "ring-2 ring-amber-500 ring-offset-2" : "hover:-translate-y-0.5"}`}><p className="text-xs font-medium opacity-70">{card.label}</p><p className="mt-1 text-2xl font-bold">{card.count}</p></button>)}
@@ -73,12 +85,12 @@ export default function LogisticsTrackingWorkbench({
     {canViewTimeline && !canAnnotate && <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">当前角色可查看物流轨迹，但未配置“处理物流轨迹”权限，备注和完成按钮已隐藏。</p>}
     {pagedRows.map((row) => { const isOpen = expanded[row.id] ?? false; return <article key={row.id} className={`overflow-hidden rounded-2xl border bg-white shadow-sm ${row.urgency === "critical" ? "border-rose-300" : row.urgency === "high" ? "border-amber-300" : "border-slate-200"}`}>
       <div className="grid gap-4 p-4 xl:grid-cols-[1.2fr_1.3fr_1fr_auto] xl:items-center">
-        <div><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.urgency === "critical" ? "bg-rose-50 text-rose-700" : row.urgency === "high" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>{row.urgencyLabel}</span>{row.priorityTag !== "-" && <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">{row.priorityTag}</span>}</div><p className="mt-2 font-mono text-sm font-semibold text-slate-900">{row.trackingNo || "暂无物流单号"}</p><p className="mt-1 text-xs text-slate-500">{row.carrier || "未填写物流商"} · {row.dueStatus}</p></div>
+        <div><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.urgency === "critical" ? "bg-rose-50 text-rose-700" : row.urgency === "high" ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-700"}`}>{row.urgencyLabel}</span>{row.priorityTag !== "-" && <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">{row.priorityTag}</span>}</div><p className="mt-2 font-mono text-sm font-semibold text-slate-900">{row.trackingNo || "暂无物流单号"}</p><p className="mt-1 text-xs text-slate-500">{row.carrier || "未填写物流商"} · {row.order.recipientCountryCode || "目的地未知"} · {row.dueStatus}</p></div>
         <div><Link href={`/admin/orders/${row.order.id}`} className="font-semibold text-violet-700 hover:underline">{row.order.orderNo}</Link><p className="mt-1 text-sm text-slate-700">{row.order.customer.name} / {row.order.recipientName || "未填写收件人"}</p><div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span className="inline-flex items-center gap-1"><Mail size={13} />{row.order.recipientEmail || "-"}</span><span className="inline-flex items-center gap-1"><MessageCircle size={13} />{row.order.customerWhatsapp || "-"}</span><span>{row.order.recipientPhone || "-"}</span></div></div>
         <div><div className="flex items-start gap-2"><Package size={16} className="mt-0.5 shrink-0 text-slate-400" /><div className="text-sm text-slate-700">{row.order.items.map((item) => `${item.productName} × ${item.quantity}`).join("、") || "未记录产品"}</div></div><div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500"><span>COD：<strong className="text-slate-800">{row.order.codAmountLabel}</strong></span><span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-1 font-medium text-violet-700"><UserRound size={13} />销售：{row.order.creatorUser.fullName || row.order.creatorUser.username}</span></div></div>
-        {row.canViewTimeline && <button type="button" onClick={() => setExpanded((value) => ({ ...value, [row.id]: !isOpen }))} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">{isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}{isOpen ? "收起轨迹" : `展开轨迹 ${row.events.length}`}</button>}
+        {row.canViewTimeline && <button type="button" onClick={() => setExpanded((value) => ({ ...value, [row.id]: !isOpen }))} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">{isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}{isOpen ? "收起轨迹" : `展开轨迹 ${row.eventTotal}`}</button>}
       </div>
-      {row.canViewTimeline && row.events.length > 0 && <TrackingEventsPanel shipmentId={row.id} initialEvents={row.events} expanded={isOpen} canAnnotate={row.canAnnotate} quickTags={config.quickTags} />}
+      {row.canViewTimeline && row.events.length > 0 && <TrackingEventsPanel shipmentId={row.id} initialEvents={row.events} initialTotal={row.eventTotal} expanded={isOpen} canAnnotate={row.canAnnotate} quickTags={config.quickTags} />}
     </article>; })}
     {!visibleRows.length && <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center text-sm text-slate-500">没有找到匹配的物流订单。</div>}
     {visibleRows.length > 0 && <footer className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2"><span>共 {visibleRows.length} 条</span><select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }} className="h-9 rounded-lg border border-slate-200 px-2"><option value={10}>10 / 页</option><option value={20}>20 / 页</option><option value={50}>50 / 页</option></select></div><div className="flex items-center gap-2"><span>第 {safePage}/{pageCount} 页</span><button type="button" disabled={safePage <= 1} onClick={() => setPage(safePage - 1)} className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 disabled:opacity-40"><ChevronLeft size={15} />上一页</button><button type="button" disabled={safePage >= pageCount} onClick={() => setPage(safePage + 1)} className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 disabled:opacity-40">下一页<ChevronRight size={15} /></button></div></footer>}
@@ -88,22 +100,24 @@ export default function LogisticsTrackingWorkbench({
 function TrackingEventsPanel({
   shipmentId,
   initialEvents,
+  initialTotal,
   expanded,
   canAnnotate,
   quickTags,
 }: {
   shipmentId: string;
   initialEvents: TrackingEvent[];
+  initialTotal: number;
   expanded: boolean;
   canAnnotate: boolean;
   quickTags: string[];
 }) {
   const [events, setEvents] = useState(initialEvents);
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState<number | null>(null);
+  const [total, setTotal] = useState(initialTotal);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const hasMore = total === null ? events.length >= 10 : events.length < total;
+  const hasMore = events.length < total;
 
   async function loadMore() {
     if (loading || !hasMore) return;
@@ -127,12 +141,12 @@ function TrackingEventsPanel({
       return [...current, ...incoming.filter((event) => !known.has(event.id))];
     });
     setPage(nextPage);
-    setTotal(payload?.meta?.total ?? events.length + incoming.length);
+    setTotal(payload?.meta?.total ?? total);
   }
 
   const visibleEvents = expanded ? events : events.slice(0, 1);
   return <div className="border-t border-slate-200 bg-slate-50/60 p-4">
-    <div className="mb-2 text-xs font-medium text-slate-500">{expanded ? `已加载 ${events.length}${total === null ? "" : ` / ${total}`} 条轨迹，轨迹区域可独立滚动` : "最新物流轨迹"}</div>
+    <div className="mb-2 text-xs font-medium text-slate-500">{expanded ? `已加载 ${events.length} / ${total} 条轨迹，轨迹区域可独立滚动` : "最新物流轨迹"}</div>
     <div className={`${expanded ? "max-h-[34rem] overflow-y-auto pr-1" : ""} space-y-3`}>
       {visibleEvents.map((event) => <EventEditor key={event.id} shipmentId={shipmentId} event={event} canAnnotate={canAnnotate} quickTags={quickTags} />)}
       {expanded && hasMore && <button type="button" disabled={loading} onClick={() => void loadMore()} className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{loading ? "正在加载…" : "加载更早轨迹"}</button>}

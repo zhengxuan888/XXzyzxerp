@@ -146,6 +146,7 @@ export default async function ShipmentsPage({
           recipientPhone: true,
           recipientEmail: true,
           customerWhatsapp: true,
+          recipientCountryCode: true,
           codAmountCents: true,
           currency: true,
           customer: { select: { name: true } },
@@ -176,8 +177,9 @@ export default async function ShipmentsPage({
         take: 1,
         select: { nextFollowUpAt: true },
       },
+      _count: { select: { events: true } },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
 
   const scopedRows = (await Promise.all(rows.map(async (row) => {
@@ -273,6 +275,7 @@ export default async function ShipmentsPage({
             handledByMembership: event.annotation.handledByMembership,
           } : null,
         })) : [],
+        eventTotal: row.canViewTimeline ? row._count.events : 0,
       }))}
     />
     </div>
