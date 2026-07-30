@@ -7,7 +7,7 @@ import type { LogisticsQueueKey, LogisticsWorkbenchConfig } from "@/lib/logistic
 
 type Annotation = { note: string | null; tags: string[]; isHandled: boolean; handledAt: string | null; handledByMembership?: { user?: { fullName: string | null; username: string } } | null };
 type TrackingEvent = { id: string; occurredAt: string; eventType: string; statusMilestone: string | null; location: string | null; memo: string | null; annotation: Annotation | null };
-type TrackingRow = { id: string; trackingNo: string | null; carrier: string | null; status: string; urgency: "critical" | "high" | "normal"; urgencyLabel: string; priorityTag: string; dueStatus: string; canViewTrackingNo: boolean; canViewTimeline: boolean; canAnnotate: boolean; eventTotal: number; order: { id: string; orderNo: string; recipientName: string | null; recipientPhone: string | null; recipientEmail: string | null; customerWhatsapp: string | null; recipientCountryCode: string | null; codAmountLabel: string; customer: { name: string }; creatorUser: { username: string; fullName: string | null }; ownerMembership: { id: string; department: { id: string; name: string } | null; managerMembership: { id: string; user: { username: string; fullName: string | null } } | null }; items: Array<{ productName: string; quantity: number }> }; events: TrackingEvent[] };
+type TrackingRow = { id: string; trackingNo: string | null; carrier: string | null; status: string; urgency: "critical" | "high" | "normal"; urgencyLabel: string; priorityTag: string; dueStatus: string; canViewTrackingNo: boolean; canViewTimeline: boolean; canAnnotate: boolean; eventTotal: number; unhandledEventCount: number; order: { id: string; orderNo: string; recipientName: string | null; recipientPhone: string | null; recipientEmail: string | null; customerWhatsapp: string | null; recipientCountryCode: string | null; codAmountLabel: string; customer: { name: string }; creatorUser: { username: string; fullName: string | null }; ownerMembership: { id: string; department: { id: string; name: string } | null; managerMembership: { id: string; user: { username: string; fullName: string | null } } | null }; items: Array<{ productName: string; quantity: number }> }; events: TrackingEvent[] };
 export default function LogisticsTrackingWorkbench({
   rows,
   config,
@@ -38,7 +38,12 @@ export default function LogisticsTrackingWorkbench({
       if (queue === "critical" && row.urgency !== "critical") return false;
       if (queue === "high" && row.urgency !== "high") return false;
       if (queue === "normal" && row.urgency !== "normal") return false;
-      if (queue === "unhandled" && !row.events.some((event) => !event.annotation?.isHandled)) return false;
+      if (queue === "unhandled" && row.unhandledEventCount === 0) return false;
+      if (queue === "in_transit" && !["PICKED_UP", "IN_TRANSIT"].includes(row.status)) return false;
+      if (queue === "out_for_delivery" && row.status !== "OUT_FOR_DELIVERY") return false;
+      if (queue === "delivered" && !["DELIVERED", "CLOSED"].includes(row.status)) return false;
+      if (queue === "exception" && row.status !== "EXCEPTION") return false;
+      if (queue === "returning" && !["RETURNING", "RETURNED"].includes(row.status)) return false;
       if (departmentId && row.order.ownerMembership.department?.id !== departmentId) return false;
       if (managerMembershipId && row.order.ownerMembership.managerMembership?.id !== managerMembershipId) return false;
       if (creatorMembershipId && row.order.ownerMembership.id !== creatorMembershipId) return false;
@@ -52,8 +57,17 @@ export default function LogisticsTrackingWorkbench({
   const pageCount = Math.max(1, Math.ceil(visibleRows.length / pageSize));
   const safePage = Math.min(page, pageCount);
   const pagedRows = visibleRows.slice((safePage - 1) * pageSize, safePage * pageSize);
-  const countFor = (key: LogisticsQueueKey) => key === "all" ? rows.length : key === "unhandled" ? rows.filter((row) => row.events.some((event) => !event.annotation?.isHandled)).length : rows.filter((row) => row.urgency === key).length;
-  const toneFor = (key: LogisticsQueueKey) => key === "critical" ? "border-rose-200 bg-rose-50 text-rose-900" : key === "high" ? "border-amber-200 bg-amber-50 text-amber-900" : key === "normal" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : key === "unhandled" ? "border-violet-200 bg-violet-50 text-violet-900" : "border-slate-200 bg-white text-slate-900";
+  const countFor = (key: LogisticsQueueKey) => {
+    if (key === "all") return rows.length;
+    if (key === "unhandled") return rows.filter((row) => row.unhandledEventCount > 0).length;
+    if (key === "critical" || key === "high" || key === "normal") return rows.filter((row) => row.urgency === key).length;
+    if (key === "in_transit") return rows.filter((row) => ["PICKED_UP", "IN_TRANSIT"].includes(row.status)).length;
+    if (key === "out_for_delivery") return rows.filter((row) => row.status === "OUT_FOR_DELIVERY").length;
+    if (key === "delivered") return rows.filter((row) => ["DELIVERED", "CLOSED"].includes(row.status)).length;
+    if (key === "exception") return rows.filter((row) => row.status === "EXCEPTION").length;
+    return rows.filter((row) => ["RETURNING", "RETURNED"].includes(row.status)).length;
+  };
+  const toneFor = (key: LogisticsQueueKey) => key === "critical" || key === "exception" ? "border-rose-200 bg-rose-50 text-rose-900" : key === "high" || key === "out_for_delivery" ? "border-amber-200 bg-amber-50 text-amber-900" : key === "normal" || key === "delivered" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : key === "unhandled" || key === "returning" ? "border-violet-200 bg-violet-50 text-violet-900" : key === "in_transit" ? "border-sky-200 bg-sky-50 text-sky-900" : "border-slate-200 bg-white text-slate-900";
   const queueCards = config.cards.filter((card) => card.isVisible).map((card) => ({ ...card, count: countFor(card.key), tone: toneFor(card.key) }));
   const departments = [...new Map(rows.flatMap((row) => row.order.ownerMembership.department ? [[row.order.ownerMembership.department.id, row.order.ownerMembership.department] as const] : [])).values()].sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
   const managers = [...new Map(rows.flatMap((row) => row.order.ownerMembership.managerMembership ? [[row.order.ownerMembership.managerMembership.id, row.order.ownerMembership.managerMembership] as const] : [])).values()].sort((a, b) => (a.user.fullName || a.user.username).localeCompare(b.user.fullName || b.user.username, "zh-CN"));

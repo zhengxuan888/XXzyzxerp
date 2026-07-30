@@ -181,6 +181,20 @@ export default async function ShipmentsPage({
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
+  const unhandledEventGroups = rows.length
+    ? await prisma.shipmentEvent.groupBy({
+        by: ["shipmentId"],
+        where: {
+          shipmentId: { in: rows.map((row) => row.id) },
+          OR: [
+            { annotation: { is: null } },
+            { annotation: { is: { isHandled: false } } },
+          ],
+        },
+        _count: { _all: true },
+      })
+    : [];
+  const unhandledEventCounts = new Map(unhandledEventGroups.map((item) => [item.shipmentId, item._count._all]));
 
   const scopedRows = (await Promise.all(rows.map(async (row) => {
     const target = {
@@ -276,6 +290,7 @@ export default async function ShipmentsPage({
           } : null,
         })) : [],
         eventTotal: row.canViewTimeline ? row._count.events : 0,
+        unhandledEventCount: row.canViewTimeline ? (unhandledEventCounts.get(row.id) ?? 0) : 0,
       }))}
     />
     </div>

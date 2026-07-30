@@ -1,6 +1,17 @@
 import { DEFAULT_ALERT_RULES, type LogisticsAlertRule } from "@/lib/logistics";
 
-export const logisticsQueueKeys = ["all", "critical", "high", "normal", "unhandled"] as const;
+export const logisticsQueueKeys = [
+  "all",
+  "in_transit",
+  "out_for_delivery",
+  "delivered",
+  "exception",
+  "returning",
+  "critical",
+  "high",
+  "normal",
+  "unhandled",
+] as const;
 export type LogisticsQueueKey = (typeof logisticsQueueKeys)[number];
 
 export type LogisticsWorkbenchCard = {
@@ -23,10 +34,15 @@ export const defaultLogisticsWorkbenchConfig: LogisticsWorkbenchConfig = {
   quickTags: ["已通知客户", "无人接听", "等待客户回复", "地址已确认", "需再次跟进"],
   cards: [
     { key: "all", label: "全部追踪", isVisible: true, sortOrder: 10 },
-    { key: "critical", label: "超期高风险", isVisible: true, sortOrder: 20 },
-    { key: "high", label: "需立即跟进", isVisible: true, sortOrder: 30 },
-    { key: "normal", label: "正常运输", isVisible: true, sortOrder: 40 },
-    { key: "unhandled", label: "存在未处理轨迹", isVisible: true, sortOrder: 50 },
+    { key: "in_transit", label: "运输中", isVisible: true, sortOrder: 20 },
+    { key: "out_for_delivery", label: "派送中", isVisible: true, sortOrder: 30 },
+    { key: "delivered", label: "已送达", isVisible: true, sortOrder: 40 },
+    { key: "unhandled", label: "未处理", isVisible: true, sortOrder: 50 },
+    { key: "exception", label: "物流异常", isVisible: true, sortOrder: 60 },
+    { key: "returning", label: "退回中/已退回", isVisible: true, sortOrder: 70 },
+    { key: "critical", label: "超期高风险", isVisible: true, sortOrder: 80 },
+    { key: "high", label: "需立即跟进", isVisible: true, sortOrder: 90 },
+    { key: "normal", label: "正常运输", isVisible: false, sortOrder: 100 },
   ],
   alertRules: DEFAULT_ALERT_RULES,
   syncIntervalMinutes: 30,
