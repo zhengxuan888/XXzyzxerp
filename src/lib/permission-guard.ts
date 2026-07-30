@@ -12,6 +12,13 @@ type PermissionSource = {
   requiredCondition: unknown;
 };
 
+function hasNoRequiredCondition(value: unknown) {
+  // Conditions need a server-side interpreter. Until a condition is supported
+  // by that interpreter, hiding the menu is safer than letting configuration
+  // look enforced while the API/menu silently ignores it.
+  return value === null || value === undefined;
+}
+
 export type PermissionOptions = {
   userId: string;
   membershipId: string;
@@ -20,6 +27,7 @@ export type PermissionOptions = {
   targetDepartmentId?: string | null;
   targetSiteId?: string | null;
   targetUserId?: string | null;
+  targetMembershipId?: string | null;
 };
 
 export async function requirePermission(opts: PermissionOptions): Promise<void> {
@@ -36,7 +44,15 @@ export async function getMembershipAwareMenus(opts: {
   membershipId: string;
   userId: string;
 }): Promise<Map<string | null, PermissionSource[]>> {
-  const membership = await prisma.membership.findUnique({ where: { id: opts.membershipId } });
+  const now = new Date();
+  const membership = await prisma.membership.findFirst({
+    where: {
+      id: opts.membershipId,
+      userId: opts.userId,
+      isActive: true,
+      OR: [{ endedAt: null }, { endedAt: { gt: now } }],
+    },
+  });
   if (!membership) return new Map<string | null, PermissionSource[]>();
 
   const permissionSet = await getAllowedActionsForSession({
@@ -50,12 +66,12 @@ export async function getMembershipAwareMenus(opts: {
     select: { menuId: true },
   });
   const roleMenuIds = new Set(menuPermissions.map((item) => item.menuId));
-  const now = new Date();
   const grantActions = new Set(
     (
       await prisma.accessGrant.findMany({
         where: {
           granteeMembershipId: membership.id,
+          businessUnitId: membership.businessUnitId,
           isActive: true,
           revokedAt: null,
           OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
@@ -89,6 +105,7 @@ export async function getMembershipAwareMenus(opts: {
     .filter(
       (item) =>
         !parentMenuIds.has(item.id) &&
+        hasNoRequiredCondition(item.requiredCondition) &&
         (roleMenuIds.has(item.id) || Boolean(item.requiredActionKey && grantActions.has(item.requiredActionKey))) &&
         (!item.requiredActionKey || allowed.has(item.requiredActionKey)),
     )
@@ -108,8 +125,12 @@ export async function getMembershipAwareMenus(opts: {
   for (const item of initiallyVisible) {
     let parentId = item.parentId;
     while (parentId) {
-      visibleIds.add(parentId);
-      parentId = menuById.get(parentId)?.parentId ?? null;
+      const parent = menuById.get(parentId);
+      // A group can itself carry a condition. Do not use it as a way to
+      // bypass a condition evaluator that has not been implemented yet.
+      if (!parent || !hasNoRequiredCondition(parent.requiredCondition)) break;
+      visibleIds.add(parent.id);
+      parentId = parent.parentId;
     }
   }
   const items: PermissionSource[] = menus

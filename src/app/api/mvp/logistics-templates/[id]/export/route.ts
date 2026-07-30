@@ -65,6 +65,7 @@ export async function GET(request: NextRequest, context: RouteContext<"/api/mvp/
     targetDepartmentId: order.departmentId,
     targetSiteId: order.siteId,
     targetUserId: order.creatorUserId,
+    targetMembershipId: order.ownedByMembershipId,
   })));
   const orders = candidateOrders.filter((_, index) => orderAccess[index].allowed);
   if (!orders.length) return fail("NO_WAITING_SHIPMENT_ORDERS", "当前没有核单通过、等待发货的订单。", 409);

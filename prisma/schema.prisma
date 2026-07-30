@@ -618,10 +618,14 @@ model Order {
 
   @@unique([businessUnitId, orderNo])
   @@index([legalEntityId, businessUnitId])
+  @@index([businessUnitId, shopId])
   @@index([customerId, status])
   @@index([orderTemplateId])
   @@index([businessUnitId, recipientEmail])
   @@index([businessUnitId, status, reviewClaimedByMembershipId])
+  @@index([businessUnitId, departmentId, creatorUserId, createdAt])
+  @@index([businessUnitId, ownedByMembershipId, createdAt, id])
+  @@index([businessUnitId, recipientCountryCode])
 }
 
 model OrderTemplate {
@@ -788,6 +792,8 @@ model Shipment {
   @@unique([businessUnitId, trackingNo])
   @@index([businessUnitId, workStatus, nextFollowUpAt])
   @@index([ownerMembershipId, workStatus])
+  @@index([businessUnitId, status, createdAt, id])
+  @@index([businessUnitId, ownerMembershipId, createdAt, id])
 }
 
 model ShipmentEvent {
@@ -809,6 +815,8 @@ model ShipmentEvent {
 
   @@unique([shipmentId, source, externalEventKey])
   @@index([shipmentId, occurredAt])
+  @@index([shipmentId, occurredAt, id])
+  @@index([shipmentId, eventType, occurredAt])
 }
 
 model LogisticsEventAnnotation {
@@ -860,7 +868,7 @@ model LogisticsWorkbenchSetting {
   businessUnitId             String   @unique
   quickTags                  String[] @default([])
   cards                      Json
-  alertRules                 Json
+  alertRules                 Json     @default("[]")
   syncIntervalMinutes        Int      @default(30)
   feishuNotificationsEnabled Boolean  @default(false)
   feishuHighPriorityOnly     Boolean  @default(true)

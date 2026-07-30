@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuthContext } from "@/lib/api-auth";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
+import { createShipmentAccessPlan } from "@/lib/shipment-access";
 import { writeAuditLog } from "@/lib/audit";
 import { fail, ok, paginated, parsePagination } from "@/lib/api-response";
 import { Prisma } from "@prisma/client";
@@ -11,111 +12,70 @@ export async function GET(request: NextRequest) {
   const auth = await requireAuthContext(request);
   if (!auth) return NextResponse.json({ error: "Unauthenticated." }, { status: 401 });
 
-  const canRead = await checkPermission({
-    userId: auth.userId,
-    membershipId: auth.membership.id,
-    actionKey: "shipment.read",
-    targetBusinessUnitId: auth.membership.businessUnitId,
-  });
-  if (!canRead.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: canRead.reasons }, { status: 403 });
-  const canSearchTrackingNo = await checkPermission({
-    userId: auth.userId,
-    membershipId: auth.membership.id,
-    actionKey: "shipment.tracking_no.view",
-    targetBusinessUnitId: auth.membership.businessUnitId,
-    targetDepartmentId: auth.membership.departmentId,
-    targetSiteId: auth.membership.siteId,
-    targetUserId: auth.userId,
-  });
+  const [readAccess, trackingNumberAccess, timelineAccess] = await Promise.all([
+    createShipmentAccessPlan({ membership: auth.membership, actionKey: "shipment.read" }),
+    createShipmentAccessPlan({ membership: auth.membership, actionKey: "shipment.tracking_no.view" }),
+    createShipmentAccessPlan({ membership: auth.membership, actionKey: "shipment.timeline.view" }),
+  ]);
+  if (!readAccess.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: ["PERMISSION_DENIED"] }, { status: 403 });
 
   const pagination = parsePagination(request);
   const status = request.nextUrl.searchParams.get("status")?.trim().toUpperCase();
   const query = request.nextUrl.searchParams.get("q")?.trim();
   const where: Prisma.ShipmentWhereInput = {
-    businessUnitId: auth.membership.businessUnitId,
-    ...(status ? { status: status as never } : {}),
-    ...(query
-      ? {
-          OR: [
-            ...(canSearchTrackingNo.allowed ? [{ trackingNo: { contains: query, mode: "insensitive" as const } }] : []),
-            { carrier: { contains: query, mode: "insensitive" } },
-            { order: { orderNo: { contains: query, mode: "insensitive" } } },
-          ],
-        }
-      : {}),
-  };
-  // Authorize against lightweight candidates first. Applying skip/take before
-  // row-level permission checks can return short pages and an incorrect total;
-  // loading every event before pagination makes the workbench degrade as history grows.
-  const candidates = await prisma.shipment.findMany({
-    where,
-    select: {
-      id: true,
-      businessUnitId: true,
-      siteId: true,
-      order: {
-        select: {
-          departmentId: true,
-          creatorUserId: true,
-        },
+    AND: [
+      readAccess.where,
+      {
+        ...(status ? { status: status as never } : {}),
+        ...(query
+          ? {
+              OR: [
+                { carrier: { contains: query, mode: "insensitive" as const } },
+                { order: { is: { orderNo: { contains: query, mode: "insensitive" as const } } } },
+              ],
+            }
+          : {}),
       },
-    },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-  });
-  const authorizedCandidates = (await Promise.all(candidates.map(async (row) => {
-    const read = await checkPermission({
-      userId: auth.userId,
-      membershipId: auth.membership.id,
-      actionKey: "shipment.read",
-      targetBusinessUnitId: row.businessUnitId,
-      targetDepartmentId: row.order.departmentId,
-      targetSiteId: row.siteId,
-      targetUserId: row.order.creatorUserId,
-    });
-    return read.allowed ? row : null;
-  }))).filter((row): row is NonNullable<typeof row> => Boolean(row));
-  const pageCandidates = authorizedCandidates.slice(pagination.skip, pagination.skip + pagination.take);
-  const pageIds = pageCandidates.map((row) => row.id);
-  const pageRows = pageIds.length
-    ? await prisma.shipment.findMany({
-        where: { id: { in: pageIds } },
-        include: {
-          order: {
-            select: {
-              orderNo: true,
-              departmentId: true,
-              creatorUserId: true,
-            },
+    ],
+  };
+  const [total, pageRows] = await Promise.all([
+    prisma.shipment.count({ where }),
+    prisma.shipment.findMany({
+      where,
+      skip: pagination.skip,
+      take: pagination.take,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      include: {
+        order: {
+          select: {
+            orderNo: true,
+            departmentId: true,
+            creatorUserId: true,
+            ownedByMembershipId: true,
           },
-          events: { orderBy: [{ occurredAt: "desc" }, { id: "desc" }] },
         },
-      })
-    : [];
-  const pageOrder = new Map(pageIds.map((id, index) => [id, index]));
-  pageRows.sort((a, b) => (pageOrder.get(a.id) ?? 0) - (pageOrder.get(b.id) ?? 0));
-  const scopedRows = await Promise.all(pageRows.map(async (row) => {
+        events: { orderBy: [{ occurredAt: "desc" }, { id: "desc" }], take: 10 },
+      },
+    }),
+  ]);
+  const scopedRows = pageRows.map((row) => {
     const target = {
-      userId: auth.userId,
-      membershipId: auth.membership.id,
-      targetBusinessUnitId: row.businessUnitId,
-      targetDepartmentId: row.order.departmentId,
-      targetSiteId: row.siteId,
-      targetUserId: row.order.creatorUserId,
+      businessUnitId: row.businessUnitId,
+      departmentId: row.order.departmentId,
+      siteId: row.siteId,
+      creatorUserId: row.order.creatorUserId,
+      ownerMembershipId: row.order.ownedByMembershipId,
     };
-    const [trackingNo, timeline] = await Promise.all([
-      checkPermission({ ...target, actionKey: "shipment.tracking_no.view" }),
-      checkPermission({ ...target, actionKey: "shipment.timeline.view" }),
-    ]);
     return {
       ...row,
       order: { orderNo: row.order.orderNo },
-      trackingNo: trackingNo.allowed ? row.trackingNo : null,
-      events: timeline.allowed ? row.events : [],
+      trackingNo: trackingNumberAccess.allows(target) ? row.trackingNo : null,
+      events: timelineAccess.allows(target) ? row.events : [],
     };
-  }));
+  });
   return paginated(
     scopedRows,
-    authorizedCandidates.length,
+    total,
     pagination,
   );
 }
@@ -145,6 +105,7 @@ export async function POST(request: NextRequest) {
     targetDepartmentId: order.departmentId,
     targetSiteId: order.siteId,
     targetUserId: order.creatorUserId,
+    targetMembershipId: order.ownedByMembershipId,
   });
   if (!canCreate.allowed) {
     return NextResponse.json({ error: "FORBIDDEN", reasons: canCreate.reasons }, { status: 403 });

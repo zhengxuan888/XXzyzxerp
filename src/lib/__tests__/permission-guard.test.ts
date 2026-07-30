@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const membershipFindUnique = vi.fn();
+const membershipFindFirst = vi.fn();
 const menuPermissionFindMany = vi.fn();
 const accessGrantFindMany = vi.fn();
 const menuFindMany = vi.fn();
 
 vi.mock("../prisma", () => ({
   prisma: {
-    membership: { findUnique: (...args: unknown[]) => membershipFindUnique(...args) },
+    membership: { findFirst: (...args: unknown[]) => membershipFindFirst(...args) },
     menuPermission: { findMany: (...args: unknown[]) => menuPermissionFindMany(...args) },
     accessGrant: { findMany: (...args: unknown[]) => accessGrantFindMany(...args) },
     menu: { findMany: (...args: unknown[]) => menuFindMany(...args) },
@@ -24,7 +24,14 @@ import { getMembershipAwareMenus } from "../permission-guard";
 describe("dynamic menu grant lifecycle", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    membershipFindUnique.mockResolvedValue({ id: "m1", roleId: "employee" });
+    membershipFindFirst.mockResolvedValue({
+      id: "m1",
+      userId: "u1",
+      roleId: "employee",
+      businessUnitId: "BU_A",
+      isActive: true,
+      endedAt: null,
+    });
     menuPermissionFindMany.mockResolvedValue([]);
     menuFindMany.mockResolvedValue([
       {
@@ -49,6 +56,9 @@ describe("dynamic menu grant lifecycle", () => {
       expect.objectContaining({
         where: expect.objectContaining({ isActive: true, revokedAt: null }),
       }),
+    );
+    expect(accessGrantFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ businessUnitId: "BU_A" }) }),
     );
   });
 
@@ -87,5 +97,41 @@ describe("dynamic menu grant lifecycle", () => {
     accessGrantFindMany.mockResolvedValue([]);
     const menus = await getMembershipAwareMenus({ membershipId: "m1", userId: "u1" });
     expect(menus.get(null)).toBeUndefined();
+  });
+
+  it("does not expose a child through a parent with an unsupported condition", async () => {
+    menuFindMany.mockResolvedValue([
+      {
+        id: "group",
+        key: "group-logistics",
+        label: "物流与售后",
+        path: "/admin/shipping",
+        icon: null,
+        parentId: null,
+        sortOrder: 1,
+        isActive: true,
+        requiredActionKey: null,
+        requiredCondition: { featureFlag: "future-rule" },
+      },
+      {
+        id: "child",
+        key: "shipments",
+        label: "物流追踪",
+        path: "/admin/shipments",
+        icon: null,
+        parentId: "group",
+        sortOrder: 1,
+        isActive: true,
+        requiredActionKey: "shipment.read",
+        requiredCondition: null,
+      },
+    ]);
+    menuPermissionFindMany.mockResolvedValue([{ menuId: "child" }]);
+    accessGrantFindMany.mockResolvedValue([]);
+
+    const menus = await getMembershipAwareMenus({ membershipId: "m1", userId: "u1" });
+
+    expect(menus.get(null)).toBeUndefined();
+    expect(menus.get("group")?.map((menu) => menu.key)).toEqual(["shipments"]);
   });
 });

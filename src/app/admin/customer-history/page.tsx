@@ -48,12 +48,11 @@ export default async function CustomerHistoryPage({
         }
       : {}),
   };
-  const scopedWhere = withOrderReadScope(baseWhere as Record<string, unknown>, orderReadScope, membership, session.userId);
+  const scopedWhere = withOrderReadScope(baseWhere as Record<string, unknown>, orderReadScope, membership);
   const allVisibleWhere = withOrderReadScope(
     { businessUnitId: membership.businessUnitId },
     orderReadScope,
     membership,
-    session.userId,
   );
   const [orders, historyCounts] = await Promise.all([
     prisma.order.findMany({

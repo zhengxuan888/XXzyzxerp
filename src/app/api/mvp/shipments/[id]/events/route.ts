@@ -34,7 +34,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
       id: true,
       businessUnitId: true,
       siteId: true,
-      order: { select: { departmentId: true, creatorUserId: true } },
+      order: { select: { departmentId: true, creatorUserId: true, ownedByMembershipId: true } },
     },
   });
   if (!shipment) return fail("SHIPMENT_NOT_FOUND", "物流记录不存在。", 404);
@@ -47,6 +47,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
     targetDepartmentId: shipment.order.departmentId,
     targetSiteId: shipment.siteId,
     targetUserId: shipment.order.creatorUserId,
+    targetMembershipId: shipment.order.ownedByMembershipId,
   });
   if (!permission.allowed) return fail("FORBIDDEN", "没有查看物流轨迹的权限。", 403);
 
@@ -110,6 +111,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         select: {
           departmentId: true,
           creatorUserId: true,
+          ownedByMembershipId: true,
           recipientCountryCode: true,
           recipientRegion: true,
           recipientCity: true,
@@ -128,6 +130,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     targetDepartmentId: shipment.order.departmentId,
     targetSiteId: shipment.siteId,
     targetUserId: shipment.order.creatorUserId,
+    targetMembershipId: shipment.order.ownedByMembershipId,
   });
   if (!canTrack.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: canTrack.reasons }, { status: 403 });
   const setting = await prisma.logisticsWorkbenchSetting.findUnique({

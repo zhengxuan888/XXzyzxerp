@@ -26,6 +26,7 @@ export default async function ShippingWorkbenchPage() {
         departmentId: true,
         siteId: true,
         creatorUserId: true,
+        ownedByMembershipId: true,
         recipientName: true,
         recipientCountryCode: true,
         creatorUser: { select: { username: true, fullName: true } },
@@ -43,7 +44,7 @@ export default async function ShippingWorkbenchPage() {
     checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "logistics_template.manage", targetBusinessUnitId: membership.businessUnitId }),
     checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "logistics_template.export", targetBusinessUnitId: membership.businessUnitId }),
   ]);
-  const canProcess = (target: { departmentId: string | null; siteId: string | null; creatorUserId: string }) => checkPermission({
+  const canProcess = (target: { departmentId: string | null; siteId: string | null; creatorUserId: string; ownedByMembershipId: string }) => checkPermission({
     userId: session.userId,
     membershipId: membership.id,
     actionKey: "shipment.create",
@@ -51,6 +52,7 @@ export default async function ShippingWorkbenchPage() {
     targetDepartmentId: target.departmentId,
     targetSiteId: target.siteId,
     targetUserId: target.creatorUserId,
+    targetMembershipId: target.ownedByMembershipId,
   });
   const orderAccess = await Promise.all(rawOrders.map(canProcess));
   const orders = rawOrders.filter((_, index) => orderAccess[index].allowed);

@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
         }
       : {}),
   };
-  const where = withOrderReadScope(baseWhere as Record<string, unknown>, orderReadScope, auth.membership, auth.userId) as Prisma.OrderWhereInput;
+  const where = withOrderReadScope(baseWhere as Record<string, unknown>, orderReadScope, auth.membership) as Prisma.OrderWhereInput;
   const [rows, total] = await prisma.$transaction([
     prisma.order.findMany({
       where,

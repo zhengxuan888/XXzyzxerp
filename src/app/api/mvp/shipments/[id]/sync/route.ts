@@ -18,7 +18,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
   const { id } = await props.params;
   const shipment = await prisma.shipment.findFirst({
     where: { id, businessUnitId: auth.membership.businessUnitId },
-    include: { order: { select: { departmentId: true, creatorUserId: true } } },
+    include: { order: { select: { departmentId: true, creatorUserId: true, ownedByMembershipId: true } } },
   });
   if (!shipment) return fail("SHIPMENT_NOT_FOUND", "物流订单不存在或无权限。", 404);
   const permission = await checkPermission({
@@ -29,6 +29,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     targetDepartmentId: shipment.order.departmentId,
     targetSiteId: shipment.siteId,
     targetUserId: shipment.order.creatorUserId,
+    targetMembershipId: shipment.order.ownedByMembershipId,
   });
   if (!permission.allowed) return fail("FORBIDDEN", "没有同步物流轨迹的权限。", 403);
   if (!shipment.trackingNo) return fail("TRACKING_NO_REQUIRED", "请先填写物流单号。", 409);

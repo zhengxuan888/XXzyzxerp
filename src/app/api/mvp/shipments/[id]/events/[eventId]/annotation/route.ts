@@ -25,7 +25,7 @@ export async function PATCH(
         select: {
           businessUnitId: true,
           siteId: true,
-          order: { select: { departmentId: true, creatorUserId: true } },
+          order: { select: { departmentId: true, creatorUserId: true, ownedByMembershipId: true } },
         },
       },
     },
@@ -39,6 +39,7 @@ export async function PATCH(
     targetDepartmentId: event.shipment.order.departmentId,
     targetSiteId: event.shipment.siteId,
     targetUserId: event.shipment.order.creatorUserId,
+    targetMembershipId: event.shipment.order.ownedByMembershipId,
   });
   if (!permission.allowed) return fail("FORBIDDEN", "无权处理该物流轨迹。", 403);
 

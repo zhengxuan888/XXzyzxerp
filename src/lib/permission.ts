@@ -16,6 +16,7 @@ export type PermissionContext = {
   targetDepartmentId?: string | null;
   targetSiteId?: string | null;
   targetUserId?: string | null;
+  targetMembershipId?: string | null;
 };
 
 const scopeLevel: Record<PermissionScope, number> = {
@@ -44,36 +45,55 @@ export function normalizeScope(scope?: string | null): PermissionScope {
   return "NONE";
 }
 
-async function isInReportingScope(actorMembershipId: string, targetUserId: string | null | undefined, includeActor: boolean) {
-  if (!targetUserId) return false;
+async function isInReportingScope(
+  actorMembershipId: string,
+  targetMembershipId: string | null | undefined,
+  targetUserId: string | null | undefined,
+  includeActor: boolean,
+  targetBusinessUnitId: string,
+) {
+  if (!targetMembershipId && !targetUserId) return false;
+  const now = new Date();
   const rows = await prisma.membership.findMany({
-    where: { isActive: true },
-    select: { id: true, userId: true, managerMembershipId: true },
+    where: {
+      businessUnitId: targetBusinessUnitId,
+      isActive: true,
+      OR: [{ endedAt: null }, { endedAt: { gt: now } }],
+    },
+    select: { id: true, userId: true, businessUnitId: true, managerMembershipId: true },
   });
   const children = new Map<string, string[]>();
+  const byId = new Map(rows.map((row) => [row.id, row]));
   for (const row of rows) if (row.managerMembershipId) children.set(row.managerMembershipId, [...(children.get(row.managerMembershipId) ?? []), row.id]);
-  const actor = rows.find((row) => row.id === actorMembershipId);
+  const actor = byId.get(actorMembershipId);
   if (!actor) return false;
-  const allowed = new Set<string>(includeActor ? [actor.userId] : []);
+  const allowedMembershipIds = new Set<string>(includeActor ? [actor.id] : []);
+  const allowedUserIds = new Set<string>(includeActor ? [actor.userId] : []);
   const queue = [...(children.get(actorMembershipId) ?? [])];
   while (queue.length) {
     const id = queue.shift()!;
-    const row = rows.find((item) => item.id === id);
-    if (row) allowed.add(row.userId);
+    const row = byId.get(id);
+    if (row) {
+      allowedMembershipIds.add(row.id);
+      allowedUserIds.add(row.userId);
+    }
     queue.push(...(children.get(id) ?? []));
   }
-  return allowed.has(targetUserId);
+  return targetMembershipId ? allowedMembershipIds.has(targetMembershipId) : allowedUserIds.has(targetUserId!);
 }
 
-async function isDepartmentTreeScope(actorMembershipId: string, targetDepartmentId: string | null | undefined) {
+async function isDepartmentTreeScope(
+  businessUnitId: string,
+  rootDepartmentId: string | null | undefined,
+  targetDepartmentId: string | null | undefined,
+) {
   if (!targetDepartmentId) return false;
-  const actor = await prisma.membership.findUnique({ where: { id: actorMembershipId }, select: { departmentId: true, businessUnitId: true } });
-  if (!actor?.departmentId) return false;
-  if (targetDepartmentId === actor.departmentId) return true;
-  const departments = await prisma.department.findMany({ where: { businessUnitId: actor.businessUnitId, isActive: true }, select: { id: true, parentId: true } });
+  if (!rootDepartmentId) return false;
+  if (targetDepartmentId === rootDepartmentId) return true;
+  const departments = await prisma.department.findMany({ where: { businessUnitId, isActive: true }, select: { id: true, parentId: true } });
   const children = new Map<string, string[]>();
   for (const row of departments) if (row.parentId) children.set(row.parentId, [...(children.get(row.parentId) ?? []), row.id]);
-  const queue = [...(children.get(actor.departmentId) ?? [])];
+  const queue = [...(children.get(rootDepartmentId) ?? [])];
   while (queue.length) { const id = queue.shift()!; if (id === targetDepartmentId) return true; queue.push(...(children.get(id) ?? [])); }
   return false;
 }
@@ -81,10 +101,12 @@ async function isDepartmentTreeScope(actorMembershipId: string, targetDepartment
 function isScopedMatch({
   scope,
   actor,
+  actorMembershipId,
   grant,
   target,
 }: {
   scope: PermissionScope;
+  actorMembershipId: string;
   actor: {
     businessUnitId: string | null;
     departmentId: string | null;
@@ -98,28 +120,24 @@ function isScopedMatch({
   };
   target: PermissionContext;
 }) {
-  if (scope === "ALL") return { allowed: true, reasons: ["SCOPE_ALL"] };
   if (scope === "NONE") return { allowed: false, reasons: ["SCOPE_NONE"] };
 
   const targetBU = target.targetBusinessUnitId ?? actor.businessUnitId;
   const targetDept = target.targetDepartmentId ?? actor.departmentId;
   const targetSite = target.targetSiteId ?? actor.siteId;
+  const scopedBusinessUnit = grant?.businessUnitId ?? actor.businessUnitId;
+
+  if (!targetBU || targetBU !== scopedBusinessUnit) {
+    return { allowed: false, reasons: ["SCOPE_BUSINESS_UNIT_MISMATCH"] };
+  }
+
+  if (scope === "ALL") return { allowed: true, reasons: ["SCOPE_ALL"] };
 
   if (scope === "BUSINESS_UNIT") {
-    if (!targetBU) return { allowed: false, reasons: ["TARGET_BU_MISSING"] };
-    if (targetBU !== actor.businessUnitId) {
-      return { allowed: false, reasons: ["SCOPE_BUSINESS_UNIT_MISMATCH"] };
-    }
-    if (grant?.businessUnitId && grant.businessUnitId !== targetBU) {
-      return { allowed: false, reasons: ["SCOPE_GRANT_BU_MISMATCH"] };
-    }
     return { allowed: true, reasons: ["SCOPE_BUSINESS_UNIT_OK"] };
   }
 
   if (scope === "DEPARTMENT") {
-    if (!targetBU || targetBU !== actor.businessUnitId) {
-      return { allowed: false, reasons: ["SCOPE_BUSINESS_UNIT_MISMATCH"] };
-    }
     const allowedDepartment = grant?.departmentId ?? actor.departmentId;
     if (!targetDept) return { allowed: false, reasons: ["TARGET_DEPARTMENT_MISSING"] };
     if (!allowedDepartment || targetDept !== allowedDepartment) {
@@ -129,20 +147,21 @@ function isScopedMatch({
   }
 
   if (scope === "SITE") {
-    if (!targetBU || targetBU !== actor.businessUnitId) {
-      return { allowed: false, reasons: ["SCOPE_BUSINESS_UNIT_MISMATCH"] };
-    }
     if (!targetSite) return { allowed: false, reasons: ["TARGET_SITE_MISSING"] };
-    if (targetSite !== actor.siteId) {
+    const allowedSite = grant?.siteId ?? actor.siteId;
+    if (targetSite !== allowedSite) {
       return { allowed: false, reasons: ["SCOPE_SITE_MISMATCH"] };
-    }
-    if (grant?.siteId && targetSite !== grant.siteId) {
-      return { allowed: false, reasons: ["SCOPE_GRANT_SITE_MISMATCH"] };
     }
     return { allowed: true, reasons: ["SCOPE_SITE_OK"] };
   }
 
   if (scope === "SELF") {
+    if (target.targetMembershipId) {
+      if (target.targetMembershipId !== actorMembershipId) {
+        return { allowed: false, reasons: ["SCOPE_SELF_MISMATCH"] };
+      }
+      return { allowed: true, reasons: ["SCOPE_SELF_OK"] };
+    }
     if (!target.targetUserId) return { allowed: false, reasons: ["TARGET_USER_MISSING"] };
     if (target.targetUserId !== actor.userId) {
       return { allowed: false, reasons: ["SCOPE_SELF_MISMATCH"] };
@@ -169,21 +188,29 @@ async function getMembershipByIdOrThrow(membershipId: string, userId: string) {
 }
 
 export async function getEffectiveActions(membershipId: string): Promise<Set<string>> {
-  const membership = await prisma.membership.findUnique({
-    where: { id: membershipId },
+  const now = new Date();
+  const membership = await prisma.membership.findFirst({
+    where: {
+      id: membershipId,
+      isActive: true,
+      OR: [{ endedAt: null }, { endedAt: { gt: now } }],
+    },
     include: { role: true },
   });
   if (!membership) return new Set<string>();
 
-  const now = new Date();
   const rolePerms = await prisma.rolePermission.findMany({
     where: { roleId: membership.roleId, isAllowed: true },
-    select: { actionKey: true },
+    // A conditional permission is not an unconditional menu capability.
+    // Until its condition has a server-side evaluator, keep it fail-closed
+    // here as well as in checkPermission().
+    select: { actionKey: true, conditions: true },
   });
 
   const grants = await prisma.accessGrant.findMany({
     where: {
       granteeMembershipId: membership.id,
+      businessUnitId: membership.businessUnitId,
       isActive: true,
       revokedAt: null,
       OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
@@ -192,7 +219,9 @@ export async function getEffectiveActions(membershipId: string): Promise<Set<str
   });
 
   const actionSet = new Set<string>();
-  rolePerms.forEach((p) => actionSet.add(p.actionKey));
+  rolePerms
+    .filter((permission) => permission.conditions == null)
+    .forEach((permission) => actionSet.add(permission.actionKey));
   grants.forEach((g) => actionSet.add(g.actionKey));
   return actionSet;
 }
@@ -223,16 +252,21 @@ export async function checkPermission(ctx: PermissionContext): Promise<Permissio
   });
 
   for (const perm of rolePerms) {
+    // Conditions are configuration, not decoration. Until a condition has a
+    // server-side evaluator, do not silently widen access by ignoring it.
+    if (perm.conditions != null) continue;
     const scope = normalizeScope(perm.scope);
     if (scope === "SUBORDINATES") {
-      if (await isInReportingScope(membership.id, ctx.targetUserId, false)) return { allowed: true, reasons: ["SCOPE_SUBORDINATES_OK", "ROLE_PERMISSION"], source: "role" };
+      if (ctx.targetBusinessUnitId !== membership.businessUnitId) continue;
+      if (await isInReportingScope(membership.id, ctx.targetMembershipId, ctx.targetUserId, false, membership.businessUnitId)) return { allowed: true, reasons: ["SCOPE_SUBORDINATES_OK", "ROLE_PERMISSION"], source: "role" };
       continue;
     }
     if (scope === "DEPARTMENT_TREE") {
-      if (await isDepartmentTreeScope(membership.id, ctx.targetDepartmentId ?? membership.departmentId)) return { allowed: true, reasons: ["SCOPE_DEPARTMENT_TREE_OK", "ROLE_PERMISSION"], source: "role" };
+      if (ctx.targetBusinessUnitId !== membership.businessUnitId) continue;
+      if (await isDepartmentTreeScope(membership.businessUnitId, membership.departmentId, ctx.targetDepartmentId ?? membership.departmentId)) return { allowed: true, reasons: ["SCOPE_DEPARTMENT_TREE_OK", "ROLE_PERMISSION"], source: "role" };
       continue;
     }
-    const result = isScopedMatch({ scope, actor, target: ctx });
+    const result = isScopedMatch({ scope, actor, actorMembershipId: membership.id, target: ctx });
     if (result.allowed) {
       return {
         allowed: true,
@@ -258,15 +292,18 @@ export async function checkPermission(ctx: PermissionContext): Promise<Permissio
 
     const scope = normalizeScope(grant.scope);
     if (scope === "SUBORDINATES") {
-      if (await isInReportingScope(membership.id, ctx.targetUserId, false)) return { allowed: true, reasons: ["SCOPE_SUBORDINATES_OK", "ACCESS_GRANT"], source: "access_grant" };
+      if (ctx.targetBusinessUnitId !== grant.businessUnitId) continue;
+      if (await isInReportingScope(membership.id, ctx.targetMembershipId, ctx.targetUserId, false, grant.businessUnitId)) return { allowed: true, reasons: ["SCOPE_SUBORDINATES_OK", "ACCESS_GRANT"], source: "access_grant" };
       continue;
     }
     if (scope === "DEPARTMENT_TREE") {
-      if (await isDepartmentTreeScope(membership.id, ctx.targetDepartmentId ?? grant.departmentId)) return { allowed: true, reasons: ["SCOPE_DEPARTMENT_TREE_OK", "ACCESS_GRANT"], source: "access_grant" };
+      if (ctx.targetBusinessUnitId !== grant.businessUnitId) continue;
+      if (await isDepartmentTreeScope(grant.businessUnitId, grant.departmentId, ctx.targetDepartmentId ?? grant.departmentId)) return { allowed: true, reasons: ["SCOPE_DEPARTMENT_TREE_OK", "ACCESS_GRANT"], source: "access_grant" };
       continue;
     }
     const result = isScopedMatch({
       scope,
+      actorMembershipId: membership.id,
       actor: {
         businessUnitId: grant.businessUnitId,
         departmentId: grant.departmentId ?? null,

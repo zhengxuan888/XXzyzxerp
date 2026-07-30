@@ -25,7 +25,7 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
     select: {
       businessUnitId: true,
       siteId: true,
-      order: { select: { departmentId: true, creatorUserId: true } },
+      order: { select: { departmentId: true, creatorUserId: true, ownedByMembershipId: true } },
     },
   });
   if (!shipmentTarget) notFound();
@@ -37,6 +37,7 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
     targetDepartmentId: shipmentTarget.order.departmentId,
     targetSiteId: shipmentTarget.siteId,
     targetUserId: shipmentTarget.order.creatorUserId,
+    targetMembershipId: shipmentTarget.order.ownedByMembershipId,
   };
   const [canRead, canViewTrackingNo, canViewTimeline, canTrack, canReadAttachments, canUpload, canDeleteAttachments] =
     await Promise.all([

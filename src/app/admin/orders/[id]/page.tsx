@@ -52,6 +52,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     targetDepartmentId: order.departmentId,
     targetSiteId: order.siteId,
     targetUserId: order.creatorUserId,
+    targetMembershipId: order.ownedByMembershipId,
   };
   const [canSubmit, canReview, canReviewApprove, canReviewReject, canReviewProof, canShip, canCancel, canReadAttachments, canCreateAttachments, canDeleteAttachments] = await Promise.all([
     checkPermission({
@@ -105,6 +106,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         targetDepartmentId: order.departmentId,
         targetSiteId: shipment.siteId,
         targetUserId: order.creatorUserId,
+        targetMembershipId: order.ownedByMembershipId,
       };
       const [trackingNo, timeline] = await Promise.all([
         checkPermission({ ...target, actionKey: "shipment.tracking_no.view" }),

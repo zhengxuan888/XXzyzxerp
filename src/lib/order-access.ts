@@ -38,6 +38,7 @@ export async function resolveOrderReadScope(membership: MembershipLike, userId: 
     actionKey: "order.read",
     targetBusinessUnitId: membership.businessUnitId,
     targetUserId: membership.userId,
+    targetMembershipId: membership.id,
   });
   const site = await checkPermission({
     ...membershipCtx,
@@ -73,7 +74,7 @@ export async function resolveOrderReadScope(membership: MembershipLike, userId: 
   return scope;
 }
 
-export function withOrderReadScope(where: Record<string, unknown>, scope: OrderReadScope, membership: MembershipLike, userId: string) {
+export function withOrderReadScope(where: Record<string, unknown>, scope: OrderReadScope, membership: MembershipLike) {
   if (scope === "ALL" || scope === "BUSINESS_UNIT") return where;
   if (scope === "DEPARTMENT") {
     if (!membership.departmentId) return { AND: [where, { id: "00000000-0000-0000-0000-000000000000" }] } as Record<string, unknown>;
@@ -89,10 +90,10 @@ export function withOrderReadScope(where: Record<string, unknown>, scope: OrderR
     AND: [
       where,
       {
-        OR: [
-          { creatorUserId: userId },
-          { ownedByMembershipId: membership.id },
-        ],
+        // A user can have several Memberships in the same business unit.
+        // SELF must follow the active Membership that owns the order, not a
+        // shared account id that may also own another department's order.
+        ownedByMembershipId: membership.id,
       },
     ],
   } as Record<string, unknown>;
@@ -118,5 +119,5 @@ export async function assertOrderReadScope({
   if (scope === "ALL" || scope === "BUSINESS_UNIT") return true;
   if (scope === "DEPARTMENT") return order.departmentId === membership.departmentId;
   if (scope === "SITE") return order.siteId === membership.siteId;
-  return order.creatorUserId === userId || order.ownedByMembershipId === membership.id;
+  return order.ownedByMembershipId === membership.id;
 }

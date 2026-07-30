@@ -55,7 +55,7 @@ export async function PATCH(request: NextRequest) {
           id: true,
           businessUnitId: true,
           siteId: true,
-          order: { select: { departmentId: true, creatorUserId: true } },
+          order: { select: { departmentId: true, creatorUserId: true, ownedByMembershipId: true } },
         },
       },
     },
@@ -75,6 +75,7 @@ export async function PATCH(request: NextRequest) {
       targetDepartmentId: event.shipment.order.departmentId,
       targetSiteId: event.shipment.siteId,
       targetUserId: event.shipment.order.creatorUserId,
+      targetMembershipId: event.shipment.order.ownedByMembershipId,
     });
     if (!permission.allowed) {
       return fail("FORBIDDEN", "所选轨迹中包含无权处理的数据，未执行任何修改。", 403);

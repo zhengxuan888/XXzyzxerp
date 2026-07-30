@@ -87,6 +87,7 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
         departmentId: true,
         siteId: true,
         creatorUserId: true,
+        ownedByMembershipId: true,
         recipientEmail: true,
         recipientPhone: true,
         customerWhatsapp: true,
@@ -103,12 +104,13 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
         departmentId: true,
         siteId: true,
         creatorUserId: true,
+        ownedByMembershipId: true,
       },
     }),
     prisma.country.findMany({ where: { isActive: true }, select: { code: true, name: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
   ]);
 
-  const canReviewOrder = async (order: { departmentId: string | null; siteId: string | null; creatorUserId: string }) => (await checkPermission({
+  const canReviewOrder = async (order: { departmentId: string | null; siteId: string | null; creatorUserId: string; ownedByMembershipId: string }) => (await checkPermission({
     userId: session.userId,
     membershipId: membership.id,
     actionKey: "order.review",
@@ -116,6 +118,7 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
     targetDepartmentId: order.departmentId,
     targetSiteId: order.siteId,
     targetUserId: order.creatorUserId,
+    targetMembershipId: order.ownedByMembershipId,
   })).allowed;
   const [candidateAccess, historyAccess] = await Promise.all([
     Promise.all(rawCandidateIndex.map(canReviewOrder)),

@@ -31,6 +31,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         select: {
           departmentId: true,
           creatorUserId: true,
+          ownedByMembershipId: true,
         },
       },
     },
@@ -45,6 +46,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     targetDepartmentId: shipment.order.departmentId,
     targetSiteId: shipment.siteId,
     targetUserId: shipment.order.creatorUserId,
+    targetMembershipId: shipment.order.ownedByMembershipId,
   });
   if (!permission.allowed) return fail("FORBIDDEN", "当前岗位没有物流跟进权限。", 403);
 
@@ -79,6 +81,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       targetDepartmentId: shipment.order.departmentId,
       targetSiteId: shipment.siteId,
       targetUserId: shipment.order.creatorUserId,
+      targetMembershipId: shipment.order.ownedByMembershipId,
     });
     if (!assignPermission.allowed) {
       return fail("FOLLOW_UP_REASSIGN_FORBIDDEN", "该任务已有负责人，当前岗位没有改派权限。", 403);
@@ -99,6 +102,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         targetDepartmentId: shipment.order.departmentId,
         targetSiteId: shipment.siteId,
         targetUserId: shipment.order.creatorUserId,
+        targetMembershipId: shipment.order.ownedByMembershipId,
       }),
       checkPermission({
         userId: owner.userId,
@@ -108,6 +112,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         targetDepartmentId: shipment.order.departmentId,
         targetSiteId: shipment.siteId,
         targetUserId: shipment.order.creatorUserId,
+        targetMembershipId: shipment.order.ownedByMembershipId,
       }),
     ]);
     if (!ownerCanRead.allowed || !ownerCanUpdate.allowed) {

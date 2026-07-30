@@ -87,6 +87,7 @@ export async function POST(request: NextRequest) {
       departmentId: true,
       siteId: true,
       creatorUserId: true,
+      ownedByMembershipId: true,
       creatorUser: { select: { username: true } },
       shipments: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true, trackingNo: true, carrier: true, status: true } },
     },
@@ -99,6 +100,7 @@ export async function POST(request: NextRequest) {
     targetDepartmentId: order.departmentId,
     targetSiteId: order.siteId,
     targetUserId: order.creatorUserId,
+    targetMembershipId: order.ownedByMembershipId,
   })));
   const orderByNo = new Map(orders.filter((_, index) => orderAccess[index].allowed).map((order) => [order.orderNo, order]));
 

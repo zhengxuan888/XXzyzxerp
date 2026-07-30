@@ -95,8 +95,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     ...((start || end) ? { createdAt: { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) } } : {}),
   };
   const baseWhere = { businessUnitId: membership.businessUnitId, ...(status ? { status } : {}), ...sharedFilters };
-  const scopedWhere = withOrderReadScope(baseWhere, orderReadScope, membership, session.userId);
-  const statusScopeWhere = withOrderReadScope({ businessUnitId: membership.businessUnitId, ...sharedFilters }, orderReadScope, membership, session.userId);
+  const scopedWhere = withOrderReadScope(baseWhere, orderReadScope, membership);
+  const statusScopeWhere = withOrderReadScope({ businessUnitId: membership.businessUnitId, ...sharedFilters }, orderReadScope, membership);
   const employeeWhere =
     orderReadScope === "SELF"
       ? { id: session.userId }

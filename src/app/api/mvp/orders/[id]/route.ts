@@ -43,6 +43,7 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ id
     targetDepartmentId: row.departmentId,
     targetSiteId: row.siteId,
     targetUserId: row.creatorUserId,
+    targetMembershipId: row.ownedByMembershipId,
   });
   if (!canDelete.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: canDelete.reasons }, { status: 403 });
 
@@ -127,6 +128,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
       targetDepartmentId: row.departmentId,
       targetSiteId: shipment.siteId,
       targetUserId: row.creatorUserId,
+      targetMembershipId: row.ownedByMembershipId,
     };
     const [trackingNo, timeline] = await Promise.all([
       checkPermission({ ...target, actionKey: "shipment.tracking_no.view" }),
