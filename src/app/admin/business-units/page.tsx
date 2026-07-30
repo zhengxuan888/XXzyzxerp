@@ -14,18 +14,18 @@ export default async function BusinessUnitsPage() {
 
   const [canRead, canCreate, canUpdate, canDelete] = await Promise.all([
     checkPermission({
-      userId: session.userId, membershipId: membership.id, actionKey: "business_unit.update", targetBusinessUnitId: membership.businessUnitId,
-    }),
-    checkPermission({
-      userId: session.userId,
-      membershipId: membership.id,
-      actionKey: "business_unit.read",
-      targetBusinessUnitId: membership.businessUnitId,
+      userId: session.userId, membershipId: membership.id, actionKey: "business_unit.read", targetBusinessUnitId: membership.businessUnitId,
     }),
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
       actionKey: "business_unit.create",
+      targetBusinessUnitId: membership.businessUnitId,
+    }),
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "business_unit.update",
       targetBusinessUnitId: membership.businessUnitId,
     }),
     checkPermission({
@@ -38,8 +38,15 @@ export default async function BusinessUnitsPage() {
   if (!canRead.allowed) redirect("/admin");
 
   const [rows, legalEntities] = await Promise.all([
-    prisma.businessUnit.findMany({ orderBy: { createdAt: "desc" }, include: { legalEntity: true } }),
-    prisma.legalEntity.findMany({ orderBy: { name: "asc" } }),
+    prisma.businessUnit.findMany({
+      where: { id: membership.businessUnitId },
+      orderBy: { createdAt: "desc" },
+      include: { legalEntity: true },
+    }),
+    prisma.legalEntity.findMany({
+      where: { id: membership.legalEntityId },
+      orderBy: { name: "asc" },
+    }),
   ]);
 
   return (

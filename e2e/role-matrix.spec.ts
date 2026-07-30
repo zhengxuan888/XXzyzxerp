@@ -70,3 +70,36 @@ for (const profile of profiles) {
     expect(forbiddenResponse.status(), `${profile.username} 越权访问 ${profile.forbiddenApi}`).toBe(403);
   });
 }
+
+test("业务负责人只能查看当前组织上下文，不能创建公司或业务板块", async ({ page }) => {
+  const loginResponse = await page.request.post("/api/auth/login", {
+    data: { username: "demo_manager", password },
+  });
+  expect(loginResponse.ok(), await loginResponse.text()).toBe(true);
+
+  for (const route of [
+    "/admin/organizations",
+    "/admin/business-units",
+    "/admin/departments",
+    "/admin/sites",
+    "/admin/users",
+    "/admin/memberships",
+    "/admin/roles",
+    "/admin/access-grants",
+    "/admin/approvals",
+  ]) {
+    const response = await page.request.get(route);
+    expect(response.ok(), `业务负责人无法打开 ${route}`).toBe(true);
+    expect(new URL(response.url()).pathname, `业务负责人打开 ${route} 时发生权限跳转`).toBe(route);
+  }
+
+  const legalEntityCreate = await page.request.post("/api/admin/legal-entities", {
+    data: { code: "FORBIDDEN_LE", name: "禁止创建的公司" },
+  });
+  expect(legalEntityCreate.status()).toBe(403);
+
+  const businessUnitCreate = await page.request.post("/api/admin/business-units", {
+    data: { code: "FORBIDDEN_BU", name: "禁止创建的业务板块", legalEntityId: "forbidden" },
+  });
+  expect(businessUnitCreate.status()).toBe(403);
+});

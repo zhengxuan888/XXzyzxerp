@@ -23,12 +23,6 @@ export default async function AccessGrantsPage() {
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
-      actionKey: "access_grant.update",
-      targetBusinessUnitId: membership.businessUnitId,
-    }),
-    checkPermission({
-      userId: session.userId,
-      membershipId: membership.id,
       actionKey: "access_grant.read",
       targetBusinessUnitId: membership.businessUnitId,
     }),
@@ -36,6 +30,12 @@ export default async function AccessGrantsPage() {
       userId: session.userId,
       membershipId: membership.id,
       actionKey: "access_grant.create",
+      targetBusinessUnitId: membership.businessUnitId,
+    }),
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "access_grant.update",
       targetBusinessUnitId: membership.businessUnitId,
     }),
     checkPermission({

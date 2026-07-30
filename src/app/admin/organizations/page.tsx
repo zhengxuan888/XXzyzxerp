@@ -14,18 +14,18 @@ export default async function OrganizationsPage() {
 
   const [canRead, canCreate, canUpdate, canDelete] = await Promise.all([
     checkPermission({
-      userId: session.userId, membershipId: membership.id, actionKey: "legal_entity.update", targetBusinessUnitId: membership.businessUnitId,
-    }),
-    checkPermission({
-      userId: session.userId,
-      membershipId: membership.id,
-      actionKey: "legal_entity.read",
-      targetBusinessUnitId: membership.businessUnitId,
+      userId: session.userId, membershipId: membership.id, actionKey: "legal_entity.read", targetBusinessUnitId: membership.businessUnitId,
     }),
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
       actionKey: "legal_entity.create",
+      targetBusinessUnitId: membership.businessUnitId,
+    }),
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "legal_entity.update",
       targetBusinessUnitId: membership.businessUnitId,
     }),
     checkPermission({
@@ -38,7 +38,10 @@ export default async function OrganizationsPage() {
 
   if (!canRead.allowed) redirect("/admin");
 
-  const rows = await prisma.legalEntity.findMany({ orderBy: { createdAt: "desc" } });
+  const rows = await prisma.legalEntity.findMany({
+    where: { id: membership.legalEntityId },
+    orderBy: { createdAt: "desc" },
+  });
 
   return (
     <CrudPage

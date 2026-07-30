@@ -15,25 +15,25 @@ export default async function MembershipsPage() {
 
   const [canRead, canManageReportingLine, canCreate, canUpdate, canDelete] = await Promise.all([
     checkPermission({
-      userId: session.userId, membershipId: membership.id, actionKey: "membership.update", targetBusinessUnitId: membership.businessUnitId, targetDepartmentId: membership.departmentId,
-    }),
-    checkPermission({
-      userId: session.userId,
-      membershipId: membership.id,
-      actionKey: "membership.read",
-      targetBusinessUnitId: membership.businessUnitId,
+      userId: session.userId, membershipId: membership.id, actionKey: "membership.read", targetBusinessUnitId: membership.businessUnitId, targetDepartmentId: membership.departmentId,
     }),
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
       actionKey: "membership.reporting_line.manage",
       targetBusinessUnitId: membership.businessUnitId,
-      targetDepartmentId: membership.departmentId,
     }),
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
       actionKey: "membership.create",
+      targetBusinessUnitId: membership.businessUnitId,
+      targetDepartmentId: membership.departmentId,
+    }),
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "membership.update",
       targetBusinessUnitId: membership.businessUnitId,
     }),
     checkPermission({
