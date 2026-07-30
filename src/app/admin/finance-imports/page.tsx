@@ -17,10 +17,11 @@ export default async function FinanceImportsPage() {
     createFinanceAccessPlan({ membership, actionKey: "finance.statement_import.read" }),
     createFinanceAccessPlan({ membership, actionKey: "finance.statement_import.preview" }),
     createFinanceAccessPlan({ membership, actionKey: "finance.statement_import.confirm" }),
+    createFinanceAccessPlan({ membership, actionKey: "finance.statement_import.cancel" }),
     createFinanceAccessPlan({ membership, actionKey: "finance.statement_artifact.read" }),
     createFinanceAccessPlan({ membership, actionKey: "finance.counterparty.read" }),
   ]);
-  const [templateRead, templateManage, importRead, importPreview, importConfirm, artifactRead, counterpartyRead] = plans;
+  const [templateRead, templateManage, importRead, importPreview, importConfirm, importCancel, artifactRead, counterpartyRead] = plans;
   if (!importRead.canAccessStatementImports) redirect("/admin");
 
   const capabilities: FinanceStatementImportCapabilities = {
@@ -29,6 +30,7 @@ export default async function FinanceImportsPage() {
     canReadImports: importRead.canAccessStatementImports,
     canPreviewImports: importPreview.canAccessStatementImports,
     canConfirmImports: importConfirm.canAccessStatementImports,
+    canCancelImports: importCancel.canAccessStatementImports,
     canReadArtifacts: artifactRead.canAccessStatementImports,
     canReadCounterparties: counterpartyRead.canAccessCounterparties,
   };

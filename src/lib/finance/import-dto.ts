@@ -146,7 +146,9 @@ type ImportBatchLike = {
   previewedAt: Date;
   confirmedByMembershipId: string | null;
   confirmedAt: Date | null;
+  cancelledByMembershipId: string | null;
   cancelledAt: Date | null;
+  cancellationReason: string | null;
   createdAt: Date;
   updatedAt: Date;
   template?: { id: string; code: string; name: string };
@@ -187,7 +189,9 @@ export function financeStatementImportBatchDto(row: ImportBatchLike) {
     previewedAt: row.previewedAt.toISOString(),
     confirmedByMembershipId: row.confirmedByMembershipId,
     confirmedAt: row.confirmedAt?.toISOString() ?? null,
+    cancelledByMembershipId: row.cancelledByMembershipId,
     cancelledAt: row.cancelledAt?.toISOString() ?? null,
+    cancellationReason: row.cancellationReason,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     sheets: row.sheets?.map(financeStatementImportSheetDto) ?? [],

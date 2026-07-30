@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Ban,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -24,6 +25,7 @@ export type FinanceStatementImportCapabilities = {
   canReadImports: boolean;
   canPreviewImports: boolean;
   canConfirmImports: boolean;
+  canCancelImports: boolean;
   canReadArtifacts: boolean;
   canReadCounterparties: boolean;
 };
@@ -90,6 +92,8 @@ type ImportBatch = {
   importedRows: number;
   previewedAt: string;
   confirmedAt: string | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
   sheets: ImportSheet[];
   idempotent?: boolean;
 };
@@ -162,6 +166,11 @@ function typeLabel(type: string) {
   return labels[type] ?? type;
 }
 
+function formatDateTime(value: string | null) {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("zh-CN", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<{ data: T; meta?: PageMeta }> {
   const response = await fetch(path, { cache: "no-store", ...init });
   const payload = await response.json().catch(() => null) as ApiEnvelope<T> | null;
@@ -197,6 +206,7 @@ export default function FinanceStatementImportWorkbench({ capabilities }: { capa
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [cancelReason, setCancelReason] = useState("");
   const [showTemplateForm, setShowTemplateForm] = useState(false);
 
   const load = useCallback(async () => {
@@ -236,6 +246,7 @@ export default function FinanceStatementImportWorkbench({ capabilities }: { capa
     && selectedBatch.rejectedRows === 0
     && capabilities.canConfirmImports,
   );
+  const canCancelSelected = Boolean(selectedBatch && selectedBatch.status === "PREVIEWED" && capabilities.canCancelImports);
 
   function resetTemplateForm() {
     setTemplateForm({ id: null, code: "", name: "", description: "", counterpartyId: "", configuration: templateExample });
@@ -321,6 +332,7 @@ export default function FinanceStatementImportWorkbench({ capabilities }: { capa
       formData.set("file", file);
       const result = await request<ImportBatch>("/api/mvp/finance/statement-imports/preview", { method: "POST", body: formData });
       setSelectedBatch(result.data);
+      setCancelReason("");
       setNotice(result.data.idempotent ? "这是同一来源文件的已有预检批次，未重复创建。" : "预检完成。系统尚未创建结算单、未对账、未付款，请先人工复核。 ");
       setFile(null);
       await load();
@@ -337,6 +349,7 @@ export default function FinanceStatementImportWorkbench({ capabilities }: { capa
     try {
       const result = await request<ImportBatch>(`/api/mvp/finance/statement-imports/${batchId}`);
       setSelectedBatch(result.data);
+      setCancelReason("");
     } catch (detailError) {
       setError(detailError instanceof Error ? detailError.message : "账单预检详情加载失败。");
     } finally {
@@ -356,6 +369,32 @@ export default function FinanceStatementImportWorkbench({ capabilities }: { capa
       await load();
     } catch (confirmError) {
       setError(confirmError instanceof Error ? confirmError.message : "确认导入失败。不会产生半成品结算单。");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function cancelImport() {
+    if (!selectedBatch || !canCancelSelected) return;
+    if (!cancelReason.trim()) {
+      setError("请先填写取消预检的原因，方便后续复核与重新预检。");
+      return;
+    }
+    if (!window.confirm("取消后不会删除原始文件或预检记录，但本批次不能恢复；修正后请重新上传并预检。是否继续？")) return;
+    setSaving(true);
+    setError("");
+    try {
+      const result = await request<ImportBatch>(`/api/mvp/finance/statement-imports/${selectedBatch.id}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: cancelReason }),
+      });
+      setSelectedBatch(result.data);
+      setCancelReason("");
+      setNotice(result.data.idempotent ? "该预检已取消；历史记录和原件仍按权限保留。" : "预检已取消并保留审计记录。修正后可重新上传同一文件预检。");
+      await load();
+    } catch (cancelError) {
+      setError(cancelError instanceof Error ? cancelError.message : "取消预检失败。请刷新后重试。");
     } finally {
       setSaving(false);
     }
@@ -454,8 +493,9 @@ export default function FinanceStatementImportWorkbench({ capabilities }: { capa
 
         <aside className="rounded-3xl border border-slate-200 bg-white shadow-sm"><div className="flex items-center justify-between border-b border-slate-100 px-5 py-4"><div><h2 className="font-bold text-slate-900">预检详情</h2><p className="mt-1 text-xs text-slate-500">逐行展示，不会显示存储路径或后台密钥。</p></div>{selectedBatch ? <span className={`rounded-full px-2 py-1 text-xs ring-1 ${statusClass(selectedBatch.status)}`}>{statusLabel(selectedBatch.status)}</span> : null}</div>{!selectedBatch ? <div className="p-8 text-center text-sm text-slate-500">选择左侧预检记录，或上传一份工作簿开始。</div> : <div className="space-y-4 p-5"><div className="rounded-2xl bg-slate-50 p-4"><div className="flex items-start justify-between gap-3"><div><strong className="block text-sm text-slate-900">{selectedBatch.sourceFile.originalName}</strong><span className="mt-1 block text-xs text-slate-500">{selectedBatch.counterparty?.name ?? "—"} · {selectedBatch.template?.name ?? "—"}</span></div>{capabilities.canReadArtifacts ? <Button type="button" variant="outline" size="sm" onClick={downloadArtifact}>下载原件</Button> : null}</div><dl className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600"><div><dt>可导入</dt><dd className="font-semibold text-emerald-700">{selectedBatch.readyRows} 行</dd></div><div><dt>未通过</dt><dd className="font-semibold text-rose-700">{selectedBatch.rejectedRows} 行</dd></div><div><dt>人工提示</dt><dd className="font-semibold text-amber-700">{selectedBatch.warningRows} 行</dd></div><div><dt>已导入</dt><dd className="font-semibold text-slate-900">{selectedBatch.importedRows} 行</dd></div></dl></div>
           {selectedBatch.sheets.map((sheet) => <details key={sheet.id} open className="rounded-2xl border border-slate-200"><summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm"><span><strong>{sheet.sheetName}</strong><span className="ml-2 text-xs text-slate-500">第 {sheet.headerRowNumber} 行表头 · {typeLabel(sheet.statementType)} · {sheet.totalAmountLabel}</span></span><ChevronDown size={16} /></summary><div className="border-t border-slate-100"><div className="max-h-80 overflow-auto"><table className="min-w-full text-left text-xs"><thead className="sticky top-0 bg-slate-50 text-slate-500"><tr><th className="px-3 py-2">行</th><th className="px-3 py-2">状态</th><th className="px-3 py-2">业务单号 / 运单</th><th className="px-3 py-2">金额</th></tr></thead><tbody>{sheet.rows.map((row) => <tr key={row.id} className="border-t border-slate-100 align-top"><td className="px-3 py-2 text-slate-500">{row.rowNumber}</td><td className="px-3 py-2"><span className={`inline-flex rounded-full px-2 py-0.5 ring-1 ${statusClass(row.status)}`}>{statusLabel(row.status)}</span>{row.message ? <p className="mt-1 max-w-52 text-rose-700">{row.message}</p> : null}</td><td className="px-3 py-2 text-slate-700"><span className="block">{row.sourceReference || "—"}</span><span className="block text-slate-400">{row.trackingReference || ""}</span></td><td className="px-3 py-2 text-slate-700">{row.amountLabel || "—"}</td></tr>)}</tbody></table></div>{sheet.createdStatementId ? <p className="border-t border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">已生成草稿结算单。对账、审批和过账仍由财务流程控制。</p> : null}</div></details>)}
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-950">确认动作是不可逆的业务事实：系统会把当前预检行原子生成草稿结算单；任何一行异常、提示或权限不足都会阻止确认。</div>
-          <Button type="button" variant="success" className="w-full" onClick={() => void confirmImport()} disabled={!canConfirmSelected || saving}>{saving ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}{selectedBatch.status === "IMPORTED" ? "已确认导入" : !capabilities.canConfirmImports ? "没有确认导入权限" : selectedBatch.warningRows || selectedBatch.rejectedRows ? "存在预检问题，不能确认" : "确认生成草稿结算单"}</Button>
+          {selectedBatch.status === "CANCELLED" ? <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs leading-5 text-rose-900"><strong className="block text-sm">该预检已取消</strong><p className="mt-1">取消时间：{formatDateTime(selectedBatch.cancelledAt)}</p><p className="mt-1">取消原因：{selectedBatch.cancellationReason || "—"}</p><p className="mt-2 text-rose-800">原始文件和预检记录仍按权限保留；若已修正，请在左侧重新上传并预检。</p></div> : null}
+          {selectedBatch.status === "PREVIEWED" ? <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4"><label className="grid gap-1.5 text-xs font-semibold text-rose-900">取消预检原因<textarea value={cancelReason} maxLength={500} disabled={!canCancelSelected || saving} onChange={(event) => setCancelReason(event.target.value)} placeholder="例如：模板表头与物流商新版本不一致，修正后重新预检" className="min-h-20 rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-rose-500 focus:ring-4 focus:ring-rose-100 disabled:bg-slate-100" /></label><div className="mt-3 flex flex-wrap items-center justify-between gap-2"><span className="text-xs leading-5 text-rose-800">取消不会删除原件；同一文件可在修正模板后重新预检。</span><Button type="button" variant="destructive" size="sm" onClick={() => void cancelImport()} disabled={!canCancelSelected || saving || !cancelReason.trim()}>{saving ? <Loader2 className="animate-spin" size={15} /> : <Ban size={15} />}取消预检</Button></div>{!capabilities.canCancelImports ? <p className="mt-2 text-xs text-rose-800">当前账号没有“取消账单预检”动作权限。</p> : null}</div> : null}
+          {selectedBatch.status !== "CANCELLED" ? <><div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-950">确认动作是不可逆的业务事实：系统会把当前预检行原子生成草稿结算单；任何一行异常、提示或权限不足都会阻止确认。</div><Button type="button" variant="success" className="w-full" onClick={() => void confirmImport()} disabled={!canConfirmSelected || saving}>{saving ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}{selectedBatch.status === "IMPORTED" ? "已确认导入" : !capabilities.canConfirmImports ? "没有确认导入权限" : selectedBatch.warningRows || selectedBatch.rejectedRows ? "存在预检问题，不能确认" : "确认生成草稿结算单"}</Button></> : null}
         </div>}</aside>
       </section>
     </main>

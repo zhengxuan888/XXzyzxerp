@@ -10,6 +10,10 @@ import { writeAuditLog } from "@/lib/audit";
 import { createFinanceAccessPlan, type FinanceAccessMembership, type FinanceAccessTarget } from "@/lib/finance/access";
 import { financeStatementImportBatchDto, financeStatementTemplateDto } from "@/lib/finance/import-dto";
 import {
+  canCancelFinanceStatementImport,
+  normalizeFinanceStatementImportCancellationReason,
+} from "@/lib/finance/import-lifecycle";
+import {
   FinanceStatementTemplateValidationError,
   normalizeFinanceTemplateCode,
   parseFinanceStatementTemplateConfiguration,
@@ -580,6 +584,70 @@ export async function findFinanceStatementImportBatch(actor: FinanceImportActor,
   if (!batch) throw new FinanceServiceError("FINANCE_IMPORT_NOT_FOUND", "账单导入批次不存在或不属于当前业务板块。", 404);
   await requireBatchAction(actor, actionKey, batch);
   return batch;
+}
+
+/**
+ * Cancelling is a terminal action for a preview only. We retain the source and
+ * parsed rows for audit, while the partial source-file uniqueness index lets a
+ * corrected upload create a new PREVIEWED batch afterwards.
+ */
+export async function cancelFinanceStatementImport(actor: FinanceImportActor, importBatchId: string, input: { reason?: unknown }) {
+  const batch = await findFinanceStatementImportBatch(actor, importBatchId, "finance.statement_import.cancel");
+  if (batch.status === FinanceStatementImportBatchStatus.CANCELLED) return { batch, idempotent: true };
+  if (!canCancelFinanceStatementImport(batch.status)) {
+    throw new FinanceServiceError("IMPORT_NOT_CANCELLABLE", "只有尚未确认的账单预检可以取消。", 409);
+  }
+  const reason = normalizeFinanceStatementImportCancellationReason(input.reason);
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const cancelledAt = new Date();
+      // The compare-and-set prevents a cancellation racing with confirmation
+      // from hiding a batch that has begun creating financial facts.
+      const claimed = await tx.financeStatementImportBatch.updateMany({
+        where: { id: batch.id, status: FinanceStatementImportBatchStatus.PREVIEWED },
+        data: {
+          status: FinanceStatementImportBatchStatus.CANCELLED,
+          cancelledAt,
+          cancelledByMembershipId: actor.membership.id,
+          cancellationReason: reason,
+        },
+      });
+      if (claimed.count !== 1) {
+        const current = await tx.financeStatementImportBatch.findUnique({ where: { id: batch.id }, include: importBatchInclude });
+        if (current?.status === FinanceStatementImportBatchStatus.CANCELLED) return { batch: current, idempotent: true };
+        throw new FinanceServiceError("IMPORT_PREVIEW_STALE", "该预检刚被其他人员处理，请刷新后重试。", 409);
+      }
+      const cancelled = await tx.financeStatementImportBatch.findUniqueOrThrow({ where: { id: batch.id }, include: importBatchInclude });
+      await writeAuditLog({
+        actorUserId: actor.userId,
+        actorMembershipId: actor.membership.id,
+        legalEntityId: cancelled.legalEntityId,
+        businessUnitId: cancelled.businessUnitId,
+        roleId: actor.membership.roleId,
+        module: "finance.statement_import",
+        action: "finance.statement_import.cancel",
+        targetType: "finance_statement_import_batch",
+        targetId: cancelled.id,
+        details: {
+          fromStatus: FinanceStatementImportBatchStatus.PREVIEWED,
+          toStatus: FinanceStatementImportBatchStatus.CANCELLED,
+          reason,
+          template: { id: cancelled.templateId, version: cancelled.templateVersion },
+          counterpartyId: cancelled.counterpartyId,
+          sourceFile: { originalName: cancelled.originalName, sha256: cancelled.sha256, sizeBytes: cancelled.sizeBytes },
+          invariant: "source_retained_for_audit_cancelled_batch_may_be_repreflighted",
+        },
+      }, tx);
+      return { batch: cancelled, idempotent: false };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  } catch (error) {
+    if (error instanceof FinanceServiceError) throw error;
+    if (error instanceof Prisma.PrismaClientKnownRequestError && ["P2034", "P2025"].includes(error.code)) {
+      throw new FinanceServiceError("IMPORT_PREVIEW_STALE", "该预检刚被其他人员处理，请刷新后重试。", 409);
+    }
+    throw error;
+  }
 }
 
 export async function confirmFinanceStatementImport(actor: FinanceImportActor, importBatchId: string) {

@@ -131,6 +131,7 @@ const actionDefs: SeedAction[] = [
   { key: "finance.statement_import.read", name: "查看账单导入预检", namespace: "finance", scope: "BUSINESS_UNIT" },
   { key: "finance.statement_import.preview", name: "预检账单导入", namespace: "finance", scope: "BUSINESS_UNIT" },
   { key: "finance.statement_import.confirm", name: "确认账单导入", namespace: "finance", scope: "BUSINESS_UNIT" },
+  { key: "finance.statement_import.cancel", name: "取消账单预检", namespace: "finance", scope: "BUSINESS_UNIT" },
   { key: "finance.statement_artifact.read", name: "下载账单原件", namespace: "finance", scope: "BUSINESS_UNIT" },
 
   { key: "expense.read", name: "Expense read", namespace: "erp", scope: "BUSINESS_UNIT" },

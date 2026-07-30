@@ -567,6 +567,7 @@ model Membership {
   createdFinanceStatementTemplates       FinanceStatementTemplate[]    @relation("FinanceStatementTemplateCreator")
   previewedFinanceStatementImportBatches FinanceStatementImportBatch[] @relation("FinanceStatementImportBatchPreviewer")
   confirmedFinanceStatementImportBatches FinanceStatementImportBatch[] @relation("FinanceStatementImportBatchConfirmer")
+  cancelledFinanceStatementImportBatches FinanceStatementImportBatch[] @relation("FinanceStatementImportBatchCanceller")
 
   @@index([userId, isActive])
   @@index([businessUnitId, isActive])
@@ -1375,7 +1376,9 @@ model FinanceStatementImportBatch {
   previewedAt             DateTime                          @default(now())
   confirmedByMembershipId String?
   confirmedAt             DateTime?
+  cancelledByMembershipId String?
   cancelledAt             DateTime?
+  cancellationReason      String?
   createdAt               DateTime                          @default(now())
   updatedAt               DateTime                          @updatedAt
 
@@ -1387,6 +1390,7 @@ model FinanceStatementImportBatch {
   counterparty          FinanceCounterparty           @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
   previewedByMembership Membership                    @relation("FinanceStatementImportBatchPreviewer", fields: [previewedByMembershipId], references: [id], onDelete: Restrict)
   confirmedByMembership Membership?                   @relation("FinanceStatementImportBatchConfirmer", fields: [confirmedByMembershipId], references: [id], onDelete: SetNull)
+  cancelledByMembership Membership?                   @relation("FinanceStatementImportBatchCanceller", fields: [cancelledByMembershipId], references: [id], onDelete: SetNull)
   sheets                FinanceStatementImportSheet[]
 
   @@index([businessUnitId, status, previewedAt, id])
@@ -1394,6 +1398,7 @@ model FinanceStatementImportBatch {
   @@index([counterpartyId, status])
   @@index([templateId, createdAt])
   @@index([previewedByMembershipId, previewedAt])
+  @@index([businessUnitId, status, cancelledAt])
 }
 
 // A single workbook can contain multiple configured financial sheets. Each
