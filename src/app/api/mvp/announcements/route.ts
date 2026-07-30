@@ -4,6 +4,7 @@ import { requireAuthContext } from "@/lib/api-auth";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
+import { paginated, parsePagination } from "@/lib/api-response";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuthContext(request);
@@ -21,12 +22,21 @@ export async function GET(request: NextRequest) {
     canRead.reasons.includes("SCOPE_ALL") ||
     canRead.reasons.includes("SCOPE_ALL_OK") ||
     canRead.reasons.includes("SCOPE_BUSINESS_UNIT_OK");
-  const rows = await prisma.announcement.findMany({
-    where: canSeeAll ? { businessUnitId: auth.membership.businessUnitId } : { isActive: true, businessUnitId: auth.membership.businessUnitId },
-    orderBy: { createdAt: "desc" },
-    include: { site: { select: { code: true, name: true } } },
-  });
-  return NextResponse.json(rows);
+  const pagination = parsePagination(request);
+  const where = canSeeAll
+    ? { businessUnitId: auth.membership.businessUnitId }
+    : { isActive: true, businessUnitId: auth.membership.businessUnitId };
+  const [rows, total] = await prisma.$transaction([
+    prisma.announcement.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      include: { site: { select: { code: true, name: true } } },
+      skip: pagination.skip,
+      take: pagination.take,
+    }),
+    prisma.announcement.count({ where }),
+  ]);
+  return paginated(rows, total, pagination);
 }
 
 export async function POST(request: NextRequest) {

@@ -5,6 +5,7 @@ import { AttendanceType } from "@prisma/client";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
+import { paginated, parsePagination } from "@/lib/api-response";
 
 function parseAttendanceType(value: unknown) {
   if (typeof value !== "string") return null;
@@ -41,15 +42,24 @@ export async function GET(request: NextRequest) {
     canApprove.reasons.includes("SCOPE_ALL") ||
     canApprove.reasons.includes("SCOPE_ALL_OK") ||
     canApprove.reasons.includes("SCOPE_BUSINESS_UNIT_OK");
-  const rows = await prisma.attendance.findMany({
-    where: canReadAll ? { businessUnitId: auth.membership.businessUnitId } : { userId: auth.userId },
-    include: {
-      user: { select: { username: true, fullName: true } },
-      membership: { select: { id: true, departmentId: true } },
-    },
-    orderBy: { attendanceDate: "desc" },
-  });
-  return NextResponse.json(rows);
+  const pagination = parsePagination(request);
+  const where = canReadAll
+    ? { businessUnitId: auth.membership.businessUnitId }
+    : { businessUnitId: auth.membership.businessUnitId, userId: auth.userId };
+  const [rows, total] = await prisma.$transaction([
+    prisma.attendance.findMany({
+      where,
+      include: {
+        user: { select: { username: true, fullName: true } },
+        membership: { select: { id: true, departmentId: true } },
+      },
+      orderBy: [{ attendanceDate: "desc" }, { id: "desc" }],
+      skip: pagination.skip,
+      take: pagination.take,
+    }),
+    prisma.attendance.count({ where }),
+  ]);
+  return paginated(rows, total, pagination);
 }
 
 export async function POST(request: NextRequest) {

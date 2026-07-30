@@ -4,6 +4,7 @@ import { requireAuthContext } from "@/lib/api-auth";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
+import { paginated, parsePagination } from "@/lib/api-response";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuthContext(request);
@@ -27,17 +28,24 @@ export async function GET(request: NextRequest) {
     canRead.reasons.includes("SCOPE_ALL_OK") ||
     canRead.reasons.includes("SCOPE_BUSINESS_UNIT_OK");
 
-  const rows = await prisma.approvalRecord.findMany({
-    where: shouldReadAll
-      ? { businessUnitId: auth.membership.businessUnitId }
-      : { submittedBy: { userId: auth.userId } },
-    orderBy: { createdAt: "desc" },
-    include: {
-      submittedBy: { select: { id: true, userId: true } },
-      approver: { select: { id: true, userId: true } },
-    },
-  });
-  return NextResponse.json(rows);
+  const pagination = parsePagination(request);
+  const where = shouldReadAll
+    ? { businessUnitId: auth.membership.businessUnitId }
+    : { businessUnitId: auth.membership.businessUnitId, submittedBy: { userId: auth.userId } };
+  const [rows, total] = await prisma.$transaction([
+    prisma.approvalRecord.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      include: {
+        submittedBy: { select: { id: true, userId: true } },
+        approver: { select: { id: true, userId: true } },
+      },
+      skip: pagination.skip,
+      take: pagination.take,
+    }),
+    prisma.approvalRecord.count({ where }),
+  ]);
+  return paginated(rows, total, pagination);
 }
 
 export async function POST(request: NextRequest) {

@@ -5,6 +5,7 @@ import { requireAuthContext } from "@/lib/api-auth";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
+import { paginated, parsePagination } from "@/lib/api-response";
 
 function toPositiveInt(value: unknown): number | null {
   if (typeof value !== "number") return null;
@@ -29,12 +30,21 @@ export async function GET(request: NextRequest) {
     canRead.reasons.includes("SCOPE_ALL") ||
     canRead.reasons.includes("SCOPE_ALL_OK") ||
     canRead.reasons.includes("SCOPE_BUSINESS_UNIT_OK");
-  const rows = await prisma.document.findMany({
-    where: canSeeAll ? { businessUnitId: auth.membership.businessUnitId } : { ownerUserId: auth.userId },
-    orderBy: { createdAt: "desc" },
-    include: { ownerUser: { select: { username: true, fullName: true } } },
-  });
-  return NextResponse.json(rows);
+  const pagination = parsePagination(request);
+  const where = canSeeAll
+    ? { businessUnitId: auth.membership.businessUnitId }
+    : { businessUnitId: auth.membership.businessUnitId, ownerUserId: auth.userId };
+  const [rows, total] = await prisma.$transaction([
+    prisma.document.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      include: { ownerUser: { select: { username: true, fullName: true } } },
+      skip: pagination.skip,
+      take: pagination.take,
+    }),
+    prisma.document.count({ where }),
+  ]);
+  return paginated(rows, total, pagination);
 }
 
 export async function POST(request: NextRequest) {

@@ -4,6 +4,7 @@ import { requireAuthContext } from "@/lib/api-auth";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
+import { paginated, parsePagination } from "@/lib/api-response";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuthContext(request);
@@ -30,11 +31,20 @@ export async function GET(request: NextRequest) {
     canApprove.reasons.includes("SCOPE_ALL") ||
     canApprove.reasons.includes("SCOPE_ALL_OK") ||
     canApprove.reasons.includes("SCOPE_BUSINESS_UNIT_OK");
-  const rows = await prisma.leaveRequest.findMany({
-    where: shouldReadAll ? { businessUnitId: auth.membership.businessUnitId } : { membershipId: auth.membership.id },
-    orderBy: { createdAt: "desc" },
-  });
-  return NextResponse.json(rows);
+  const pagination = parsePagination(request);
+  const where = shouldReadAll
+    ? { businessUnitId: auth.membership.businessUnitId }
+    : { businessUnitId: auth.membership.businessUnitId, membershipId: auth.membership.id };
+  const [rows, total] = await prisma.$transaction([
+    prisma.leaveRequest.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: pagination.skip,
+      take: pagination.take,
+    }),
+    prisma.leaveRequest.count({ where }),
+  ]);
+  return paginated(rows, total, pagination);
 }
 
 export async function POST(request: NextRequest) {
