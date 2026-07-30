@@ -59,7 +59,7 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
   const start = validDate(params.start);
   const end = validDate(params.end);
   const endExclusive = end ? new Date(end.getTime() + 86_400_000) : null;
-  const page = Math.max(1, Number(params.page) || 1);
+  const requestedPage = Math.max(1, Number(params.page) || 1);
   const pageSize = [10, 20, 50, 100].includes(Number(params.pageSize)) ? Number(params.pageSize) : 20;
 
   const where = {
@@ -78,17 +78,19 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
     ...((start || endExclusive) ? { createdAt: { ...(start ? { gte: start } : {}), ...(endExclusive ? { lt: endExclusive } : {}) } } : {}),
   };
 
-  const [candidateRows, employees, countries, customerCounts] = await Promise.all([
+  const [candidateIndex, employees, countries, customerCounts] = await Promise.all([
     prisma.order.findMany({
       where,
-      include: {
-        customer: { select: { id: true, name: true } },
-        creatorUser: { select: { id: true, username: true, fullName: true } },
-        reviewClaimedBy: { include: { user: { select: { fullName: true, username: true } } } },
-        items: { select: { productName: true, quantity: true } },
+      select: {
+        id: true,
+        customerId: true,
+        recipientEmail: true,
+        recipientPhone: true,
+        customerWhatsapp: true,
+        recipientCountryCode: true,
+        reviewClaimedByMembershipId: true,
       },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      take: 10_000,
     }),
     prisma.user.findMany({
       where: { memberships: { some: { businessUnitId: membership.businessUnitId, isActive: true } } },
@@ -105,25 +107,37 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
 
   const repeatCustomers = new Set(customerCounts.filter((item) => item._count._all > 1).map((item) => item.customerId));
   const duplicateCounts = new Map<string, number>();
-  candidateRows.forEach((order) => {
+  candidateIndex.forEach((order) => {
     const key = duplicateKey(order);
     if (key) duplicateCounts.set(key, (duplicateCounts.get(key) ?? 0) + 1);
   });
-  const isDuplicate = (order: (typeof candidateRows)[number]) => {
+  const isDuplicate = (order: (typeof candidateIndex)[number]) => {
     const key = duplicateKey(order);
     return Boolean(key && (duplicateCounts.get(key) ?? 0) > 1);
   };
   const classified = {
-    ALL: candidateRows,
-    PENDING: candidateRows.filter((order) => !order.reviewClaimedByMembershipId),
-    REVIEWING: candidateRows.filter((order) => Boolean(order.reviewClaimedByMembershipId)),
-    REPEAT: candidateRows.filter((order) => repeatCustomers.has(order.customerId)),
-    DUPLICATE: candidateRows.filter(isDuplicate),
+    ALL: candidateIndex,
+    PENDING: candidateIndex.filter((order) => !order.reviewClaimedByMembershipId),
+    REVIEWING: candidateIndex.filter((order) => Boolean(order.reviewClaimedByMembershipId)),
+    REPEAT: candidateIndex.filter((order) => repeatCustomers.has(order.customerId)),
+    DUPLICATE: candidateIndex.filter(isDuplicate),
   };
   const selected = classified[tab];
   const totalPages = Math.max(1, Math.ceil(selected.length / pageSize));
-  const safePage = Math.min(page, totalPages);
-  const rows = selected.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const safePage = Math.min(requestedPage, totalPages);
+  const pageIds = selected.slice((safePage - 1) * pageSize, safePage * pageSize).map((order) => order.id);
+  const rows = pageIds.length
+    ? await prisma.order.findMany({
+        where: { id: { in: pageIds }, businessUnitId: membership.businessUnitId },
+        include: {
+          customer: { select: { id: true, name: true } },
+          creatorUser: { select: { id: true, username: true, fullName: true } },
+          reviewClaimedBy: { include: { user: { select: { fullName: true, username: true } } } },
+          items: { select: { productName: true, quantity: true } },
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      })
+    : [];
 
   const query = (overrides: Partial<Params>) => {
     const next = new URLSearchParams({
@@ -187,7 +201,6 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
           <div className="flex items-center gap-2"><span>第 {safePage}/{totalPages} 页</span>{safePage > 1 && <Link className="rounded-lg border border-slate-200 px-3 py-2" href={query({ page: String(safePage - 1) })}>上一页</Link>}{safePage < totalPages && <Link className="rounded-lg border border-slate-200 px-3 py-2" href={query({ page: String(safePage + 1) })}>下一页</Link>}</div>
         </footer>
       </section>
-      {candidateRows.length >= 10_000 && <p className="text-xs text-amber-700">当前待核单数据超过 10,000 条，请缩小日期或员工范围。</p>}
     </div>
   );
 }
