@@ -66,6 +66,7 @@ const actionDefs: SeedAction[] = [
 
   { key: "product.read", name: "Product read", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "product.create", name: "Product create", namespace: "erp", scope: "BUSINESS_UNIT" },
+  { key: "product.import", name: "Product import", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "product.update", name: "Product update", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "product.delete", name: "Product delete", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "sku.create", name: "SKU create", namespace: "erp", scope: "BUSINESS_UNIT" },
@@ -628,6 +629,7 @@ async function main() {
     "customer.delete",
     "product.read",
     "product.create",
+    "product.import",
     "product.update",
     "product.delete",
     "sku.create",
