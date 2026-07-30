@@ -118,7 +118,7 @@ export default function AttachmentPanel({
             <Paperclip size={17} className="text-violet-600" />
             {title}
           </h2>
-          <p className="mt-1 text-xs text-slate-500">支持 PNG/JPEG/WEBP/PDF/MP4，最大 50MB</p>
+          <p className="mt-1 text-xs text-slate-500">支持图片（5MB）、PDF（10MB）、MP4（50MB）</p>
         </div>
         {canUpload && (
           <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white hover:bg-violet-700">

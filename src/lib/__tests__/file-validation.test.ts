@@ -20,6 +20,14 @@ describe("附件安全校验", () => {
     expect(() => validateUpload({ originalName: "large.png", declaredMime: "image/png", bytes: oversized })).toThrow("FILE_SIZE_LIMIT_EXCEEDED");
   });
 
+  it("允许超过 10MB 但不超过 50MB 的 MP4 凭证", () => {
+    const video = new Uint8Array(11 * 1024 * 1024);
+    video.set(new TextEncoder().encode("ftyp"), 4);
+    const result = validateUpload({ originalName: "出货凭证.mp4", declaredMime: "video/mp4", bytes: video });
+    expect(result.mimeType).toBe("video/mp4");
+    expect(result.sizeBytes).toBe(video.byteLength);
+  });
+
   it("本地存储拒绝路径穿越和非随机存储键", async () => {
     const storage = new LocalDemoStorageAdapter();
     await expect(storage.get("../secret.png")).rejects.toThrow("INVALID_STORAGE_KEY");

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { format } from "date-fns";
+import type { Prisma } from "@prisma/client";
 
 import OrderWorkflowActions from "@/components/admin/OrderWorkflowActions";
 import OrderReviewClaimButton from "@/components/admin/OrderReviewClaimButton";
@@ -44,60 +45,46 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const allowed = await assertOrderReadScope({ membership, userId: session.userId, orderId: order.id });
   if (!allowed) redirect("/admin");
 
+  const permissionTarget = {
+    userId: session.userId,
+    membershipId: membership.id,
+    targetBusinessUnitId: membership.businessUnitId,
+    targetDepartmentId: order.departmentId,
+    targetSiteId: order.siteId,
+    targetUserId: order.creatorUserId,
+  };
   const [canSubmit, canReview, canReviewProof, canShip, canCancel, canReadAttachments, canCreateAttachments, canDeleteAttachments] = await Promise.all([
     checkPermission({
-      userId: session.userId,
-      membershipId: membership.id,
+      ...permissionTarget,
       actionKey: "order.submit",
-      targetBusinessUnitId: membership.businessUnitId,
     }),
     checkPermission({
-      userId: session.userId,
-      membershipId: membership.id,
+      ...permissionTarget,
       actionKey: "order.review",
-      targetBusinessUnitId: membership.businessUnitId,
     }),
     checkPermission({
-      userId: session.userId,
-      membershipId: membership.id,
+      ...permissionTarget,
       actionKey: "order.review.proof.upload",
-      targetBusinessUnitId: membership.businessUnitId,
-      targetDepartmentId: order.departmentId,
-      targetSiteId: order.siteId,
-      targetUserId: order.creatorUserId,
     }),
     checkPermission({
-      userId: session.userId,
-      membershipId: membership.id,
+      ...permissionTarget,
       actionKey: "order.ship",
-      targetBusinessUnitId: membership.businessUnitId,
     }),
     checkPermission({
-      userId: session.userId,
-      membershipId: membership.id,
+      ...permissionTarget,
       actionKey: "order.status.update",
-      targetBusinessUnitId: membership.businessUnitId,
     }),
     checkPermission({
-      userId: session.userId,
-      membershipId: membership.id,
+      ...permissionTarget,
       actionKey: "attachment.read",
-      targetBusinessUnitId: membership.businessUnitId,
-      targetDepartmentId: order.departmentId,
     }),
     checkPermission({
-      userId: session.userId,
-      membershipId: membership.id,
+      ...permissionTarget,
       actionKey: "attachment.create",
-      targetBusinessUnitId: membership.businessUnitId,
-      targetDepartmentId: order.departmentId,
     }),
     checkPermission({
-      userId: session.userId,
-      membershipId: membership.id,
+      ...permissionTarget,
       actionKey: "attachment.delete",
-      targetBusinessUnitId: membership.businessUnitId,
-      targetDepartmentId: order.departmentId,
     }),
   ]);
 
@@ -119,6 +106,31 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     })),
   );
   const templateConfiguration = parseOrderTemplateConfiguration(order.orderTemplate?.configuration);
+  const contactMatches = ([
+    order.recipientEmail ? { recipientEmail: { equals: order.recipientEmail, mode: "insensitive" as const } } : null,
+    order.recipientPhone ? { recipientPhone: order.recipientPhone } : null,
+    order.customerWhatsapp ? { customerWhatsapp: order.customerWhatsapp } : null,
+  ] as Array<Prisma.OrderWhereInput | null>).filter((item): item is Prisma.OrderWhereInput => Boolean(item));
+  const comparisonScope: Prisma.OrderWhereInput = {
+    businessUnitId: order.businessUnitId,
+    departmentId: order.departmentId,
+    ...(canReview.allowed ? {} : { creatorUserId: session.userId }),
+    id: { not: order.id },
+    status: { notIn: ["DRAFT", "CANCELLED"] },
+  };
+  const [previousOrderCount, duplicateContactCount] = await Promise.all([
+    prisma.order.count({ where: { ...comparisonScope, customerId: order.customerId } }),
+    contactMatches.length ? prisma.order.count({ where: { ...comparisonScope, OR: contactMatches } }) : Promise.resolve(0),
+  ]);
+  const missingFields = [
+    !order.recipientName && "收件人",
+    !order.recipientPhone && "电话",
+    !order.recipientEmail && "邮箱",
+    !order.recipientCountryCode && "国家",
+    !order.recipientPostalCode && "邮编",
+    !order.recipientCity && "城市",
+    !order.recipientAddress && "详细地址",
+  ].filter(Boolean) as string[];
 
   return (
     <div className="space-y-6">
@@ -142,6 +154,55 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <p className="text-sm text-gray-600">创建人：{order.creatorUser?.fullName ?? order.creatorUser?.username}</p>
         <p className="text-sm text-gray-600">创建时间：{format(order.createdAt, "yyyy-MM-dd HH:mm:ss")}</p>
       </div>
+
+      <section className="rounded-2xl border border-amber-200 bg-amber-50/40 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-bold text-slate-950">核单信息总览</h2>
+            <p className="mt-1 text-xs text-slate-500">客户、联系方式和收货地址集中核对，无需切换页面。</p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs font-semibold">
+            {previousOrderCount > 0 && <span className="rounded-full bg-violet-100 px-3 py-1.5 text-violet-700">历史下单 {previousOrderCount} 次</span>}
+            {duplicateContactCount > 0 && <span className="rounded-full bg-rose-100 px-3 py-1.5 text-rose-700">疑似重复订单 {duplicateContactCount} 条</span>}
+            {missingFields.length === 0
+              ? <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-emerald-700">必要信息完整</span>
+              : <span className="rounded-full bg-rose-100 px-3 py-1.5 text-rose-700">缺少：{missingFields.join("、")}</span>}
+          </div>
+        </div>
+        <dl className="mt-5 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            ["收件人", order.recipientName],
+            ["销售", order.creatorUser?.fullName ?? order.creatorUser?.username],
+            ["电话", order.recipientPhone],
+            ["WhatsApp", order.customerWhatsapp],
+            ["邮箱", order.recipientEmail],
+            ["国家/地区", order.recipientCountryCode],
+            ["州/区域", order.recipientRegion],
+            ["城市", order.recipientCity],
+            ["邮编", order.recipientPostalCode],
+            ["付款方式", order.paymentMethod],
+            ["物流渠道", order.logisticsChannel],
+            ["订单模板", order.orderTemplate?.name],
+          ].map(([label, value]) => (
+            <div key={label}>
+              <dt className="text-xs font-semibold text-slate-500">{label}</dt>
+              <dd className={`mt-1 break-words font-medium ${value ? "text-slate-900" : "text-rose-600"}`}>{value || "未填写"}</dd>
+            </div>
+          ))}
+          <div className="sm:col-span-2 xl:col-span-4">
+            <dt className="text-xs font-semibold text-slate-500">完整地址</dt>
+            <dd className={`mt-1 break-words font-medium ${order.recipientAddress ? "text-slate-900" : "text-rose-600"}`}>
+              {order.recipientAddress || "未填写"}
+            </dd>
+          </div>
+          {order.note && (
+            <div className="sm:col-span-2 xl:col-span-4">
+              <dt className="text-xs font-semibold text-slate-500">订单备注</dt>
+              <dd className="mt-1 whitespace-pre-wrap break-words font-medium text-slate-900">{order.note}</dd>
+            </div>
+          )}
+        </dl>
+      </section>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <section className="rounded border border-gray-200 p-4">

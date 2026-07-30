@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
   if (!file || typeof file === "string" || typeof file.arrayBuffer !== "function") {
     return fail("FILE_REQUIRED", "请选择需要上传的文件。", 400);
   }
-  if (file.size > 10 * 1024 * 1024) return fail("FILE_SIZE_LIMIT_EXCEEDED", "文件超过允许大小。", 413);
+  if (file.size > 50 * 1024 * 1024) return fail("FILE_SIZE_LIMIT_EXCEEDED", "文件超过允许大小。", 413);
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   let validated;
