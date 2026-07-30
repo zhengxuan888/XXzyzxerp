@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { requireAuthContext } from "@/lib/api-auth";
 import { fail, ok } from "@/lib/api-response";
 import { writeAuditLog } from "@/lib/audit";
-import { parseColumnLines, parseLogisticsTemplateConfiguration } from "@/lib/logistics-provider-template";
+import { parseColumnLines, parseLogisticsTemplateConfiguration, parseReturnMappingLines } from "@/lib/logistics-provider-template";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 
@@ -23,7 +23,25 @@ export async function PATCH(request: NextRequest, props: RouteContext<"/api/mvp/
   if (!code || !name || !carrierName || !columns.length) return fail("TEMPLATE_FIELDS_REQUIRED", "编码、模板名称、物流商和至少一个有效导出字段必填。", 400);
   const conflict = await prisma.logisticsProviderTemplate.findFirst({ where: { businessUnitId: auth.membership.businessUnitId, code, id: { not: id } }, select: { id: true } });
   if (conflict) return fail("TEMPLATE_CODE_CONFLICT", `模板编码“${code}”已存在。`, 409);
-  const updated = await prisma.logisticsProviderTemplate.update({ where: { id }, data: { code, name, carrierName, configuration: parseLogisticsTemplateConfiguration({ sheetName: body?.sheetName, columns }) as unknown as Prisma.InputJsonValue, isActive: body?.isActive === true || body?.isActive === "on" } });
-  await writeAuditLog({ actorUserId: auth.userId, actorMembershipId: auth.membership.id, module: "logistics.templates", action: "logistics_template.update", targetType: "logistics_provider_template", targetId: id, businessUnitId: auth.membership.businessUnitId, roleId: auth.membership.roleId, details: { previous: { code: current.code, name: current.name, isActive: current.isActive }, next: { code, name, isActive: updated.isActive } } });
+  const configuration = parseLogisticsTemplateConfiguration({
+    sheetName: body?.sheetName,
+    columns,
+    returnWorkbook: parseReturnMappingLines(
+      typeof body?.returnMappingLines === "string" ? body.returnMappingLines : "",
+      body?.returnHeaderScanRows,
+    ),
+  });
+  const updated = await prisma.logisticsProviderTemplate.update({
+    where: { id },
+    data: {
+      code,
+      name,
+      carrierName,
+      configuration: configuration as unknown as Prisma.InputJsonValue,
+      version: { increment: 1 },
+      isActive: body?.isActive === true || body?.isActive === "on",
+    },
+  });
+  await writeAuditLog({ actorUserId: auth.userId, actorMembershipId: auth.membership.id, module: "logistics.templates", action: "logistics_template.update", targetType: "logistics_provider_template", targetId: id, businessUnitId: auth.membership.businessUnitId, roleId: auth.membership.roleId, details: { previous: { code: current.code, name: current.name, isActive: current.isActive, version: current.version }, next: { code, name, isActive: updated.isActive, version: updated.version } } });
   return ok(updated);
 }

@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
 
-import { parseLogisticsReturnWorkbook, trackingNumberProblem } from "@/lib/logistics-return-import";
+import { parseLogisticsReturnWorkbook, parseLogisticsReturnWorkbookDetails, trackingNumberProblem } from "@/lib/logistics-return-import";
 
 async function workbookBuffer(rows: string[][]) {
   const workbook = new ExcelJS.Workbook();
@@ -30,5 +30,24 @@ describe("logistics return import", () => {
     expect(trackingNumberProblem("8.828E+18")).toContain("科学计数法");
     expect(trackingNumberProblem("../TRACK")).toContain("非法字符");
     expect(trackingNumberProblem("0082800082909724860095")).toBeNull();
+  });
+
+  it("finds a configured header row on a later row and keeps the matching sheet", async () => {
+    const bytes = await workbookBuffer([
+      ["provider return report"],
+      ["reference", "parcel number", "delivery state"],
+      ["ERP-002", "TRACK-002", "created"],
+    ]);
+    const parsed = await parseLogisticsReturnWorkbookDetails(bytes, {
+      headerScanRows: 3,
+      aliases: {
+        orderNo: ["reference"],
+        trackingNo: ["parcel number"],
+        carrier: ["carrier"],
+        providerStatus: ["delivery state"],
+      },
+    });
+    expect(parsed.headerRowNumber).toBe(2);
+    expect(parsed.rows).toEqual([{ rowNumber: 3, orderNo: "ERP-002", trackingNo: "TRACK-002", carrier: "", providerStatus: "created" }]);
   });
 });

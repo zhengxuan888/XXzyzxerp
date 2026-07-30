@@ -48,10 +48,11 @@ docker compose ps
 3. 在同版本代码上执行 `pnpm exec prisma validate`。
 4. 查看 `pnpm exec prisma migrate status`，确认待应用迁移仅来自当前发布。
 5. 执行 `pnpm exec prisma migrate deploy`；预发布/生产禁止 `migrate dev`。
-6. 启动一个新应用实例，先不接收公网流量。
-7. 验证 `/api/health`、登录、权限菜单和关键只读页面。
-8. 执行最小冒烟：测试用户登录、客户/商品读取、订单测试闭环、附件测试文件上传与删除。
-9. 切换反向代理流量；保留上一不可变应用版本。
+6. 执行 `pnpm run prisma:generate`，确保应用实例使用与本次 Schema 一致的 Prisma Client。
+7. 启动一个新的应用实例，先不接收公网流量；不得复用迁移前仍在运行的旧进程。
+8. 验证 `/api/health`、登录、权限菜单和关键只读页面。
+9. 执行最小冒烟：测试用户登录、客户/商品读取、订单测试闭环、附件测试文件上传与删除。
+10. 切换反向代理流量；保留上一不可变应用版本。
 
 ## 4. 种子策略
 

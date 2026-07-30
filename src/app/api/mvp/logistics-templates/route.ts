@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { requireAuthContext } from "@/lib/api-auth";
 import { fail, ok } from "@/lib/api-response";
 import { writeAuditLog } from "@/lib/audit";
-import { parseColumnLines, parseLogisticsTemplateConfiguration } from "@/lib/logistics-provider-template";
+import { parseColumnLines, parseLogisticsTemplateConfiguration, parseReturnMappingLines } from "@/lib/logistics-provider-template";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 
@@ -39,7 +39,14 @@ export async function POST(request: NextRequest) {
   if (!code || !name || !carrierName || !columns.length) {
     return fail("TEMPLATE_FIELDS_REQUIRED", "编码、模板名称、物流商和至少一个有效导出字段必填。", 400);
   }
-  const configuration = parseLogisticsTemplateConfiguration({ sheetName: body?.sheetName, columns });
+  const configuration = parseLogisticsTemplateConfiguration({
+    sheetName: body?.sheetName,
+    columns,
+    returnWorkbook: parseReturnMappingLines(
+      typeof body?.returnMappingLines === "string" ? body.returnMappingLines : "",
+      body?.returnHeaderScanRows,
+    ),
+  });
   const row = await prisma.logisticsProviderTemplate.create({
     data: {
       legalEntityId: auth.membership.legalEntityId,

@@ -48,6 +48,32 @@ enum LogisticsWorkStatus {
   CLOSED
 }
 
+enum LogisticsExportBatchStatus {
+  EXPORTED
+  SENT_TO_PROVIDER
+  RETURN_PREVIEWED
+  RETURN_IMPORTED
+  CANCELLED
+}
+
+enum LogisticsReturnImportBatchStatus {
+  PREVIEWED
+  IMPORTED
+  CANCELLED
+}
+
+enum LogisticsReturnImportRowStatus {
+  READY
+  WARNING
+  REJECTED
+  IMPORTED
+}
+
+enum LogisticsBatchArtifactKind {
+  EXPORT_WORKBOOK
+  RETURN_WORKBOOK
+}
+
 enum NotificationDeliveryStatus {
   PENDING
   PROCESSING
@@ -156,6 +182,9 @@ model LegalEntity {
   attachments        Attachment[]
   dailyGoals         DailyGoal[]
   teamGoals          TeamGoal[]
+  logisticsExportBatches      LogisticsExportBatch[]
+  logisticsReturnImportBatches LogisticsReturnImportBatch[]
+  logisticsBatchArtifacts     LogisticsBatchArtifact[]
 }
 
 model BusinessUnit {
@@ -201,6 +230,9 @@ model BusinessUnit {
   dailyGoals                DailyGoal[]
   teamGoals                 TeamGoal[]
   notificationDeliveries    NotificationDelivery[]
+  logisticsExportBatches      LogisticsExportBatch[]
+  logisticsReturnImportBatches LogisticsReturnImportBatch[]
+  logisticsBatchArtifacts     LogisticsBatchArtifact[]
 
   @@unique([legalEntityId, code])
   @@index([legalEntityId])
@@ -233,6 +265,7 @@ model Department {
   conversations      Conversation[]
   attachments        Attachment[]
   teamGoals          TeamGoal[]
+  logisticsExportBatches LogisticsExportBatch[]
 
   @@unique([businessUnitId, code, parentId])
   @@index([businessUnitId, parentId])
@@ -418,6 +451,9 @@ model Membership {
   dailyGoals                  DailyGoal[]                @relation("DailyGoalOwner")
   goalsSetForOthers           DailyGoal[]                @relation("DailyGoalSetter")
   teamGoalsSet                TeamGoal[]                 @relation("TeamGoalSetter")
+  logisticsExportBatches      LogisticsExportBatch[]      @relation("LogisticsExportBatchCreator")
+  logisticsReturnImportBatches LogisticsReturnImportBatch[] @relation("LogisticsReturnImportBatchPreviewer")
+  logisticsBatchArtifacts     LogisticsBatchArtifact[]     @relation("LogisticsBatchArtifactCreator")
 
   @@index([userId, isActive])
   @@index([businessUnitId, isActive])
@@ -615,6 +651,7 @@ model Order {
   expenses              Expense[]
   inventoryTransactions InventoryTransaction[]
   inventoryReservations InventoryReservation[]
+  logisticsExportBatchItems LogisticsExportBatchItem[]
 
   @@unique([businessUnitId, orderNo])
   @@index([legalEntityId, businessUnitId])
@@ -657,15 +694,157 @@ model LogisticsProviderTemplate {
   name           String
   carrierName    String
   configuration  Json
+  version        Int      @default(1)
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   legalEntity  LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
   businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  exportBatches LogisticsExportBatch[]
 
   @@unique([businessUnitId, code])
   @@index([businessUnitId, isActive])
+}
+
+model LogisticsExportBatch {
+  id                    String                      @id @default(uuid())
+  legalEntityId         String
+  businessUnitId        String
+  departmentId          String?
+  templateId            String
+  templateVersion       Int
+  batchNo               String
+  templateSnapshot      Json
+  orderCount            Int
+  status                LogisticsExportBatchStatus  @default(EXPORTED)
+  dispatchNote          String?
+  dispatchedAt          DateTime?
+  createdByMembershipId String
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+
+  legalEntity         LegalEntity                @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit        BusinessUnit               @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department          Department?                @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  template            LogisticsProviderTemplate  @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  createdByMembership Membership                 @relation("LogisticsExportBatchCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  items               LogisticsExportBatchItem[]
+  returnImports       LogisticsReturnImportBatch[]
+  artifacts           LogisticsBatchArtifact[]
+
+  @@unique([businessUnitId, batchNo])
+  @@index([businessUnitId, status, createdAt])
+  @@index([departmentId, createdAt])
+  @@index([createdByMembershipId, createdAt])
+}
+
+model LogisticsExportBatchItem {
+  id                String   @id @default(uuid())
+  exportBatchId     String
+  orderId           String
+  orderNoSnapshot   String
+  rowHash           String
+  payloadSnapshot   Json
+  trackingNo        String?
+  importedAt        DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  exportBatch LogisticsExportBatch @relation(fields: [exportBatchId], references: [id], onDelete: Cascade)
+  order       Order                 @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@unique([exportBatchId, orderId])
+  @@index([orderId])
+  @@index([exportBatchId, orderNoSnapshot])
+}
+
+model LogisticsReturnImportBatch {
+  id                    String                           @id @default(uuid())
+  legalEntityId         String
+  businessUnitId        String
+  exportBatchId         String
+  originalName          String
+  storageKey            String
+  mimeType              String
+  sizeBytes             Int
+  sha256                String
+  mappingSnapshot       Json
+  totalRows             Int
+  readyRows             Int
+  warningRows           Int
+  rejectedRows          Int
+  importedRows          Int                              @default(0)
+  status                LogisticsReturnImportBatchStatus @default(PREVIEWED)
+  previewedByMembershipId String
+  previewedAt           DateTime                         @default(now())
+  importedAt            DateTime?
+  createdAt             DateTime                         @default(now())
+  updatedAt             DateTime                         @updatedAt
+
+  legalEntity         LegalEntity          @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit        BusinessUnit         @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  exportBatch         LogisticsExportBatch @relation(fields: [exportBatchId], references: [id], onDelete: Restrict)
+  previewedByMembership Membership          @relation("LogisticsReturnImportBatchPreviewer", fields: [previewedByMembershipId], references: [id], onDelete: Restrict)
+  rows                LogisticsReturnImportRow[]
+  artifacts           LogisticsBatchArtifact[]
+
+  @@index([businessUnitId, status, previewedAt])
+  @@index([exportBatchId, status])
+  @@index([sha256])
+  @@unique([exportBatchId, sha256])
+}
+
+model LogisticsReturnImportRow {
+  id                String                          @id @default(uuid())
+  importBatchId     String
+  rowNumber         Int
+  orderNo           String
+  trackingNo        String
+  carrier           String?
+  providerStatus    String?
+  sourceRowHash     String
+  orderId           String?
+  shipmentId        String?
+  status            LogisticsReturnImportRowStatus
+  message           String
+  importedAt        DateTime?
+  createdAt         DateTime                        @default(now())
+  updatedAt         DateTime                        @updatedAt
+
+  importBatch LogisticsReturnImportBatch @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+
+  @@unique([importBatchId, rowNumber])
+  @@index([importBatchId, status])
+  @@index([orderId])
+  @@index([shipmentId])
+}
+
+model LogisticsBatchArtifact {
+  id                    String                     @id @default(uuid())
+  legalEntityId         String
+  businessUnitId        String
+  exportBatchId         String?
+  returnImportBatchId   String?
+  kind                  LogisticsBatchArtifactKind
+  originalName          String
+  storageKey            String
+  mimeType              String
+  sizeBytes             Int
+  sha256                String
+  createdByMembershipId String
+  createdAt             DateTime                   @default(now())
+
+  legalEntity         LegalEntity                 @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit        BusinessUnit                @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  exportBatch         LogisticsExportBatch?       @relation(fields: [exportBatchId], references: [id], onDelete: Cascade)
+  returnImportBatch   LogisticsReturnImportBatch? @relation(fields: [returnImportBatchId], references: [id], onDelete: Cascade)
+  createdByMembership Membership                  @relation("LogisticsBatchArtifactCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+
+  @@index([businessUnitId, createdAt])
+  @@index([exportBatchId])
+  @@index([returnImportBatchId])
+  @@unique([businessUnitId, storageKey])
 }
 
 model InventoryBalance {

@@ -2,7 +2,7 @@ import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { StorageAdapter } from "@/lib/storage/adapter";
 
-const STORAGE_KEY_PATTERN = /^[a-f0-9-]{36}\.(png|jpg|webp|pdf)$/;
+const STORAGE_KEY_PATTERN = /^[a-f0-9-]{36}\.(png|jpg|webp|pdf|xlsx)$/;
 
 export class LocalDemoStorageAdapter implements StorageAdapter {
   readonly providerKey = "LOCAL_DEMO";
