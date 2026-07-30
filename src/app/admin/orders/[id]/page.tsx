@@ -122,6 +122,17 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     prisma.order.count({ where: { ...comparisonScope, customerId: order.customerId } }),
     contactMatches.length ? prisma.order.count({ where: { ...comparisonScope, OR: contactMatches } }) : Promise.resolve(0),
   ]);
+  const pendingShipment = order.shipments.find((shipment) => shipment.status === "PENDING");
+  const shipmentProofCount = pendingShipment
+    ? await prisma.attachment.count({
+        where: {
+          businessUnitId: order.businessUnitId,
+          targetType: "SHIPMENT",
+          targetId: pendingShipment.id,
+          status: "ACTIVE",
+        },
+      })
+    : 0;
   const missingFields = [
     !order.recipientName && "收件人",
     !order.recipientPhone && "电话",
@@ -244,6 +255,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           reviewClaimedByMe={order.reviewClaimedByMembershipId === membership.id}
           reviewRejectReasons={templateConfiguration.reviewRejectReasons}
           voidReasons={templateConfiguration.voidReasons}
+          shippingChecklist={{
+            hasShipment: Boolean(pendingShipment),
+            hasTrackingNo: Boolean(pendingShipment?.trackingNo),
+            hasProof: shipmentProofCount > 0,
+          }}
         />
       </div>
 
@@ -274,6 +290,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           targetId={shipment.id}
           canUpload={canCreateAttachments.allowed && canShip.allowed && Boolean(shipment.trackingNo)}
           canDelete={canDeleteAttachments.allowed && canShip.allowed && Boolean(shipment.trackingNo)}
+          refreshAfterUpload
           title={`出货凭证 · ${shipment.carrier || "待填写物流商"} · ${shipmentPermissions.get(shipment.id)?.trackingNo ? shipment.trackingNo || "待回填运单号" : "物流单号受限"}`}
         />
       ))}

@@ -21,12 +21,14 @@ export default function AttachmentPanel({
   canUpload,
   canDelete,
   title = "附件",
+  refreshAfterUpload = false,
 }: {
   targetType: AttachmentTargetType;
   targetId: string;
   canUpload: boolean;
   canDelete: boolean;
   title?: string;
+  refreshAfterUpload?: boolean;
 }) {
   const [items, setItems] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,6 +94,7 @@ export default function AttachmentPanel({
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error?.message ?? payload.error?.code ?? "上传失败");
       await load();
+      if (refreshAfterUpload) window.location.reload();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "上传失败");
     } finally {

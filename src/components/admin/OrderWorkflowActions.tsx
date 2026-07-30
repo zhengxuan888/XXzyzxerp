@@ -17,6 +17,11 @@ type Props = {
   reviewClaimedByMe?: boolean;
   reviewRejectReasons?: string[];
   voidReasons?: string[];
+  shippingChecklist?: {
+    hasShipment: boolean;
+    hasTrackingNo: boolean;
+    hasProof: boolean;
+  };
 };
 
 const actionLabel = {
@@ -34,6 +39,7 @@ export default function OrderWorkflowActions({
   reviewClaimedByMe = false,
   reviewRejectReasons = [],
   voidReasons = [],
+  shippingChecklist,
 }: Props) {
   const [action, setAction] = useState<WorkflowAction | null>(null);
   const [note, setNote] = useState("");
@@ -50,7 +56,12 @@ export default function OrderWorkflowActions({
   }
   if (currentStatus === "WAITING_SHIPMENT") {
     if (permissions.cancel) available.push("void");
-    if (permissions.ship) available.push("ship");
+    if (
+      permissions.ship
+      && shippingChecklist?.hasShipment
+      && shippingChecklist.hasTrackingNo
+      && shippingChecklist.hasProof
+    ) available.push("ship");
   }
   if (currentStatus === "EXCEPTION" && permissions.cancel) {
     available.push("void");
@@ -82,6 +93,25 @@ export default function OrderWorkflowActions({
     <section className="rounded border border-gray-200 p-4">
       <h2 className="font-medium">订单流程</h2>
       <p className="mt-1 text-sm text-gray-500">当前状态：{zh(currentStatus)}</p>
+      {currentStatus === "WAITING_SHIPMENT" && permissions.ship && shippingChecklist && (
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <p className="text-xs font-bold text-slate-700">确认发货前检查</p>
+          <div className="mt-2 grid gap-2 text-xs sm:grid-cols-3">
+            {[
+              ["物流记录", shippingChecklist.hasShipment],
+              ["真实物流单号", shippingChecklist.hasTrackingNo],
+              ["出货凭证", shippingChecklist.hasProof],
+            ].map(([label, complete]) => (
+              <span key={String(label)} className={`rounded-lg px-2.5 py-2 font-semibold ${complete ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}>
+                {complete ? "✓" : "○"} {label}
+              </span>
+            ))}
+          </div>
+          {(!shippingChecklist.hasShipment || !shippingChecklist.hasTrackingNo || !shippingChecklist.hasProof) && (
+            <p className="mt-2 text-xs text-amber-800">完成以上三项后，“确认发货”按钮才会开放。</p>
+          )}
+        </div>
+      )}
       {available.length === 0 ? (
         <>
           <p className="mt-4 text-sm text-gray-500">当前状态下暂无可执行动作。</p>
