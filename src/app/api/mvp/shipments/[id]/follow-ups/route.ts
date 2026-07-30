@@ -26,6 +26,14 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
 
   const shipment = await prisma.shipment.findFirst({
     where: { id, businessUnitId: auth.membership.businessUnitId },
+    include: {
+      order: {
+        select: {
+          departmentId: true,
+          creatorUserId: true,
+        },
+      },
+    },
   });
   if (!shipment) return fail("SHIPMENT_NOT_FOUND", "物流单不存在或不属于当前业务板块。", 404);
 
@@ -34,7 +42,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     membershipId: auth.membership.id,
     actionKey: "shipment.track.update",
     targetBusinessUnitId: shipment.businessUnitId,
+    targetDepartmentId: shipment.order.departmentId,
     targetSiteId: shipment.siteId,
+    targetUserId: shipment.order.creatorUserId,
   });
   if (!permission.allowed) return fail("FORBIDDEN", "当前岗位没有物流跟进权限。", 403);
 
@@ -53,16 +63,37 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     if (Number.isNaN(nextFollowUpAt.getTime())) return fail("INVALID_NEXT_FOLLOW_UP_AT", "下次跟进时间格式不正确。", 400);
   }
 
-  const ownerMembershipId =
-    typeof body?.ownerMembershipId === "string" && body.ownerMembershipId.trim()
-      ? body.ownerMembershipId.trim()
-      : shipment.ownerMembershipId;
-  if (ownerMembershipId) {
+  const hasOwnerAssignment = typeof body?.ownerMembershipId === "string" && Boolean(body.ownerMembershipId.trim());
+  const ownerMembershipId = hasOwnerAssignment ? body.ownerMembershipId.trim() : shipment.ownerMembershipId;
+  if (hasOwnerAssignment && ownerMembershipId) {
     const owner = await prisma.membership.findFirst({
       where: { id: ownerMembershipId, businessUnitId: shipment.businessUnitId, isActive: true },
-      select: { id: true },
+      select: { id: true, userId: true },
     });
     if (!owner) return fail("INVALID_FOLLOW_UP_OWNER", "跟进人不属于当前业务板块或已停用。", 400);
+    const [ownerCanRead, ownerCanUpdate] = await Promise.all([
+      checkPermission({
+        userId: owner.userId,
+        membershipId: owner.id,
+        actionKey: "shipment.read",
+        targetBusinessUnitId: shipment.businessUnitId,
+        targetDepartmentId: shipment.order.departmentId,
+        targetSiteId: shipment.siteId,
+        targetUserId: shipment.order.creatorUserId,
+      }),
+      checkPermission({
+        userId: owner.userId,
+        membershipId: owner.id,
+        actionKey: "shipment.track.update",
+        targetBusinessUnitId: shipment.businessUnitId,
+        targetDepartmentId: shipment.order.departmentId,
+        targetSiteId: shipment.siteId,
+        targetUserId: shipment.order.creatorUserId,
+      }),
+    ]);
+    if (!ownerCanRead.allowed || !ownerCanUpdate.allowed) {
+      return fail("FOLLOW_UP_OWNER_OUT_OF_SCOPE", "该员工没有查看或处理此订单物流的权限，不能转派。", 403);
+    }
   }
 
   const result = await prisma.$transaction(async (tx) => {
