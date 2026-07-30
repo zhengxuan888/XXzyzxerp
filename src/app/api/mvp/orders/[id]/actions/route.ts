@@ -244,25 +244,25 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         },
       });
 
+      await writeAuditLog({
+        actorUserId: auth.userId,
+        actorMembershipId: auth.membership.id,
+        module: "sales.order_workflow",
+        action: `order.${action}`,
+        targetType: "order",
+        targetId: updated.id,
+        businessUnitId: updated.businessUnitId,
+        roleId: auth.membership.roleId,
+        details: {
+          fromStatus: current.status,
+          toStatus: updated.status,
+          note: note || null,
+          shipmentId,
+        },
+      }, tx);
+
       return { order: updated, shipmentId };
     }, { isolationLevel: "Serializable" });
-
-    await writeAuditLog({
-      actorUserId: auth.userId,
-      actorMembershipId: auth.membership.id,
-      module: "sales.order_workflow",
-      action: `order.${action}`,
-      targetType: "order",
-      targetId: result.order.id,
-      businessUnitId: result.order.businessUnitId,
-      roleId: auth.membership.roleId,
-      details: {
-        fromStatus: order.status,
-        toStatus: result.order.status,
-        note: note || null,
-        shipmentId: result.shipmentId,
-      } satisfies Prisma.InputJsonObject,
-    });
 
     return ok(result);
   } catch (error) {

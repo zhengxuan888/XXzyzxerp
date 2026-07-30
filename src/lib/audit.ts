@@ -14,8 +14,10 @@ export type AuditLogPayload = {
   ipAddress?: string | null;
 };
 
-export async function writeAuditLog(payload: AuditLogPayload) {
-  await prisma.auditLog.create({
+type AuditClient = Pick<Prisma.TransactionClient, "auditLog">;
+
+export async function writeAuditLog(payload: AuditLogPayload, client: AuditClient = prisma) {
+  await client.auditLog.create({
     data: {
       action: payload.action,
       actorUserId: payload.actorUserId,
