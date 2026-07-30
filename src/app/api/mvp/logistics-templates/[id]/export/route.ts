@@ -56,7 +56,17 @@ export async function GET(request: NextRequest, context: RouteContext<"/api/mvp/
   });
   if (!template) return fail("TEMPLATE_NOT_FOUND", "物流商模板不存在或已停用。", 404);
   const configuration = parseLogisticsTemplateConfiguration(template.configuration);
-  const orders = await loadOrders(auth.membership.businessUnitId);
+  const candidateOrders = await loadOrders(auth.membership.businessUnitId);
+  const orderAccess = await Promise.all(candidateOrders.map((order) => checkPermission({
+    userId: auth.userId,
+    membershipId: auth.membership.id,
+    actionKey: "logistics_template.export",
+    targetBusinessUnitId: order.businessUnitId,
+    targetDepartmentId: order.departmentId,
+    targetSiteId: order.siteId,
+    targetUserId: order.creatorUserId,
+  })));
+  const orders = candidateOrders.filter((_, index) => orderAccess[index].allowed);
   if (!orders.length) return fail("NO_WAITING_SHIPMENT_ORDERS", "当前没有核单通过、等待发货的订单。", 409);
 
   const workbook = new ExcelJS.Workbook();

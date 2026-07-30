@@ -16,28 +16,55 @@ export default async function ShippingWorkbenchPage() {
   const permission = await checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "shipment.create", targetBusinessUnitId: membership.businessUnitId });
   if (!permission.allowed) redirect("/admin");
 
-  const [orders, pendingShipments, logisticsTemplates, templateRead, templateManage, templateExport] = await Promise.all([
-    prisma.order.findMany({ where: { businessUnitId: membership.businessUnitId, status: "WAITING_SHIPMENT" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true, orderNo: true } }),
-    prisma.shipment.findMany({
-      where: { businessUnitId: membership.businessUnitId, status: "PENDING" },
-      include: {
-        order: {
-          select: {
-            orderNo: true,
-            recipientName: true,
-            recipientCountryCode: true,
-            creatorUser: { select: { username: true, fullName: true } },
-            items: { select: { productName: true, quantity: true } },
-          },
+  const [rawOrders, logisticsTemplates, templateRead, templateManage, templateExport] = await Promise.all([
+    prisma.order.findMany({
+      where: { businessUnitId: membership.businessUnitId, status: "WAITING_SHIPMENT" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: {
+        id: true,
+        orderNo: true,
+        departmentId: true,
+        siteId: true,
+        creatorUserId: true,
+        recipientName: true,
+        recipientCountryCode: true,
+        creatorUser: { select: { username: true, fullName: true } },
+        items: { select: { productName: true, quantity: true } },
+        shipments: {
+          where: { status: "PENDING" },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: 1,
+          select: { id: true, trackingNo: true, carrier: true, status: true, memo: true },
         },
       },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     }),
     prisma.logisticsProviderTemplate.findMany({ where: { businessUnitId: membership.businessUnitId }, orderBy: [{ isActive: "desc" }, { name: "asc" }, { id: "asc" }], select: { id: true, code: true, name: true, carrierName: true, isActive: true, configuration: true } }),
     checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "logistics_template.read", targetBusinessUnitId: membership.businessUnitId }),
     checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "logistics_template.manage", targetBusinessUnitId: membership.businessUnitId }),
     checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "logistics_template.export", targetBusinessUnitId: membership.businessUnitId }),
   ]);
+  const canProcess = (target: { departmentId: string | null; siteId: string | null; creatorUserId: string }) => checkPermission({
+    userId: session.userId,
+    membershipId: membership.id,
+    actionKey: "shipment.create",
+    targetBusinessUnitId: membership.businessUnitId,
+    targetDepartmentId: target.departmentId,
+    targetSiteId: target.siteId,
+    targetUserId: target.creatorUserId,
+  });
+  const orderAccess = await Promise.all(rawOrders.map(canProcess));
+  const orders = rawOrders.filter((_, index) => orderAccess[index].allowed);
+  const workRows = orders.map((order) => {
+    const shipment = order.shipments[0];
+    return {
+      id: order.id,
+      order,
+      trackingNo: shipment?.trackingNo ?? null,
+      carrier: shipment?.carrier ?? null,
+      status: shipment?.status ?? "PENDING",
+      memo: shipment?.memo ?? null,
+    };
+  });
 
   return (
     <div className="space-y-6">
@@ -47,19 +74,20 @@ export default async function ShippingWorkbenchPage() {
       </header>
       <section className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">核单通过待处理</p><p className="mt-1 text-2xl font-bold text-slate-950">{orders.length}</p></div>
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm"><p className="text-xs text-amber-700">等待物流单号</p><p className="mt-1 text-2xl font-bold text-amber-900">{pendingShipments.filter((item) => !item.trackingNo).length}</p></div>
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm"><p className="text-xs text-emerald-700">已回填待确认发货</p><p className="mt-1 text-2xl font-bold text-emerald-900">{pendingShipments.filter((item) => item.trackingNo).length}</p></div>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm"><p className="text-xs text-amber-700">等待物流单号</p><p className="mt-1 text-2xl font-bold text-amber-900">{orders.filter((item) => !item.shipments[0]?.trackingNo).length}</p></div>
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm"><p className="text-xs text-emerald-700">已回填待确认发货</p><p className="mt-1 text-2xl font-bold text-emerald-900">{orders.filter((item) => item.shipments[0]?.trackingNo).length}</p></div>
       </section>
       {templateRead.allowed && <LogisticsTemplateManager templates={logisticsTemplates} waitingOrderCount={orders.length} canManage={templateManage.allowed} canExport={templateExport.allowed} />}
       <LogisticsReturnImport />
       <CrudPage
         apiBase="/api/mvp"
         resource="shipments"
-        listTitle="已回填运单号，等待上传凭证并确认发货"
+        listTitle="待发货订单（回填运单号后上传凭证并确认发货）"
+        createLabel="手动回填运单号"
         detailPath="/admin/orders"
         canCreate
         canDelete={false}
-        rows={pendingShipments.map((shipment) => ({ ...shipment, id: shipment.orderId }))}
+        rows={workRows}
         createFields={[
           { key: "orderId", label: "已核单订单", required: true, type: "select", options: orders.map((order) => ({ value: order.id, label: order.orderNo })) },
           { key: "carrier", label: "物流商 / 运输方式", required: true },

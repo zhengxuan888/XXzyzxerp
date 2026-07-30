@@ -84,12 +84,23 @@ export async function POST(request: NextRequest) {
       status: true,
       legalEntityId: true,
       businessUnitId: true,
+      departmentId: true,
       siteId: true,
+      creatorUserId: true,
       creatorUser: { select: { username: true } },
       shipments: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true, trackingNo: true, carrier: true, status: true } },
     },
   });
-  const orderByNo = new Map(orders.map((order) => [order.orderNo, order]));
+  const orderAccess = await Promise.all(orders.map((order) => checkPermission({
+    userId: auth.userId,
+    membershipId: auth.membership.id,
+    actionKey: "shipment.create",
+    targetBusinessUnitId: order.businessUnitId,
+    targetDepartmentId: order.departmentId,
+    targetSiteId: order.siteId,
+    targetUserId: order.creatorUserId,
+  })));
+  const orderByNo = new Map(orders.filter((_, index) => orderAccess[index].allowed).map((order) => [order.orderNo, order]));
 
   const trackingCounts = new Map<string, number>();
   for (const row of inputRows) {

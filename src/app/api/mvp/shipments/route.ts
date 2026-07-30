@@ -109,6 +109,9 @@ export async function POST(request: NextRequest) {
     membershipId: auth.membership.id,
     actionKey: "shipment.create",
     targetBusinessUnitId: order.businessUnitId,
+    targetDepartmentId: order.departmentId,
+    targetSiteId: order.siteId,
+    targetUserId: order.creatorUserId,
   });
   if (!canCreate.allowed) {
     return NextResponse.json({ error: "FORBIDDEN", reasons: canCreate.reasons }, { status: 403 });

@@ -35,6 +35,7 @@ export type CrudPageProps = {
   createFields: FieldSpec[];
   dataColumns: DataCell[];
   listTitle: string;
+  createLabel?: string;
   rowClassName?: (row: DataRow) => string;
   showCreate?: boolean;
   detailPath?: string;
@@ -78,6 +79,7 @@ export default function CrudPage({
   createFields,
   dataColumns,
   listTitle,
+  createLabel = "新建",
   rowClassName,
   showCreate = true,
   detailPath,
@@ -242,7 +244,7 @@ export default function CrudPage({
                 onClick={() => setShowForm((value) => !value)}
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white shadow-sm shadow-violet-200 hover:bg-violet-700"
               >
-                <Plus size={17} /> 新建
+                <Plus size={17} /> {createLabel}
               </button>
             )}
           </div>
