@@ -53,7 +53,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     targetSiteId: order.siteId,
     targetUserId: order.creatorUserId,
   };
-  const [canSubmit, canReview, canReviewProof, canShip, canCancel, canReadAttachments, canCreateAttachments, canDeleteAttachments] = await Promise.all([
+  const [canSubmit, canReview, canReviewApprove, canReviewReject, canReviewProof, canShip, canCancel, canReadAttachments, canCreateAttachments, canDeleteAttachments] = await Promise.all([
     checkPermission({
       ...permissionTarget,
       actionKey: "order.submit",
@@ -61,6 +61,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     checkPermission({
       ...permissionTarget,
       actionKey: "order.review",
+    }),
+    checkPermission({
+      ...permissionTarget,
+      actionKey: "order.review.approve",
+    }),
+    checkPermission({
+      ...permissionTarget,
+      actionKey: "order.review.reject",
     }),
     checkPermission({
       ...permissionTarget,
@@ -72,7 +80,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     }),
     checkPermission({
       ...permissionTarget,
-      actionKey: "order.status.update",
+      actionKey: "order.void",
     }),
     checkPermission({
       ...permissionTarget,
@@ -248,7 +256,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           currentStatus={order.status}
           permissions={{
             submit: canSubmit.allowed,
-            review: canReview.allowed,
+            reviewApprove: canReviewApprove.allowed,
+            reviewReject: canReviewReject.allowed,
             ship: canShip.allowed,
             cancel: canCancel.allowed,
           }}

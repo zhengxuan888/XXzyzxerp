@@ -10,7 +10,8 @@ type Props = {
   currentStatus: string;
   permissions: {
     submit: boolean;
-    review: boolean;
+    reviewApprove: boolean;
+    reviewReject: boolean;
     ship: boolean;
     cancel?: boolean;
   };
@@ -50,9 +51,10 @@ export default function OrderWorkflowActions({
   if (currentStatus === "DRAFT" && permissions.submit) {
     available.push("submit");
   }
-  if (currentStatus === "SUBMITTED" && permissions.review) {
-    if (reviewClaimedByMe) available.push("approve", "reject");
-    if (permissions.cancel) available.push("void");
+  if (currentStatus === "SUBMITTED") {
+    if (reviewClaimedByMe && permissions.reviewApprove) available.push("approve");
+    if (reviewClaimedByMe && permissions.reviewReject) available.push("reject");
+    if (reviewClaimedByMe && permissions.cancel) available.push("void");
   }
   if (currentStatus === "WAITING_SHIPMENT") {
     if (permissions.cancel) available.push("void");
@@ -115,7 +117,7 @@ export default function OrderWorkflowActions({
       {available.length === 0 ? (
         <>
           <p className="mt-4 text-sm text-gray-500">当前状态下暂无可执行动作。</p>
-          {currentStatus === "SUBMITTED" && permissions.review && !reviewClaimedByMe && (
+          {currentStatus === "SUBMITTED" && (permissions.reviewApprove || permissions.reviewReject || permissions.cancel) && !reviewClaimedByMe && (
             <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
               请先领取该订单；领取人上传核单凭证后才能通过或退回。
             </p>

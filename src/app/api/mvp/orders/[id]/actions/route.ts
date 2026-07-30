@@ -23,9 +23,9 @@ type WorkflowResult = {
 
 const ACTION_CONFIG: Record<WorkflowAction, { permission: string; from: readonly OrderStatus[]; to: OrderStatus }> = {
   submit: { permission: "order.submit", from: ["DRAFT"], to: "SUBMITTED" },
-  approve: { permission: "order.review", from: ["SUBMITTED"], to: "WAITING_SHIPMENT" },
-  reject: { permission: "order.review", from: ["SUBMITTED"], to: "DRAFT" },
-  void: { permission: "order.status.update", from: ["SUBMITTED", "WAITING_SHIPMENT", "EXCEPTION"], to: "CANCELLED" },
+  approve: { permission: "order.review.approve", from: ["SUBMITTED"], to: "WAITING_SHIPMENT" },
+  reject: { permission: "order.review.reject", from: ["SUBMITTED"], to: "DRAFT" },
+  void: { permission: "order.void", from: ["SUBMITTED", "WAITING_SHIPMENT", "EXCEPTION"], to: "CANCELLED" },
   ship: { permission: "order.ship", from: ["WAITING_SHIPMENT"], to: "SHIPPED" },
 };
 
@@ -66,7 +66,10 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     const proofPermission = await checkPermission({ userId: auth.userId, membershipId: auth.membership.id, actionKey: "order.review.proof.upload", targetBusinessUnitId: order.businessUnitId, targetDepartmentId: order.departmentId, targetSiteId: order.siteId, targetUserId: order.creatorUserId });
     if (!proofPermission.allowed) return fail("FORBIDDEN", "当前角色未配置核单凭证权限", 403);
   }
-  if ((action === "approve" || action === "reject") && order.reviewClaimedByMembershipId !== auth.membership.id) {
+  if (
+    (action === "approve" || action === "reject" || (action === "void" && order.status === "SUBMITTED"))
+    && order.reviewClaimedByMembershipId !== auth.membership.id
+  ) {
     return fail("ORDER_REVIEW_CLAIM_REQUIRED", "请先领取该订单，且只能由领取人完成核单。", 409);
   }
 
@@ -96,6 +99,12 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       });
       if (!current || current.status !== order.status) {
         throw new Error("ORDER_CONCURRENTLY_CHANGED");
+      }
+      if (
+        (action === "approve" || action === "reject" || (action === "void" && current.status === "SUBMITTED"))
+        && current.reviewClaimedByMembershipId !== auth.membership.id
+      ) {
+        throw new Error("ORDER_REVIEW_CLAIM_REQUIRED");
       }
 
       if (action === "submit") {
@@ -298,6 +307,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     }
     if (error instanceof Error && error.message === "ORDER_REVIEW_PROOF_REQUIRED") {
       return fail("ORDER_REVIEW_PROOF_REQUIRED", "核单通过前必须上传核单凭证，且由当前审核人员上传。", 409);
+    }
+    if (error instanceof Error && error.message === "ORDER_REVIEW_CLAIM_REQUIRED") {
+      return fail("ORDER_REVIEW_CLAIM_REQUIRED", "请先领取该订单，且只能由领取人完成核单或作废。", 409);
     }
     if (error instanceof Error && error.message === "SHIPMENT_FIELDS_REQUIRED") {
       return fail("SHIPMENT_FIELDS_REQUIRED", "请填写承运商与物流单号", 400);

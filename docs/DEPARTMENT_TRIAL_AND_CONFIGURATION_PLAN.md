@@ -12,7 +12,7 @@
 | 岗位能力 | Action | 工作台队列 | 当前目标 |
 | --- | --- | --- | --- |
 | 录入订单 | `order.create` / `order.submit` | 我的草稿 | 保存、提交核单、库存预占 |
-| 核单 | `order.review` | 待核单 | 通过、驳回及原因 |
+| 核单 | `order.review`、`order.review.approve`、`order.review.reject`、`order.review.proof.upload`、`order.void` | 待核单 | 领取、通过、退回、上传凭证、作废均可独立授权 |
 | 发货 | `order.ship` / `shipment.create` | 待发货 | 原子出库、物流单、开始跟踪 |
 | 物流查看 | `shipment.read` | 运输中 | 全生命周期轨迹 |
 | 跟单售后 | `shipment.track.update` | 今日跟进、异常件 | 备注、责任人、下次跟进 |
