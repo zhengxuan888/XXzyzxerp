@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, CircleAlert, FileSpreadsheet, LoaderCircle, RotateCcw, Upload } from "lucide-react";
+import { CheckCircle2, CircleAlert, Download, FileSpreadsheet, LoaderCircle, RotateCcw, Upload } from "lucide-react";
 
 type PreviewRow = {
   row: number;
@@ -106,6 +106,16 @@ export default function OrderBatchImport({ canCreate }: { canCreate: boolean }) 
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {canCreate && (
+            <a
+              href="/api/mvp/orders/batch-import/template"
+              download
+              className="rounded-xl border border-amber-200 px-3 py-2 text-sm text-amber-700 hover:bg-amber-50"
+            >
+              <Download className="mr-1 inline" size={16} />
+              下载标准模板
+            </a>
+          )}
           <label
             className={`rounded-xl border px-3 py-2 text-sm ${
               canCreate ? "cursor-pointer border-violet-200 text-violet-700 hover:bg-violet-50" : "cursor-not-allowed border-slate-200 text-slate-400"

@@ -150,6 +150,19 @@ export async function POST(request: NextRequest) {
         });
         result.push(order);
       }
+      await writeAuditLog({
+        actorUserId: auth.userId,
+        actorMembershipId: auth.membership.id,
+        module: "mvp.orders",
+        action: "order.batch_import",
+        targetType: "order_batch",
+        businessUnitId: auth.membership.businessUnitId,
+        roleId: auth.membership.roleId,
+        details: {
+          count: result.length,
+          orderIds: result.map((order) => order.id),
+        },
+      }, tx);
       return result;
     });
   } catch (error) {
@@ -159,15 +172,5 @@ export async function POST(request: NextRequest) {
     throw error;
   }
 
-  await writeAuditLog({
-    actorUserId: auth.userId,
-    actorMembershipId: auth.membership.id,
-    module: "mvp.orders",
-    action: "order.batch_import",
-    targetType: "order_batch",
-    businessUnitId: auth.membership.businessUnitId,
-    roleId: auth.membership.roleId,
-    details: { count: created.length },
-  });
   return ok({ imported: created.length, orders: created }, { status: 201 });
 }
