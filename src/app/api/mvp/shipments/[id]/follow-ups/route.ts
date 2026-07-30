@@ -65,6 +65,25 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
 
   const hasOwnerAssignment = typeof body?.ownerMembershipId === "string" && Boolean(body.ownerMembershipId.trim());
   const ownerMembershipId = hasOwnerAssignment ? body.ownerMembershipId.trim() : shipment.ownerMembershipId;
+  if (
+    hasOwnerAssignment &&
+    shipment.ownerMembershipId &&
+    shipment.ownerMembershipId !== ownerMembershipId &&
+    shipment.ownerMembershipId !== auth.membership.id
+  ) {
+    const assignPermission = await checkPermission({
+      userId: auth.userId,
+      membershipId: auth.membership.id,
+      actionKey: "shipment.followup.assign",
+      targetBusinessUnitId: shipment.businessUnitId,
+      targetDepartmentId: shipment.order.departmentId,
+      targetSiteId: shipment.siteId,
+      targetUserId: shipment.order.creatorUserId,
+    });
+    if (!assignPermission.allowed) {
+      return fail("FOLLOW_UP_REASSIGN_FORBIDDEN", "该任务已有负责人，当前岗位没有改派权限。", 403);
+    }
+  }
   if (hasOwnerAssignment && ownerMembershipId) {
     const owner = await prisma.membership.findFirst({
       where: { id: ownerMembershipId, businessUnitId: shipment.businessUnitId, isActive: true },

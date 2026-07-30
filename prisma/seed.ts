@@ -93,6 +93,7 @@ const actionDefs: SeedAction[] = [
   { key: "shipment.timeline.view", name: "View shipment timeline", namespace: "erp", scope: "SITE" },
   { key: "shipment.create", name: "Shipment create", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "shipment.track.update", name: "Shipment track update", namespace: "erp", scope: "BUSINESS_UNIT" },
+  { key: "shipment.followup.assign", name: "转派物流跟进任务", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "shipment.workbench.configure", name: "配置物流工作台", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "logistics_template.read", name: "查看物流商模板", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "logistics_template.manage", name: "配置物流商模板", namespace: "erp", scope: "BUSINESS_UNIT" },

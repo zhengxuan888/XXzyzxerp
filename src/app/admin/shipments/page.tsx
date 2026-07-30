@@ -115,6 +115,12 @@ export default async function ShipmentsPage({
     actionKey: "shipment.workbench.configure",
     targetBusinessUnitId: membership.businessUnitId,
   });
+  const canReassign = await checkPermission({
+    userId: session.userId,
+    membershipId: membership.id,
+    actionKey: "shipment.followup.assign",
+    targetBusinessUnitId: membership.businessUnitId,
+  });
   const workbenchSetting = await prisma.logisticsWorkbenchSetting.findUnique({
     where: { businessUnitId: membership.businessUnitId },
   });
@@ -176,6 +182,12 @@ export default async function ShipmentsPage({
         orderBy: { createdAt: "desc" },
         take: 1,
         select: { nextFollowUpAt: true },
+      },
+      ownerMembership: {
+        select: {
+          id: true,
+          user: { select: { username: true, fullName: true } },
+        },
       },
       _count: { select: { events: true } },
     },
@@ -271,6 +283,8 @@ export default async function ShipmentsPage({
       canViewTrackingNo={canViewTrackingNo.allowed}
       canViewTimeline={canViewTimeline.allowed}
       canAnnotate={canViewTimeline.allowed && canAnnotate.allowed}
+      currentMembershipId={membership.id}
+      canReassign={canReassign.allowed}
       rows={withDerived.map((row) => ({
         id: row.id,
         trackingNo: row.canViewTrackingNo ? row.trackingNo : null,
@@ -305,6 +319,7 @@ export default async function ShipmentsPage({
         eventTotal: row.canViewTimeline ? row._count.events : 0,
         unhandledEventCount: row.canViewTimeline ? (unhandledEventCounts.get(row.id) ?? 0) : 0,
         queueSignals: row.canViewTimeline ? [...(queueSignals.get(row.id) ?? [])] : [],
+        followUpOwner: row.ownerMembership,
       }))}
     />
     </div>

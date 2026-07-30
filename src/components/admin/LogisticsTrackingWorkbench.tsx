@@ -7,7 +7,7 @@ import type { LogisticsQueueKey, LogisticsWorkbenchConfig } from "@/lib/logistic
 
 type Annotation = { note: string | null; tags: string[]; isHandled: boolean; handledAt: string | null; handledByMembership?: { user?: { fullName: string | null; username: string } } | null };
 type TrackingEvent = { id: string; occurredAt: string; eventType: string; statusMilestone: string | null; location: string | null; memo: string | null; annotation: Annotation | null };
-type TrackingRow = { id: string; trackingNo: string | null; carrier: string | null; status: string; urgency: "critical" | "high" | "normal"; urgencyLabel: string; priorityTag: string; dueStatus: string; canViewTrackingNo: boolean; canViewTimeline: boolean; canAnnotate: boolean; eventTotal: number; unhandledEventCount: number; queueSignals: string[]; order: { id: string; orderNo: string; recipientName: string | null; recipientPhone: string | null; recipientEmail: string | null; customerWhatsapp: string | null; recipientCountryCode: string | null; codAmountLabel: string; customer: { name: string }; creatorUser: { username: string; fullName: string | null }; ownerMembership: { id: string; department: { id: string; name: string } | null; managerMembership: { id: string; user: { username: string; fullName: string | null } } | null }; items: Array<{ productName: string; quantity: number }> }; events: TrackingEvent[] };
+type TrackingRow = { id: string; trackingNo: string | null; carrier: string | null; status: string; urgency: "critical" | "high" | "normal"; urgencyLabel: string; priorityTag: string; dueStatus: string; canViewTrackingNo: boolean; canViewTimeline: boolean; canAnnotate: boolean; eventTotal: number; unhandledEventCount: number; queueSignals: string[]; followUpOwner: { id: string; user: { username: string; fullName: string | null } } | null; order: { id: string; orderNo: string; recipientName: string | null; recipientPhone: string | null; recipientEmail: string | null; customerWhatsapp: string | null; recipientCountryCode: string | null; codAmountLabel: string; customer: { name: string }; creatorUser: { username: string; fullName: string | null }; ownerMembership: { id: string; department: { id: string; name: string } | null; managerMembership: { id: string; user: { username: string; fullName: string | null } } | null }; items: Array<{ productName: string; quantity: number }> }; events: TrackingEvent[] };
 
 function matchesConfiguredCard(row: TrackingRow, matches: string[]) {
   if (!matches.length) return false;
@@ -22,12 +22,16 @@ export default function LogisticsTrackingWorkbench({
   canViewTrackingNo,
   canViewTimeline,
   canAnnotate,
+  currentMembershipId,
+  canReassign,
 }: {
   rows: TrackingRow[];
   config: LogisticsWorkbenchConfig;
   canViewTrackingNo: boolean;
   canViewTimeline: boolean;
   canAnnotate: boolean;
+  currentMembershipId: string;
+  canReassign: boolean;
 }) {
   const [keyword, setKeyword] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -40,6 +44,8 @@ export default function LogisticsTrackingWorkbench({
   const [destination, setDestination] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [ownerQueue, setOwnerQueue] = useState<"all" | "mine" | "unassigned">("all");
+  const [claimedOwners, setClaimedOwners] = useState<Record<string, string>>({});
   const visibleRows = useMemo(() => {
     const term = keyword.trim().toLowerCase();
     const selectedCard = config.cards.find((card) => card.key === queue);
@@ -60,10 +66,13 @@ export default function LogisticsTrackingWorkbench({
       if (shipmentStatus && row.status !== shipmentStatus) return false;
       if (carrier && row.carrier !== carrier) return false;
       if (destination && row.order.recipientCountryCode !== destination) return false;
+      const ownerId = claimedOwners[row.id] ?? row.followUpOwner?.id ?? null;
+      if (ownerQueue === "mine" && ownerId !== currentMembershipId) return false;
+      if (ownerQueue === "unassigned" && ownerId) return false;
       if (!term) return true;
       return `${row.trackingNo} ${row.order.orderNo} ${row.order.recipientName} ${row.order.recipientEmail} ${row.order.customerWhatsapp} ${row.order.creatorUser.fullName} ${row.order.creatorUser.username} ${row.order.items.map((item) => item.productName).join(" ")}`.toLowerCase().includes(term);
     });
-  }, [carrier, config.cards, creatorMembershipId, departmentId, destination, keyword, managerMembershipId, queue, rows, shipmentStatus]);
+  }, [carrier, claimedOwners, config.cards, creatorMembershipId, currentMembershipId, departmentId, destination, keyword, managerMembershipId, ownerQueue, queue, rows, shipmentStatus]);
   const pageCount = Math.max(1, Math.ceil(visibleRows.length / pageSize));
   const safePage = Math.min(page, pageCount);
   const pagedRows = visibleRows.slice((safePage - 1) * pageSize, safePage * pageSize);
@@ -109,17 +118,57 @@ export default function LogisticsTrackingWorkbench({
     {!canViewTrackingNo && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">当前角色未配置“查看物流单号”权限，页面已隐藏物流单号。</p>}
     {!canViewTimeline && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">当前角色未配置“查看物流轨迹”权限，页面已隐藏全部轨迹。</p>}
     {canViewTimeline && !canAnnotate && <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">当前角色可查看物流轨迹，但未配置“处理物流轨迹”权限，备注和完成按钮已隐藏。</p>}
+    {canAnnotate && <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-sm">
+      <span className="font-semibold text-slate-700">任务范围</span>
+      {([["all", "全部任务"], ["mine", "我的待办"], ["unassigned", "未分配"]] as const).map(([value, label]) => <button key={value} type="button" onClick={() => { setOwnerQueue(value); setPage(1); }} className={`rounded-lg px-3 py-1.5 font-medium ${ownerQueue === value ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{label}</button>)}
+    </div>}
     {pagedRows.map((row) => { const isOpen = expanded[row.id] ?? false; return <article key={row.id} className={`overflow-hidden rounded-2xl border bg-white shadow-sm ${row.urgency === "critical" ? "border-rose-300" : row.urgency === "high" ? "border-amber-300" : "border-slate-200"}`}>
       <div className="grid gap-4 p-4 xl:grid-cols-[1.2fr_1.3fr_1fr_auto] xl:items-center">
         <div><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.urgency === "critical" ? "bg-rose-50 text-rose-700" : row.urgency === "high" ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-700"}`}>{row.urgencyLabel}</span>{row.priorityTag !== "-" && <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">{row.priorityTag}</span>}</div><p className="mt-2 font-mono text-sm font-semibold text-slate-900">{row.trackingNo || "暂无物流单号"}</p><p className="mt-1 text-xs text-slate-500">{row.carrier || "未填写物流商"} · {row.order.recipientCountryCode || "目的地未知"} · {row.dueStatus}</p></div>
         <div><Link href={`/admin/orders/${row.order.id}`} className="font-semibold text-violet-700 hover:underline">{row.order.orderNo}</Link><p className="mt-1 text-sm text-slate-700">{row.order.customer.name} / {row.order.recipientName || "未填写收件人"}</p><div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span className="inline-flex items-center gap-1"><Mail size={13} />{row.order.recipientEmail || "-"}</span><span className="inline-flex items-center gap-1"><MessageCircle size={13} />{row.order.customerWhatsapp || "-"}</span><span>{row.order.recipientPhone || "-"}</span></div></div>
         <div><div className="flex items-start gap-2"><Package size={16} className="mt-0.5 shrink-0 text-slate-400" /><div className="text-sm text-slate-700">{row.order.items.map((item) => `${item.productName} × ${item.quantity}`).join("、") || "未记录产品"}</div></div><div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500"><span>COD：<strong className="text-slate-800">{row.order.codAmountLabel}</strong></span><span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-1 font-medium text-violet-700"><UserRound size={13} />销售：{row.order.creatorUser.fullName || row.order.creatorUser.username}</span></div></div>
-        {row.canViewTimeline && <button type="button" onClick={() => setExpanded((value) => ({ ...value, [row.id]: !isOpen }))} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">{isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}{isOpen ? "收起轨迹" : `展开轨迹 ${row.eventTotal}`}</button>}
+        <div className="flex flex-col gap-2">
+          {row.canAnnotate && <ClaimButton shipmentId={row.id} currentMembershipId={currentMembershipId} ownerId={claimedOwners[row.id] ?? row.followUpOwner?.id ?? null} ownerName={claimedOwners[row.id] ? "我" : row.followUpOwner?.user.fullName || row.followUpOwner?.user.username || null} canReassign={canReassign} onClaimed={() => setClaimedOwners((current) => ({ ...current, [row.id]: currentMembershipId }))} />}
+          {row.canViewTimeline && <button type="button" onClick={() => setExpanded((value) => ({ ...value, [row.id]: !isOpen }))} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">{isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}{isOpen ? "收起轨迹" : `展开轨迹 ${row.eventTotal}`}</button>}
+        </div>
       </div>
       {row.canViewTimeline && row.events.length > 0 && <TrackingEventsPanel shipmentId={row.id} initialEvents={row.events} initialTotal={row.eventTotal} expanded={isOpen} canAnnotate={row.canAnnotate} quickTags={config.quickTags} />}
     </article>; })}
     {!visibleRows.length && <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center text-sm text-slate-500">没有找到匹配的物流订单。</div>}
     {visibleRows.length > 0 && <footer className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2"><span>共 {visibleRows.length} 条</span><select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }} className="h-9 rounded-lg border border-slate-200 px-2"><option value={10}>10 / 页</option><option value={20}>20 / 页</option><option value={50}>50 / 页</option></select></div><div className="flex items-center gap-2"><span>第 {safePage}/{pageCount} 页</span><button type="button" disabled={safePage <= 1} onClick={() => setPage(safePage - 1)} className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 disabled:opacity-40"><ChevronLeft size={15} />上一页</button><button type="button" disabled={safePage >= pageCount} onClick={() => setPage(safePage + 1)} className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 disabled:opacity-40">下一页<ChevronRight size={15} /></button></div></footer>}
+  </div>;
+}
+
+function ClaimButton({ shipmentId, currentMembershipId, ownerId, ownerName, canReassign, onClaimed }: { shipmentId: string; currentMembershipId: string; ownerId: string | null; ownerName: string | null; canReassign: boolean; onClaimed: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const isMine = ownerId === currentMembershipId;
+  async function claim() {
+    setLoading(true);
+    setMessage("");
+    const response = await fetch(`/api/mvp/shipments/${shipmentId}/follow-ups`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ownerMembershipId: currentMembershipId,
+        workStatus: "IN_PROGRESS",
+        note: "主动认领物流售后跟进任务",
+      }),
+    });
+    const payload = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+    setLoading(false);
+    if (!response.ok) {
+      setMessage(payload?.error?.message ?? "认领失败");
+      return;
+    }
+    onClaimed();
+    setMessage("已认领");
+  }
+  if (isMine) return <span className="rounded-lg bg-emerald-50 px-3 py-2 text-center text-xs font-semibold text-emerald-700">我的待办</span>;
+  if (ownerId && !canReassign) return <span className="rounded-lg bg-slate-50 px-3 py-2 text-center text-xs font-medium text-slate-600">负责人：{ownerName}</span>;
+  return <div className="grid gap-1">
+    <button type="button" disabled={loading} onClick={() => void claim()} className="h-9 rounded-lg bg-violet-50 px-3 text-xs font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-50">{loading ? "认领中…" : ownerId ? `转为我跟进（当前：${ownerName}）` : "认领跟进"}</button>
+    {message && <span className="max-w-48 text-center text-xs text-rose-600">{message}</span>}
   </div>;
 }
 
