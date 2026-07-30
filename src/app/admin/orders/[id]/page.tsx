@@ -57,7 +57,15 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       actionKey: "order.review",
       targetBusinessUnitId: membership.businessUnitId,
     }),
-    checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "order.review.proof.upload", targetBusinessUnitId: membership.businessUnitId, targetDepartmentId: order.departmentId }),
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "order.review.proof.upload",
+      targetBusinessUnitId: membership.businessUnitId,
+      targetDepartmentId: order.departmentId,
+      targetSiteId: order.siteId,
+      targetUserId: order.creatorUserId,
+    }),
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,

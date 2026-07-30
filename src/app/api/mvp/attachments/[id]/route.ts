@@ -5,6 +5,7 @@ import { fail, ok } from "@/lib/api-response";
 import { prisma } from "@/lib/prisma";
 import { localDemoStorage } from "@/lib/storage/local-demo";
 import { writeAuditLog } from "@/lib/audit";
+import { resolveAttachmentTarget } from "@/lib/attachments";
 
 export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const auth = await requireAuthContext(request);
@@ -14,14 +15,33 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ id
     where: { id, businessUnitId: auth.membership.businessUnitId, status: "ACTIVE" },
   });
   if (!attachment) return fail("NOT_FOUND", "附件不存在。", 404);
+  const target = await resolveAttachmentTarget(auth, attachment.targetType, attachment.targetId);
+  if (!target) return fail("NOT_FOUND", "附件不存在。", 404);
   const decision = await checkPermission({
     userId: auth.userId,
     membershipId: auth.membership.id,
     actionKey: "attachment.delete",
-    targetBusinessUnitId: attachment.businessUnitId,
-    targetDepartmentId: attachment.departmentId,
+    targetBusinessUnitId: target.businessUnitId,
+    targetDepartmentId: target.departmentId,
+    targetSiteId: target.siteId,
+    targetUserId: target.ownerUserId,
   });
   if (!decision.allowed) return fail("NOT_FOUND", "附件不存在。", 404);
+  if (attachment.targetType === "ORDER_REVIEW") {
+    const reviewOrder = await prisma.order.findFirst({
+      where: { id: attachment.targetId, businessUnitId: auth.membership.businessUnitId },
+      select: { status: true, reviewClaimedByMembershipId: true },
+    });
+    if (!reviewOrder || reviewOrder.status !== "SUBMITTED") {
+      return fail("REVIEW_PROOF_LOCKED", "核单完成后的凭证已锁定，不能删除。", 409);
+    }
+    if (
+      reviewOrder.reviewClaimedByMembershipId !== auth.membership.id
+      || attachment.uploadedByMembershipId !== auth.membership.id
+    ) {
+      return fail("FORBIDDEN", "只能由当前领取人删除自己上传的核单凭证。", 403);
+    }
+  }
   await localDemoStorage.delete(attachment.storageKey);
   await prisma.attachment.update({ where: { id: attachment.id }, data: { status: "DELETED", deletedAt: new Date() } });
   await writeAuditLog({

@@ -202,6 +202,19 @@ test("订单动作按归属、角色和状态机拒绝越权", async ({ page }) 
     data: { action: "claim" },
   });
   expect(reviewClaim.ok(), await reviewClaim.text()).toBe(true);
+  const reviewRelease = await page.request.put(`/api/mvp/orders/${submittedOrder.id}/review-claim`, {
+    data: { action: "release" },
+  });
+  expect(reviewRelease.ok(), await reviewRelease.text()).toBe(true);
+  const unclaimedReviewProof = await page.request.post(
+    "/api/mvp/attachments",
+    emptyUpload("ORDER_REVIEW", submittedOrder.id),
+  );
+  expect(unclaimedReviewProof.status()).toBe(409);
+  const reclaim = await page.request.put(`/api/mvp/orders/${submittedOrder.id}/review-claim`, {
+    data: { action: "claim" },
+  });
+  expect(reclaim.ok(), await reclaim.text()).toBe(true);
   const reviewerShip = await page.request.post(`/api/mvp/orders/${waitingShipmentOrder.id}/actions`, {
     data: { action: "ship" },
   });
