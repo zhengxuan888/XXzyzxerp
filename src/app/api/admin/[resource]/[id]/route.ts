@@ -71,8 +71,10 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ res
       if (!current) return buildResponseNotFound();
       const decision = await checkPermission({ userId: auth.userId, membershipId: auth.membership.id, actionKey: "business_unit.update", targetBusinessUnitId: current.id });
       if (!decision.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: decision.reasons }, { status: 403 });
-      const legalEntityId = typeof updateBody.legalEntityId === "string" ? updateBody.legalEntityId : current.legalEntityId;
-      if (!await prisma.legalEntity.findUnique({ where: { id: legalEntityId }, select: { id: true } })) return invalidBody("所属公司不存在。");
+      if (typeof updateBody.legalEntityId === "string" && updateBody.legalEntityId !== current.legalEntityId) {
+        return invalidBody("业务板块不能直接迁移到其他公司；请使用经过审计的专用组织迁移流程。");
+      }
+      const legalEntityId = current.legalEntityId;
       if (await prisma.businessUnit.findFirst({ where: { legalEntityId, code, id: { not: current.id } }, select: { id: true } })) return invalidBody("该公司下业务板块编码已存在。");
       const row = await prisma.businessUnit.update({ where: { id: current.id }, data: { legalEntityId, code, name, isActive: updateBody.isActive === true } });
       await writeAuditLog({ actorUserId: auth.userId, actorMembershipId: auth.membership.id, module: "admin.business-units", action: "business_unit.update", targetType: "business_unit", targetId: row.id, businessUnitId: row.id, roleId: auth.membership.roleId, details: { previous: current, next: row } });

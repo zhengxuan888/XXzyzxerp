@@ -13,6 +13,20 @@ const rolePermissionFindUnique = vi.fn();
 const accessGrantFindMany = vi.fn();
 const delegationRuleFindUnique = vi.fn();
 
+function activeMembership<T extends Record<string, unknown>>(membership: T) {
+  return {
+    ...membership,
+    legalEntityId: "LE_A",
+    user: { isActive: true },
+    legalEntity: { isActive: true },
+    businessUnit: {
+      isActive: true,
+      legalEntityId: "LE_A",
+      legalEntity: { isActive: true },
+    },
+  };
+}
+
 vi.mock("../prisma", () => ({
   prisma: {
     membership: {
@@ -48,7 +62,7 @@ describe("permission utils", () => {
   });
 
   it("checkPermission allows BUSINESS_UNIT scoped role permission in same business unit", async () => {
-    membershipFindFirst.mockResolvedValue({
+    membershipFindFirst.mockResolvedValue(activeMembership({
       id: "m1",
       businessUnitId: "BU_A",
       departmentId: "D1",
@@ -58,7 +72,7 @@ describe("permission utils", () => {
       isActive: true,
       endedAt: null,
       role: { id: "role_admin" },
-    });
+    }));
     rolePermissionFindMany.mockResolvedValue([{ scope: "BUSINESS_UNIT" }]);
     accessGrantFindMany.mockResolvedValue([]);
 
@@ -74,8 +88,59 @@ describe("permission utils", () => {
     expect(result.reasons).toEqual(expect.arrayContaining(["SCOPE_BUSINESS_UNIT_OK"]));
   });
 
-  it("checkPermission denies role permission cross business unit", async () => {
+  it("fails closed when the active Membership organization chain is disabled or inconsistent", async () => {
+    rolePermissionFindMany.mockResolvedValue([{ scope: "BUSINESS_UNIT" }]);
+    accessGrantFindMany.mockResolvedValue([]);
+
     membershipFindFirst.mockResolvedValue({
+      ...activeMembership({
+        id: "m1",
+        businessUnitId: "BU_A",
+        departmentId: "D1",
+        siteId: "S1",
+        userId: "u1",
+        roleId: "role_admin",
+        isActive: true,
+        endedAt: null,
+        role: { id: "role_admin" },
+      }),
+      businessUnit: { isActive: false, legalEntityId: "LE_A", legalEntity: { isActive: true } },
+    });
+
+    const disabledBusinessUnit = await checkPermission({
+      userId: "u1",
+      membershipId: "m1",
+      actionKey: "order.read",
+      targetBusinessUnitId: "BU_A",
+    });
+    expect(disabledBusinessUnit).toEqual({ allowed: false, reasons: ["SESSION_INVALID_MEMBERSHIP"] });
+
+    membershipFindFirst.mockResolvedValue({
+      ...activeMembership({
+        id: "m1",
+        businessUnitId: "BU_A",
+        departmentId: "D1",
+        siteId: "S1",
+        userId: "u1",
+        roleId: "role_admin",
+        isActive: true,
+        endedAt: null,
+        role: { id: "role_admin" },
+      }),
+      legalEntity: { isActive: false },
+    });
+
+    const disabledLegalEntity = await checkPermission({
+      userId: "u1",
+      membershipId: "m1",
+      actionKey: "order.read",
+      targetBusinessUnitId: "BU_A",
+    });
+    expect(disabledLegalEntity).toEqual({ allowed: false, reasons: ["SESSION_INVALID_MEMBERSHIP"] });
+  });
+
+  it("checkPermission denies role permission cross business unit", async () => {
+    membershipFindFirst.mockResolvedValue(activeMembership({
       id: "m1",
       businessUnitId: "BU_A",
       departmentId: "D1",
@@ -85,7 +150,7 @@ describe("permission utils", () => {
       isActive: true,
       endedAt: null,
       role: { id: "role_admin" },
-    });
+    }));
     rolePermissionFindMany.mockResolvedValue([{ scope: "BUSINESS_UNIT" }]);
     accessGrantFindMany.mockResolvedValue([]);
 
@@ -101,7 +166,7 @@ describe("permission utils", () => {
   });
 
   it("ALL permission remains inside the active Membership business context", async () => {
-    membershipFindFirst.mockResolvedValue({
+    membershipFindFirst.mockResolvedValue(activeMembership({
       id: "m1",
       businessUnitId: "BU_A",
       departmentId: "D1",
@@ -111,7 +176,7 @@ describe("permission utils", () => {
       isActive: true,
       endedAt: null,
       role: { id: "role_admin" },
-    });
+    }));
     rolePermissionFindMany.mockResolvedValue([{ scope: "ALL" }]);
     accessGrantFindMany.mockResolvedValue([]);
 
@@ -126,7 +191,7 @@ describe("permission utils", () => {
   });
 
   it("effective actions query grants only within the active Membership business context", async () => {
-    membershipFindFirst.mockResolvedValue({
+    membershipFindFirst.mockResolvedValue(activeMembership({
       id: "m1",
       businessUnitId: "BU_A",
       departmentId: "D1",
@@ -136,7 +201,7 @@ describe("permission utils", () => {
       isActive: true,
       endedAt: null,
       role: { id: "role_admin" },
-    });
+    }));
     rolePermissionFindMany.mockResolvedValue([]);
     accessGrantFindMany.mockResolvedValue([]);
 
@@ -148,7 +213,7 @@ describe("permission utils", () => {
   });
 
   it("keeps conditional permissions out of effective menu actions until an evaluator exists", async () => {
-    membershipFindFirst.mockResolvedValue({
+    membershipFindFirst.mockResolvedValue(activeMembership({
       id: "m1",
       businessUnitId: "BU_A",
       departmentId: "D1",
@@ -158,7 +223,7 @@ describe("permission utils", () => {
       isActive: true,
       endedAt: null,
       role: { id: "role_admin" },
-    });
+    }));
     rolePermissionFindMany.mockResolvedValue([
       { actionKey: "shipment.read", conditions: null },
       { actionKey: "shipment.track.update", conditions: { country: "GR" } },
@@ -172,7 +237,7 @@ describe("permission utils", () => {
   });
 
   it("SELF scope uses the Membership owner when a target Membership is supplied", async () => {
-    membershipFindFirst.mockResolvedValue({
+    membershipFindFirst.mockResolvedValue(activeMembership({
       id: "sales-a",
       businessUnitId: "BU_A",
       departmentId: "D1",
@@ -182,7 +247,7 @@ describe("permission utils", () => {
       isActive: true,
       endedAt: null,
       role: { id: "role_staff" },
-    });
+    }));
     rolePermissionFindMany.mockResolvedValue([{ scope: "SELF", conditions: null }]);
     accessGrantFindMany.mockResolvedValue([]);
 
@@ -208,7 +273,7 @@ describe("permission utils", () => {
   });
 
   it("fails closed when a role permission has an unsupported condition", async () => {
-    membershipFindFirst.mockResolvedValue({
+    membershipFindFirst.mockResolvedValue(activeMembership({
       id: "m1",
       businessUnitId: "BU_A",
       departmentId: "D1",
@@ -218,7 +283,7 @@ describe("permission utils", () => {
       isActive: true,
       endedAt: null,
       role: { id: "role_admin" },
-    });
+    }));
     rolePermissionFindMany.mockResolvedValue([{ scope: "ALL", conditions: { country: "GR" } }]);
     accessGrantFindMany.mockResolvedValue([]);
 
@@ -233,7 +298,7 @@ describe("permission utils", () => {
   });
 
   it("checkPermission enforces department ownership, not only business-unit ownership", async () => {
-    membershipFindFirst.mockResolvedValue({
+    membershipFindFirst.mockResolvedValue(activeMembership({
       id: "m1",
       businessUnitId: "BU_A",
       departmentId: "D1",
@@ -243,7 +308,7 @@ describe("permission utils", () => {
       isActive: true,
       endedAt: null,
       role: { id: "role_manager" },
-    });
+    }));
     rolePermissionFindMany.mockResolvedValue([{ scope: "DEPARTMENT" }]);
     accessGrantFindMany.mockResolvedValue([]);
 
@@ -258,7 +323,7 @@ describe("permission utils", () => {
   });
 
   it("checkPermission allows reporting-line subordinates and rejects peers", async () => {
-    membershipFindFirst.mockResolvedValue({
+    membershipFindFirst.mockResolvedValue(activeMembership({
       id: "manager",
       businessUnitId: "BU_A",
       departmentId: "D1",
@@ -268,7 +333,7 @@ describe("permission utils", () => {
       isActive: true,
       endedAt: null,
       role: { id: "role_manager" },
-    });
+    }));
     rolePermissionFindMany.mockResolvedValue([{ scope: "SUBORDINATES" }]);
     accessGrantFindMany.mockResolvedValue([]);
     membershipFindMany.mockResolvedValue([
@@ -306,7 +371,7 @@ describe("permission utils", () => {
   });
 
   it("checkPermission accepts valid ACCESS_GRANT and rejects expired grant", async () => {
-    membershipFindFirst.mockResolvedValue({
+    membershipFindFirst.mockResolvedValue(activeMembership({
       id: "m2",
       businessUnitId: "BU_A",
       departmentId: "D1",
@@ -316,7 +381,7 @@ describe("permission utils", () => {
       isActive: true,
       endedAt: null,
       role: { id: "role_staff" },
-    });
+    }));
     rolePermissionFindMany.mockResolvedValue([]);
     accessGrantFindMany
       .mockResolvedValueOnce([
@@ -370,7 +435,7 @@ describe("permission utils", () => {
   });
 
   it("assertGrantRule blocks delegation beyond actor scope", async () => {
-    membershipFindFirst.mockResolvedValue({
+    membershipFindFirst.mockResolvedValue(activeMembership({
       id: "manager",
       businessUnitId: "BU_A",
       departmentId: "D1",
@@ -380,7 +445,7 @@ describe("permission utils", () => {
       isActive: true,
       endedAt: null,
       role: { id: "role_manager" },
-    });
+    }));
     membershipFindUnique.mockResolvedValue({
       id: "manager",
       businessUnitId: "BU_A",

@@ -13,10 +13,14 @@ export async function POST(request: Request) {
     where: { username: body.username },
     include: {
       memberships: {
-        where: { isActive: true },
+        where: {
+          isActive: true,
+          OR: [{ endedAt: null }, { endedAt: { gt: new Date() } }],
+        },
         include: {
           role: true,
-          businessUnit: true,
+          legalEntity: { select: { id: true, isActive: true } },
+          businessUnit: { include: { legalEntity: { select: { id: true, isActive: true } } } },
         },
       },
     },
@@ -30,10 +34,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Password is incorrect." }, { status: 401 });
   }
 
+  const usableMemberships = user.memberships.filter((membership) => (
+    membership.legalEntity.isActive
+    && membership.businessUnit.isActive
+    && membership.businessUnit.legalEntity.isActive
+    && membership.businessUnit.legalEntityId === membership.legalEntityId
+  ));
   const explicitMembershipId = typeof body.membershipId === "string" ? body.membershipId : null;
   const primary = await resolvePrimaryMembership(user.id);
   const selected = explicitMembershipId
-    ? user.memberships.find((m) => m.id === explicitMembershipId) ?? primary
+    ? usableMemberships.find((m) => m.id === explicitMembershipId) ?? primary
     : primary;
 
   if (!selected) {

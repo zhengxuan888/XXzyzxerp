@@ -181,9 +181,21 @@ async function getMembershipByIdOrThrow(membershipId: string, userId: string) {
       isActive: true,
       OR: [{ endedAt: null }, { endedAt: { gt: now } }],
     },
-    include: { role: true },
+    include: {
+      role: true,
+      user: { select: { isActive: true } },
+      legalEntity: { select: { isActive: true } },
+      businessUnit: { include: { legalEntity: { select: { isActive: true } } } },
+    },
   });
-  if (!membership) return null;
+  if (
+    !membership
+    || !membership.user.isActive
+    || !membership.legalEntity.isActive
+    || !membership.businessUnit.isActive
+    || !membership.businessUnit.legalEntity.isActive
+    || membership.businessUnit.legalEntityId !== membership.legalEntityId
+  ) return null;
   return membership;
 }
 
@@ -195,9 +207,21 @@ export async function getEffectiveActions(membershipId: string): Promise<Set<str
       isActive: true,
       OR: [{ endedAt: null }, { endedAt: { gt: now } }],
     },
-    include: { role: true },
+    include: {
+      role: true,
+      user: { select: { isActive: true } },
+      legalEntity: { select: { isActive: true } },
+      businessUnit: { include: { legalEntity: { select: { isActive: true } } } },
+    },
   });
-  if (!membership) return new Set<string>();
+  if (
+    !membership
+    || !membership.user.isActive
+    || !membership.legalEntity.isActive
+    || !membership.businessUnit.isActive
+    || !membership.businessUnit.legalEntity.isActive
+    || membership.businessUnit.legalEntityId !== membership.legalEntityId
+  ) return new Set<string>();
 
   const rolePerms = await prisma.rolePermission.findMany({
     where: { roleId: membership.roleId, isAllowed: true },

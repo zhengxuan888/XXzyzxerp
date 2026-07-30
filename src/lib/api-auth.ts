@@ -28,8 +28,20 @@ export async function requireAuthContext(req: NextRequest): Promise<AuthContext 
       isActive: true,
       OR: [{ endedAt: null }, { endedAt: { gte: new Date() } }],
     },
+    include: {
+      user: { select: { id: true, isActive: true } },
+      legalEntity: { select: { id: true, isActive: true } },
+      businessUnit: { include: { legalEntity: { select: { id: true, isActive: true } } } },
+    },
   });
-  if (!membership) return null;
+  if (
+    !membership
+    || !membership.user.isActive
+    || !membership.legalEntity.isActive
+    || !membership.businessUnit.isActive
+    || !membership.businessUnit.legalEntity.isActive
+    || membership.businessUnit.legalEntityId !== membership.legalEntityId
+  ) return null;
 
   return {
     userId: session.userId,

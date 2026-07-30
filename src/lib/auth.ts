@@ -80,10 +80,29 @@ export function parseSessionCookie(raw?: string) {
   return parseSessionFromToken(raw);
 }
 
+type OrganizationAwareMembership = {
+  legalEntityId: string;
+  user: { isActive: boolean };
+  legalEntity: { isActive: boolean };
+  businessUnit: {
+    isActive: boolean;
+    legalEntityId: string;
+    legalEntity: { isActive: boolean };
+  };
+};
+
+function hasActiveConsistentOrganization(membership: OrganizationAwareMembership) {
+  return membership.user.isActive
+    && membership.legalEntity.isActive
+    && membership.businessUnit.isActive
+    && membership.businessUnit.legalEntity.isActive
+    && membership.businessUnit.legalEntityId === membership.legalEntityId;
+}
+
 export async function getActiveMembershipById(membershipId: string | null) {
   if (!membershipId) return null;
   const now = new Date();
-  return prisma.membership.findFirst({
+  const membership = await prisma.membership.findFirst({
     where: {
       id: membershipId,
       isActive: true,
@@ -91,16 +110,18 @@ export async function getActiveMembershipById(membershipId: string | null) {
     },
     include: {
       role: true,
-      user: true,
-      businessUnit: true,
+      user: { select: { id: true, isActive: true } },
+      legalEntity: { select: { id: true, isActive: true } },
+      businessUnit: { include: { legalEntity: { select: { id: true, isActive: true } } } },
       department: true,
     },
   });
+  return membership && hasActiveConsistentOrganization(membership) ? membership : null;
 }
 
 export async function resolvePrimaryMembership(userId: string) {
   const now = new Date();
-  return prisma.membership.findFirst({
+  const membership = await prisma.membership.findFirst({
     where: {
       userId,
       isActive: true,
@@ -109,17 +130,20 @@ export async function resolvePrimaryMembership(userId: string) {
     },
     include: {
       role: true,
-      businessUnit: true,
+      user: { select: { id: true, isActive: true } },
+      legalEntity: { select: { id: true, isActive: true } },
+      businessUnit: { include: { legalEntity: { select: { id: true, isActive: true } } } },
       department: true,
     },
     orderBy: { updatedAt: "desc" },
   });
+  return membership && hasActiveConsistentOrganization(membership) ? membership : null;
 }
 
 export async function getMembershipById(id: string | null) {
   if (!id) return null;
   const now = new Date();
-  return prisma.membership.findFirst({
+  const membership = await prisma.membership.findFirst({
     where: {
       id,
       isActive: true,
@@ -127,11 +151,12 @@ export async function getMembershipById(id: string | null) {
     },
     include: {
       role: true,
-      businessUnit: true,
-      legalEntity: true,
+      businessUnit: { include: { legalEntity: { select: { id: true, isActive: true } } } },
+      legalEntity: { select: { id: true, isActive: true } },
       department: true,
       site: true,
-      user: true,
+      user: { select: { id: true, isActive: true } },
     },
   });
+  return membership && hasActiveConsistentOrganization(membership) ? membership : null;
 }

@@ -8,6 +8,7 @@ export type AuditLogPayload = {
   action: string;
   targetType: string;
   targetId?: string | null;
+  legalEntityId?: string | null;
   businessUnitId?: string | null;
   roleId?: string | null;
   details?: Record<string, unknown> | null;
@@ -25,6 +26,7 @@ export async function writeAuditLog(payload: AuditLogPayload, client: AuditClien
       module: payload.module,
       targetType: payload.targetType,
       targetId: payload.targetId ?? null,
+      legalEntityId: payload.legalEntityId ?? null,
       businessUnitId: payload.businessUnitId ?? null,
       roleId: payload.roleId ?? null,
       details: payload.details ? (payload.details as Prisma.InputJsonValue) : Prisma.JsonNull,

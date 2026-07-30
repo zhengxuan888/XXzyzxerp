@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { issueSessionToken, SESSION_COOKIE } from "@/lib/auth";
+import { getActiveMembershipById, issueSessionToken, SESSION_COOKIE } from "@/lib/auth";
 import { getSessionFromRequest } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 
@@ -24,16 +24,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "membershipId is required." }, { status: 400 });
   }
 
-  const now = new Date();
-  const membership = await prisma.membership.findFirst({
-    where: {
-      id: body.membershipId,
-      userId: session.userId,
-      isActive: true,
-      OR: [{ endedAt: null }, { endedAt: { gt: now } }],
-    },
-  });
-  if (!membership) {
+  const membership = await getActiveMembershipById(body.membershipId);
+  if (!membership || membership.userId !== session.userId) {
     return NextResponse.json({ error: "Invalid membership context." }, { status: 404 });
   }
 
