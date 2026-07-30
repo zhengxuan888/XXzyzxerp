@@ -17,7 +17,24 @@ import OrderStatusCards from "@/components/admin/OrderStatusCards";
 
 const ORDER_STATUSES = new Set<OrderStatus>(["DRAFT", "SUBMITTED", "WAITING_SHIPMENT", "SHIPPED", "DELIVERED", "EXCEPTION", "COMPLETED", "CANCELLED"]);
 
-export default async function OrdersPage({ searchParams }: { searchParams: Promise<{ status?: string; employee?: string; product?: string; country?: string; page?: string }> }) {
+type OrdersSearchParams = {
+  status?: string;
+  employee?: string;
+  product?: string;
+  country?: string;
+  q?: string;
+  start?: string;
+  end?: string;
+  page?: string;
+  pageSize?: string;
+};
+
+function parseDate(value?: string, endOfDay = false) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  return new Date(`${value}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}Z`);
+}
+
+export default async function OrdersPage({ searchParams }: { searchParams: Promise<OrdersSearchParams> }) {
   const session = await getSessionFromCookie();
   if (!session?.activeMembershipId) redirect("/login");
   const membership = await getActiveMembershipById(session.activeMembershipId);
@@ -28,8 +45,11 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const employee = params.employee?.trim() || undefined;
   const product = params.product?.trim() || undefined;
   const country = params.country?.trim().toUpperCase() || undefined;
-  const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
-  const pageSize = 20;
+  const keyword = params.q?.trim() || undefined;
+  const start = parseDate(params.start);
+  const end = parseDate(params.end, true);
+  const requestedPage = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
+  const pageSize = [10, 20, 50, 100].includes(Number(params.pageSize)) ? Number(params.pageSize) : 20;
 
   const [canRead, canCreate, canDelete] = await Promise.all([
     checkPermission({
@@ -63,9 +83,24 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     select: { id: true, code: true, name: true, skus: { where: { isActive: true }, orderBy: { code: "asc" } } },
   });
 
-  const baseWhere = { businessUnitId: membership.businessUnitId, ...(status ? { status } : {}), ...(employee ? { creatorUserId: employee } : {}), ...(country ? { recipientCountryCode: country } : {}), ...(product ? { items: { some: { productName: { contains: product, mode: "insensitive" as const } } } } : {}) };
+  const sharedFilters = {
+    ...(employee ? { creatorUserId: employee } : {}),
+    ...(country ? { recipientCountryCode: country } : {}),
+    ...(product ? { items: { some: { productName: { contains: product, mode: "insensitive" as const } } } } : {}),
+    ...(keyword ? {
+      OR: [
+        { orderNo: { contains: keyword, mode: "insensitive" as const } },
+        { recipientName: { contains: keyword, mode: "insensitive" as const } },
+        { recipientEmail: { contains: keyword, mode: "insensitive" as const } },
+        { recipientPhone: { contains: keyword, mode: "insensitive" as const } },
+        { customerWhatsapp: { contains: keyword, mode: "insensitive" as const } },
+      ],
+    } : {}),
+    ...((start || end) ? { createdAt: { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) } } : {}),
+  };
+  const baseWhere = { businessUnitId: membership.businessUnitId, ...(status ? { status } : {}), ...sharedFilters };
   const scopedWhere = withOrderReadScope(baseWhere, orderReadScope, membership, session.userId);
-  const statusScopeWhere = withOrderReadScope({ businessUnitId: membership.businessUnitId, ...(employee ? { creatorUserId: employee } : {}), ...(country ? { recipientCountryCode: country } : {}), ...(product ? { items: { some: { productName: { contains: product, mode: "insensitive" as const } } } } : {}) }, orderReadScope, membership, session.userId);
+  const statusScopeWhere = withOrderReadScope({ businessUnitId: membership.businessUnitId, ...sharedFilters }, orderReadScope, membership, session.userId);
   const employeeWhere =
     orderReadScope === "SELF"
       ? { id: session.userId }
@@ -74,7 +109,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         : orderReadScope === "SITE"
           ? { memberships: { some: { businessUnitId: membership.businessUnitId, siteId: membership.siteId, isActive: true } } }
           : { memberships: { some: { businessUnitId: membership.businessUnitId, isActive: true } } };
-  const [rows, totalCount, statusGroups, templates, employees, countries] = await Promise.all([
+  const totalCount = await prisma.order.count({ where: scopedWhere as Record<string, unknown> });
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const page = Math.min(requestedPage, totalPages);
+  const [rows, statusGroups, templates, employees, countries] = await Promise.all([
     prisma.order.findMany({
       where: scopedWhere as Record<string, unknown>,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -86,7 +124,6 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         items: { select: { id: true, quantity: true, productName: true } },
       },
     }),
-    prisma.order.count({ where: scopedWhere as Record<string, unknown> }),
     prisma.order.groupBy({ by: ["status"], where: statusScopeWhere as Record<string, unknown>, _count: { _all: true } }),
     prisma.orderTemplate.findMany({
       where: { businessUnitId: membership.businessUnitId, isActive: true },
@@ -103,6 +140,20 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     if (key in stats && key !== "total") stats[key] = group._count._all;
     return stats;
   }, { total: 0, draft: 0, submitted: 0, waiting_shipment: 0, shipped: 0, delivered: 0, exception: 0, completed: 0, cancelled: 0 });
+  const pageHref = (nextPage: number) => {
+    const query = new URLSearchParams({
+      status: status ?? "",
+      employee: employee ?? "",
+      product: product ?? "",
+      country: country ?? "",
+      q: keyword ?? "",
+      start: params.start ?? "",
+      end: params.end ?? "",
+      page: String(nextPage),
+      pageSize: String(pageSize),
+    });
+    return `/admin/orders?${query}`;
+  };
 
   return (
     <div className="space-y-6">
@@ -124,11 +175,14 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       />
       <OrderBatchImport canCreate={canCreate.allowed} />
       <OrderStatusCards groups={statusGroups.map((item) => ({ status: item.status, count: item._count._all }))} activeStatus={status} />
-      <form method="get" className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4">
+      <form method="get" className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-2 xl:grid-cols-8">
         <input type="hidden" name="status" value={status ?? ""} />
-        <select name="employee" defaultValue={employee ?? ""} className="rounded-xl border border-slate-200 px-3 py-2 text-sm"><option value="">全部录单员工</option>{employees.map((item) => <option key={item.id} value={item.id}>{item.fullName || item.username}</option>)}</select>
+        <input name="q" defaultValue={keyword ?? ""} placeholder="订单号、客户、邮箱、电话、WhatsApp" className="rounded-xl border border-slate-200 px-3 py-2 text-sm xl:col-span-2" />
+        <select name="employee" defaultValue={employee ?? ""} className="rounded-xl border border-slate-200 px-3 py-2 text-sm"><option value="">全部销售</option>{employees.map((item) => <option key={item.id} value={item.id}>{item.fullName || item.username}</option>)}</select>
         <input name="product" defaultValue={product ?? ""} placeholder="产品名称" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
-        <input name="country" defaultValue={country ?? ""} placeholder="目的地国家代码，如 ES" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+        <select name="country" defaultValue={country ?? ""} className="rounded-xl border border-slate-200 px-3 py-2 text-sm"><option value="">全部目的地</option>{countries.map((item) => <option key={item.code} value={item.code}>{item.name} ({item.code})</option>)}</select>
+        <input type="date" name="start" defaultValue={params.start ?? ""} aria-label="开始日期" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+        <input type="date" name="end" defaultValue={params.end ?? ""} aria-label="结束日期" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
         <button className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white">筛选</button>
       </form>
       <CrudPage
@@ -229,7 +283,15 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           { key: "country", label: "目的地国家", render: (row) => String(row.recipientCountryCode ?? "-") },
         ]}
       />
-      <div className="flex items-center justify-between text-sm text-slate-500"><span>共 {totalCount} 条，第 {page} / {Math.max(1, Math.ceil(totalCount / pageSize))} 页</span><div className="flex gap-2">{page > 1 && <Link className="rounded-lg border px-3 py-1.5" href={`/admin/orders?status=${status ?? ""}&employee=${employee ?? ""}&product=${product ?? ""}&country=${country ?? ""}&page=${page - 1}`}>上一页</Link>}{page < Math.ceil(totalCount / pageSize) && <Link className="rounded-lg border px-3 py-1.5" href={`/admin/orders?status=${status ?? ""}&employee=${employee ?? ""}&product=${product ?? ""}&country=${country ?? ""}&page=${page + 1}`}>下一页</Link>}</div></div>
+      <div className="flex flex-col gap-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+        <form method="get" className="flex items-center gap-2">
+          {Object.entries({ status: status ?? "", employee: employee ?? "", product: product ?? "", country: country ?? "", q: keyword ?? "", start: params.start ?? "", end: params.end ?? "" }).map(([key, value]) => <input key={key} type="hidden" name={key} value={value} />)}
+          <span>共 {totalCount} 条</span>
+          <select name="pageSize" defaultValue={String(pageSize)} className="h-9 rounded-lg border border-slate-200 px-2"><option value="10">10 / 页</option><option value="20">20 / 页</option><option value="50">50 / 页</option><option value="100">100 / 页</option></select>
+          <button className="rounded-lg border border-slate-200 px-3 py-2">应用</button>
+        </form>
+        <div className="flex items-center gap-2"><span>第 {page}/{totalPages} 页</span>{page > 1 && <Link className="rounded-lg border px-3 py-1.5" href={pageHref(page - 1)}>上一页</Link>}{page < totalPages && <Link className="rounded-lg border px-3 py-1.5" href={pageHref(page + 1)}>下一页</Link>}</div>
+      </div>
     </div>
   );
 }
