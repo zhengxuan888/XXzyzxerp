@@ -14,13 +14,78 @@ import {
   shipmentEventMeta,
   shouldSuppressHighPriorityFollowUp,
 } from "@/lib/logistics";
-import { fail, ok } from "@/lib/api-response";
+import { fail, ok, paginated, parsePagination } from "@/lib/api-response";
 import { parseLogisticsWorkbenchConfig } from "@/lib/logistics-workbench-config";
 
 function nextFollowUpDate(eventType: keyof typeof shipmentEventMeta, occurredAt: Date) {
   const isHighPriority = shipmentEventMeta[eventType].priority === "HIGH";
   const hours = isHighPriority ? 6 : 24;
   return new Date(occurredAt.getTime() + hours * 60 * 60 * 1000);
+}
+
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const { id } = await props.params;
+  const auth = await requireAuthContext(request);
+  if (!auth) return fail("UNAUTHENTICATED", "请先登录。", 401);
+
+  const shipment = await prisma.shipment.findFirst({
+    where: { id, businessUnitId: auth.membership.businessUnitId },
+    select: {
+      id: true,
+      businessUnitId: true,
+      siteId: true,
+      order: { select: { departmentId: true, creatorUserId: true } },
+    },
+  });
+  if (!shipment) return fail("SHIPMENT_NOT_FOUND", "物流记录不存在。", 404);
+
+  const permission = await checkPermission({
+    userId: auth.userId,
+    membershipId: auth.membership.id,
+    actionKey: "shipment.timeline.view",
+    targetBusinessUnitId: shipment.businessUnitId,
+    targetDepartmentId: shipment.order.departmentId,
+    targetSiteId: shipment.siteId,
+    targetUserId: shipment.order.creatorUserId,
+  });
+  if (!permission.allowed) return fail("FORBIDDEN", "没有查看物流轨迹的权限。", 403);
+
+  const pagination = parsePagination(request, 100);
+  const where = { shipmentId: shipment.id };
+  const [events, total] = await Promise.all([
+    prisma.shipmentEvent.findMany({
+      where,
+      orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+      skip: pagination.skip,
+      take: pagination.take,
+      include: {
+        annotation: {
+          include: {
+            handledByMembership: {
+              include: { user: { select: { username: true, fullName: true } } },
+            },
+          },
+        },
+      },
+    }),
+    prisma.shipmentEvent.count({ where }),
+  ]);
+
+  return paginated(events.map((event) => ({
+    id: event.id,
+    occurredAt: event.occurredAt.toISOString(),
+    eventType: event.eventType,
+    statusMilestone: event.statusMilestone,
+    location: event.location,
+    memo: event.memo,
+    annotation: event.annotation ? {
+      note: event.annotation.note,
+      tags: event.annotation.tags,
+      isHandled: event.annotation.isHandled,
+      handledAt: event.annotation.handledAt?.toISOString() ?? null,
+      handledByMembership: event.annotation.handledByMembership,
+    } : null,
+  })), total, pagination);
 }
 
 export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -39,8 +104,11 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       firstTrackedAt: true,
       lastTrackedAt: true,
       nextFollowUpAt: true,
+      siteId: true,
       order: {
         select: {
+          departmentId: true,
+          creatorUserId: true,
           recipientCountryCode: true,
           recipientRegion: true,
           recipientCity: true,
@@ -56,6 +124,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     membershipId: auth.membership.id,
     actionKey: "shipment.track.update",
     targetBusinessUnitId: shipment.businessUnitId,
+    targetDepartmentId: shipment.order.departmentId,
+    targetSiteId: shipment.siteId,
+    targetUserId: shipment.order.creatorUserId,
   });
   if (!canTrack.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: canTrack.reasons }, { status: 403 });
   const setting = await prisma.logisticsWorkbenchSetting.findUnique({

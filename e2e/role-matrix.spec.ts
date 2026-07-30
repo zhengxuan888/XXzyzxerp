@@ -132,10 +132,12 @@ test("销售只能读取自己的订单，业务负责人可以读取本板块�
   const salesShipmentDetailResponse = await page.request.get(`/api/mvp/orders/${shippedOrder!.id}`);
   expect(salesShipmentDetailResponse.ok(), await salesShipmentDetailResponse.text()).toBe(true);
   const salesShipmentDetail = await salesShipmentDetailResponse.json() as {
-    shipments: Array<{ trackingNo: string | null; events: unknown[] }>;
+    shipments: Array<{ id: string; trackingNo: string | null; events: unknown[] }>;
   };
   expect(salesShipmentDetail.shipments.length).toBeGreaterThan(0);
   expect(salesShipmentDetail.shipments.every((shipment) => shipment.trackingNo === null && shipment.events.length === 0)).toBe(true);
+  const salesTimeline = await page.request.get(`/api/mvp/shipments/${salesShipmentDetail.shipments[0].id}/events?page=1&pageSize=10`);
+  expect(salesTimeline.status()).toBe(403);
   const salesOrderPage = await page.request.get(`/admin/orders/${shippedOrder!.id}`);
   expect(await salesOrderPage.text()).not.toContain("DEMO-TRACK-001");
 
@@ -148,10 +150,16 @@ test("销售只能读取自己的订单，业务负责人可以读取本板块�
   const afterSalesDetailResponse = await page.request.get(`/api/mvp/orders/${shippedOrder!.id}`);
   expect(afterSalesDetailResponse.ok(), await afterSalesDetailResponse.text()).toBe(true);
   const afterSalesDetail = await afterSalesDetailResponse.json() as {
-    shipments: Array<{ trackingNo: string | null; events: unknown[] }>;
+    shipments: Array<{ id: string; trackingNo: string | null; events: unknown[] }>;
   };
   expect(afterSalesDetail.shipments.some((shipment) => shipment.trackingNo === "DEMO-TRACK-001")).toBe(true);
   expect(afterSalesDetail.shipments.some((shipment) => shipment.events.length > 0)).toBe(true);
+  const afterSalesTimeline = await page.request.get(`/api/mvp/shipments/${afterSalesDetail.shipments[0].id}/events?page=1&pageSize=10`);
+  expect(afterSalesTimeline.ok(), await afterSalesTimeline.text()).toBe(true);
+  const afterSalesTimelineBody = await afterSalesTimeline.json() as { data: unknown[]; meta: { page: number; pageSize: number; total: number } };
+  expect(afterSalesTimelineBody.meta.page).toBe(1);
+  expect(afterSalesTimelineBody.meta.pageSize).toBe(10);
+  expect(afterSalesTimelineBody.meta.total).toBeGreaterThan(0);
   const afterSalesOrderPage = await page.request.get(`/admin/orders/${shippedOrder!.id}`);
   expect(await afterSalesOrderPage.text()).toContain("DEMO-TRACK-001");
 });

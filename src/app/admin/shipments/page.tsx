@@ -164,7 +164,7 @@ export default async function ShipmentsPage({
       },
       events: {
         orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
-        take: 30,
+        take: 10,
         include: {
           annotation: {
             include: { handledByMembership: { include: { user: { select: { username: true, fullName: true } } } } },

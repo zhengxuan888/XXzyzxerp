@@ -78,10 +78,66 @@ export default function LogisticsTrackingWorkbench({
         <div><div className="flex items-start gap-2"><Package size={16} className="mt-0.5 shrink-0 text-slate-400" /><div className="text-sm text-slate-700">{row.order.items.map((item) => `${item.productName} × ${item.quantity}`).join("、") || "未记录产品"}</div></div><div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500"><span>COD：<strong className="text-slate-800">{row.order.codAmountLabel}</strong></span><span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-1 font-medium text-violet-700"><UserRound size={13} />销售：{row.order.creatorUser.fullName || row.order.creatorUser.username}</span></div></div>
         {row.canViewTimeline && <button type="button" onClick={() => setExpanded((value) => ({ ...value, [row.id]: !isOpen }))} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">{isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}{isOpen ? "收起轨迹" : `展开轨迹 ${row.events.length}`}</button>}
       </div>
-      {row.canViewTimeline && row.events.length > 0 && <div className="border-t border-slate-200 bg-slate-50/60 p-4"><div className="mb-2 text-xs font-medium text-slate-500">{isOpen ? `共 ${row.events.length} 条轨迹，轨迹区域可独立滚动` : "最新物流轨迹"}</div><div className={`${isOpen ? "max-h-[34rem] overflow-y-auto pr-1" : ""} space-y-3`}>{(isOpen ? row.events : row.events.slice(0, 1)).map((event) => <EventEditor key={event.id} shipmentId={row.id} event={event} canAnnotate={row.canAnnotate} quickTags={config.quickTags} />)}</div></div>}
+      {row.canViewTimeline && row.events.length > 0 && <TrackingEventsPanel shipmentId={row.id} initialEvents={row.events} expanded={isOpen} canAnnotate={row.canAnnotate} quickTags={config.quickTags} />}
     </article>; })}
     {!visibleRows.length && <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center text-sm text-slate-500">没有找到匹配的物流订单。</div>}
     {visibleRows.length > 0 && <footer className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2"><span>共 {visibleRows.length} 条</span><select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }} className="h-9 rounded-lg border border-slate-200 px-2"><option value={10}>10 / 页</option><option value={20}>20 / 页</option><option value={50}>50 / 页</option></select></div><div className="flex items-center gap-2"><span>第 {safePage}/{pageCount} 页</span><button type="button" disabled={safePage <= 1} onClick={() => setPage(safePage - 1)} className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 disabled:opacity-40"><ChevronLeft size={15} />上一页</button><button type="button" disabled={safePage >= pageCount} onClick={() => setPage(safePage + 1)} className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 disabled:opacity-40">下一页<ChevronRight size={15} /></button></div></footer>}
+  </div>;
+}
+
+function TrackingEventsPanel({
+  shipmentId,
+  initialEvents,
+  expanded,
+  canAnnotate,
+  quickTags,
+}: {
+  shipmentId: string;
+  initialEvents: TrackingEvent[];
+  expanded: boolean;
+  canAnnotate: boolean;
+  quickTags: string[];
+}) {
+  const [events, setEvents] = useState(initialEvents);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const hasMore = total === null ? events.length >= 10 : events.length < total;
+
+  async function loadMore() {
+    if (loading || !hasMore) return;
+    setLoading(true);
+    setError("");
+    const nextPage = page + 1;
+    const response = await fetch(`/api/mvp/shipments/${shipmentId}/events?page=${nextPage}&pageSize=10`);
+    const payload = await response.json().catch(() => null) as {
+      data?: TrackingEvent[];
+      meta?: { total: number };
+      error?: { message?: string };
+    } | null;
+    setLoading(false);
+    if (!response.ok) {
+      setError(payload?.error?.message ?? "加载更多轨迹失败");
+      return;
+    }
+    const incoming = payload?.data ?? [];
+    setEvents((current) => {
+      const known = new Set(current.map((event) => event.id));
+      return [...current, ...incoming.filter((event) => !known.has(event.id))];
+    });
+    setPage(nextPage);
+    setTotal(payload?.meta?.total ?? events.length + incoming.length);
+  }
+
+  const visibleEvents = expanded ? events : events.slice(0, 1);
+  return <div className="border-t border-slate-200 bg-slate-50/60 p-4">
+    <div className="mb-2 text-xs font-medium text-slate-500">{expanded ? `已加载 ${events.length}${total === null ? "" : ` / ${total}`} 条轨迹，轨迹区域可独立滚动` : "最新物流轨迹"}</div>
+    <div className={`${expanded ? "max-h-[34rem] overflow-y-auto pr-1" : ""} space-y-3`}>
+      {visibleEvents.map((event) => <EventEditor key={event.id} shipmentId={shipmentId} event={event} canAnnotate={canAnnotate} quickTags={quickTags} />)}
+      {expanded && hasMore && <button type="button" disabled={loading} onClick={() => void loadMore()} className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{loading ? "正在加载…" : "加载更早轨迹"}</button>}
+      {expanded && error && <p className="text-center text-xs text-rose-600">{error}</p>}
+    </div>
   </div>;
 }
 
