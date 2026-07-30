@@ -7,7 +7,15 @@ import type { LogisticsQueueKey, LogisticsWorkbenchConfig } from "@/lib/logistic
 
 type Annotation = { note: string | null; tags: string[]; isHandled: boolean; handledAt: string | null; handledByMembership?: { user?: { fullName: string | null; username: string } } | null };
 type TrackingEvent = { id: string; occurredAt: string; eventType: string; statusMilestone: string | null; location: string | null; memo: string | null; annotation: Annotation | null };
-type TrackingRow = { id: string; trackingNo: string | null; carrier: string | null; status: string; urgency: "critical" | "high" | "normal"; urgencyLabel: string; priorityTag: string; dueStatus: string; canViewTrackingNo: boolean; canViewTimeline: boolean; canAnnotate: boolean; eventTotal: number; unhandledEventCount: number; order: { id: string; orderNo: string; recipientName: string | null; recipientPhone: string | null; recipientEmail: string | null; customerWhatsapp: string | null; recipientCountryCode: string | null; codAmountLabel: string; customer: { name: string }; creatorUser: { username: string; fullName: string | null }; ownerMembership: { id: string; department: { id: string; name: string } | null; managerMembership: { id: string; user: { username: string; fullName: string | null } } | null }; items: Array<{ productName: string; quantity: number }> }; events: TrackingEvent[] };
+type TrackingRow = { id: string; trackingNo: string | null; carrier: string | null; status: string; urgency: "critical" | "high" | "normal"; urgencyLabel: string; priorityTag: string; dueStatus: string; canViewTrackingNo: boolean; canViewTimeline: boolean; canAnnotate: boolean; eventTotal: number; unhandledEventCount: number; queueSignals: string[]; order: { id: string; orderNo: string; recipientName: string | null; recipientPhone: string | null; recipientEmail: string | null; customerWhatsapp: string | null; recipientCountryCode: string | null; codAmountLabel: string; customer: { name: string }; creatorUser: { username: string; fullName: string | null }; ownerMembership: { id: string; department: { id: string; name: string } | null; managerMembership: { id: string; user: { username: string; fullName: string | null } } | null }; items: Array<{ productName: string; quantity: number }> }; events: TrackingEvent[] };
+
+function matchesConfiguredCard(row: TrackingRow, matches: string[]) {
+  if (!matches.length) return false;
+  const signals = new Set(row.queueSignals);
+  signals.add(`STATUS:${row.status.toUpperCase()}`);
+  if (row.eventTotal === 0) signals.add("NO_EVENTS");
+  return matches.some((match) => signals.has(match.trim().toUpperCase()));
+}
 export default function LogisticsTrackingWorkbench({
   rows,
   config,
@@ -34,6 +42,7 @@ export default function LogisticsTrackingWorkbench({
   const [pageSize, setPageSize] = useState(10);
   const visibleRows = useMemo(() => {
     const term = keyword.trim().toLowerCase();
+    const selectedCard = config.cards.find((card) => card.key === queue);
     return rows.filter((row) => {
       if (queue === "critical" && row.urgency !== "critical") return false;
       if (queue === "high" && row.urgency !== "high") return false;
@@ -44,6 +53,7 @@ export default function LogisticsTrackingWorkbench({
       if (queue === "delivered" && !["DELIVERED", "CLOSED"].includes(row.status)) return false;
       if (queue === "exception" && row.status !== "EXCEPTION") return false;
       if (queue === "returning" && !["RETURNING", "RETURNED"].includes(row.status)) return false;
+      if (selectedCard?.matches.length && !matchesConfiguredCard(row, selectedCard.matches)) return false;
       if (departmentId && row.order.ownerMembership.department?.id !== departmentId) return false;
       if (managerMembershipId && row.order.ownerMembership.managerMembership?.id !== managerMembershipId) return false;
       if (creatorMembershipId && row.order.ownerMembership.id !== creatorMembershipId) return false;
@@ -53,7 +63,7 @@ export default function LogisticsTrackingWorkbench({
       if (!term) return true;
       return `${row.trackingNo} ${row.order.orderNo} ${row.order.recipientName} ${row.order.recipientEmail} ${row.order.customerWhatsapp} ${row.order.creatorUser.fullName} ${row.order.creatorUser.username} ${row.order.items.map((item) => item.productName).join(" ")}`.toLowerCase().includes(term);
     });
-  }, [carrier, creatorMembershipId, departmentId, destination, keyword, managerMembershipId, queue, rows, shipmentStatus]);
+  }, [carrier, config.cards, creatorMembershipId, departmentId, destination, keyword, managerMembershipId, queue, rows, shipmentStatus]);
   const pageCount = Math.max(1, Math.ceil(visibleRows.length / pageSize));
   const safePage = Math.min(page, pageCount);
   const pagedRows = visibleRows.slice((safePage - 1) * pageSize, safePage * pageSize);
@@ -65,7 +75,9 @@ export default function LogisticsTrackingWorkbench({
     if (key === "out_for_delivery") return rows.filter((row) => row.status === "OUT_FOR_DELIVERY").length;
     if (key === "delivered") return rows.filter((row) => ["DELIVERED", "CLOSED"].includes(row.status)).length;
     if (key === "exception") return rows.filter((row) => row.status === "EXCEPTION").length;
-    return rows.filter((row) => ["RETURNING", "RETURNED"].includes(row.status)).length;
+    if (key === "returning") return rows.filter((row) => ["RETURNING", "RETURNED"].includes(row.status)).length;
+    const card = config.cards.find((item) => item.key === key);
+    return card ? rows.filter((row) => matchesConfiguredCard(row, card.matches)).length : 0;
   };
   const toneFor = (key: LogisticsQueueKey) => key === "critical" || key === "exception" ? "border-rose-200 bg-rose-50 text-rose-900" : key === "high" || key === "out_for_delivery" ? "border-amber-200 bg-amber-50 text-amber-900" : key === "normal" || key === "delivered" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : key === "unhandled" || key === "returning" ? "border-violet-200 bg-violet-50 text-violet-900" : key === "in_transit" ? "border-sky-200 bg-sky-50 text-sky-900" : "border-slate-200 bg-white text-slate-900";
   const queueCards = config.cards.filter((card) => card.isVisible).map((card) => ({ ...card, count: countFor(card.key), tone: toneFor(card.key) }));

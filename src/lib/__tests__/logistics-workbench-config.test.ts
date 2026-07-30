@@ -18,18 +18,23 @@ describe("logistics workbench configuration", () => {
     });
     expect(config.quickTags).toEqual(["已通知"]);
     expect(config.cards[0]).toMatchObject({ key: "critical", label: "立即处理", sortOrder: 1 });
-    expect(config.cards.map((card) => card.key).sort()).toEqual([
+    expect(config.cards).toHaveLength(18);
+    expect(config.cards.map((card) => card.key)).toEqual(expect.arrayContaining([
       "all",
-      "critical",
-      "delivered",
-      "exception",
-      "high",
       "in_transit",
-      "normal",
       "out_for_delivery",
-      "returning",
+      "delivered",
       "unhandled",
-    ]);
+      "address_error",
+      "delivery_failed",
+      "ready_for_pickup",
+      "refused",
+      "read_no_reply",
+      "unread_no_reply",
+      "tracking_offline",
+      "other_exception",
+    ]));
+    expect(config.cards.find((card) => card.key === "address_error")?.matches).toContain("EVENT:ADDRESS_ERROR");
     expect(config.alertRules).toEqual([{ key: "ES", matches: ["西班牙", "Spain"], milestoneEvent: "IN_TRANSIT", silentWorkDaysBeforeMilestone: 2 }]);
     expect(config.syncIntervalMinutes).toBe(45);
   });

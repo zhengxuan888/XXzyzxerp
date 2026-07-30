@@ -195,6 +195,19 @@ export default async function ShipmentsPage({
       })
     : [];
   const unhandledEventCounts = new Map(unhandledEventGroups.map((item) => [item.shipmentId, item._count._all]));
+  const signalEvents = rows.length
+    ? await prisma.shipmentEvent.findMany({
+        where: { shipmentId: { in: rows.map((row) => row.id) } },
+        select: { shipmentId: true, eventType: true, annotation: { select: { tags: true } } },
+      })
+    : [];
+  const queueSignals = new Map<string, Set<string>>();
+  for (const event of signalEvents) {
+    const signals = queueSignals.get(event.shipmentId) ?? new Set<string>();
+    signals.add(`EVENT:${event.eventType.toUpperCase()}`);
+    for (const tag of event.annotation?.tags ?? []) signals.add(`TAG:${tag.trim().toUpperCase()}`);
+    queueSignals.set(event.shipmentId, signals);
+  }
 
   const scopedRows = (await Promise.all(rows.map(async (row) => {
     const target = {
@@ -291,6 +304,7 @@ export default async function ShipmentsPage({
         })) : [],
         eventTotal: row.canViewTimeline ? row._count.events : 0,
         unhandledEventCount: row.canViewTimeline ? (unhandledEventCounts.get(row.id) ?? 0) : 0,
+        queueSignals: row.canViewTimeline ? [...(queueSignals.get(row.id) ?? [])] : [],
       }))}
     />
     </div>
