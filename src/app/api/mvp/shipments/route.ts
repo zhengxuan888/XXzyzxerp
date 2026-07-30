@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
   try {
     row = existingPending
       ? await prisma.shipment.update({
-        where: { id: existingPending.id },
+        where: { id: existingPending.id, status: "PENDING" },
         data: {
           carrier,
           trackingNo,
@@ -184,7 +184,18 @@ export async function POST(request: NextRequest) {
         });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return fail("TRACKING_NO_ALREADY_EXISTS", "该物流单号已被其他订单使用，请刷新后核对。", 409);
+      return fail(
+        "SHIPMENT_CONCURRENTLY_CHANGED",
+        "该订单或物流单号刚刚被其他人处理，请刷新后核对，系统未覆盖原数据。",
+        409,
+      );
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      return fail(
+        "SHIPMENT_CONCURRENTLY_CHANGED",
+        "待发货记录状态已经变化，请刷新后重新操作。",
+        409,
+      );
     }
     throw error;
   }

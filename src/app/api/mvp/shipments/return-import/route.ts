@@ -163,13 +163,27 @@ export async function POST(request: NextRequest) {
       const results = [];
       for (const row of readyRows) {
         const order = orderByNo.get(row.orderNo)!;
+        const currentOrder = await tx.order.findUnique({
+          where: { id: order.id },
+          select: { status: true },
+        });
+        if (currentOrder?.status !== "WAITING_SHIPMENT") {
+          throw new Error("STALE_IMPORT_PREVIEW");
+        }
         const data = {
           carrier: row.carrier || "物流商",
           trackingNo: row.trackingNo,
           memo: `回传单号 ${row.trackingNo} 由文件 ${file.name} 回填`,
         };
         const shipment = row.shipmentId
-          ? await tx.shipment.update({ where: { id: row.shipmentId }, data })
+          ? await tx.shipment.update({
+              where: {
+                id: row.shipmentId,
+                status: "PENDING",
+                trackingNo: null,
+              },
+              data,
+            })
           : await tx.shipment.create({
               data: {
                 orderId: order.id,
@@ -195,12 +209,15 @@ export async function POST(request: NextRequest) {
         results.push({ orderId: order.id, shipmentId: shipment.id, trackingNo: row.trackingNo });
       }
       return results;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+    if (
+      (error instanceof Error && error.message === "STALE_IMPORT_PREVIEW")
+      || (error instanceof Prisma.PrismaClientKnownRequestError && ["P2002", "P2025", "P2034"].includes(error.code))
+    ) {
       return fail(
-        "TRACKING_NO_ALREADY_EXISTS",
-        "导入期间有物流单号已被其他订单占用，本次导入未写入，请重新预览。",
+        "IMPORT_PREVIEW_STALE",
+        "预览后订单或物流单号已被其他人处理，本次导入未写入，请重新预览。",
         409,
       );
     }
