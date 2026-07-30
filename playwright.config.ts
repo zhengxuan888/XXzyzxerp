@@ -10,10 +10,13 @@ const baseURL = process.env.PW_BASE_URL || `http://127.0.0.1:${port}`;
 export default defineConfig({
   testDir: "./e2e",
   timeout: 90_000,
+  expect: {
+    timeout: 15_000,
+  },
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : 2,
+  workers: 1,
   reporter: "html",
   use: {
     baseURL,

@@ -1,6 +1,22 @@
 packages:
   - .
 
+overrides:
+  postcss: 8.5.25
+  sharp: 0.35.3
+  uuid: 11.1.1
+
 ignoredBuiltDependencies:
   - sharp
   - unrs-resolver
+
+minimumReleaseAgeExclude:
+  - brace-expansion@1.1.18
+  - brace-expansion@2.1.4
+  - brace-expansion@5.0.9
+
+# 1.x/2.x received the same bounded-expansion fix as 5.0.9, but the advisory
+# currently reports only ">=5.0.8" as patched and therefore flags the backports.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-mh99-v99m-4gvg

@@ -150,3 +150,34 @@ git diff --check
 - Ship24、飞书、对象存储、SMTP、域名 HTTPS、备份恢复和生产监控需要在预发布环境使用用户提供的正式资源验证。
 
 ---
+## 2026-07-31 依赖安全与完整浏览器回归
+
+### 安全加固
+
+- 将 Next.js 实际使用的 `sharp` 从 0.34.5 固定到 0.35.3，修复 libvips 继承的 High 级漏洞。
+- 将 Next.js 的 `postcss` 从 8.4.31 固定到 8.5.25，修复路径穿越、任意文件读取及 CSS 输出风险。
+- 将 ExcelJS 依赖链的 `uuid` 固定到 11.1.1，修复缓冲区边界问题。
+- `brace-expansion` 自动解析到兼容旧 minimatch API 的安全回移版本 1.1.18、2.1.4 和 5.0.9；源码已确认包含最大展开数、总字符数和深递归保护。
+- 审计数据库仅将 `>=5.0.8` 标为修复，因此对 `GHSA-mh99-v99m-4gvg` 做精确忽略；其他漏洞仍由 `pnpm audit --prod --audit-level high` 阻断。
+- 三个发布时间不足默认门槛的安全补丁版本使用精确 `minimumReleaseAgeExclude`，未放宽其他包的供应链发布时间策略。
+
+### 本轮验证证据
+
+| Gate | 结果 |
+|---|---|
+| `pnpm install --frozen-lockfile` | 通过；锁文件供应链策略通过 |
+| Excel 导入解析定向测试 | 6 文件、16 项通过 |
+| Excel 工作簿真实生成 | 通过 |
+| Sharp 实际加载 | 0.35.3，libvips 8.18.3 |
+| Vitest 全量 | 24 文件、77 项通过 |
+| TypeScript / ESLint | 通过 |
+| Prisma validate / migrate status | 通过；20 个迁移为最新状态 |
+| Next.js production build | 通过；71 个页面/API 路由 |
+| Playwright 完整回归 | 24/24 通过 |
+| Docker Compose | PostgreSQL 与 Redis 均 healthy |
+| 本地配置校验 | 通过且未输出 Secret |
+| 本地健康检查 | `/api/health` 返回 `ok: true` |
+
+完整浏览器回归使用单工作进程和 15 秒可见性等待，避免本地开发服务器冷启动被误判为业务失败。覆盖动态菜单全路由、七类角色、订单与核单越权、库存和金额、附件安全、中文账号、移动端、统一收件箱及服务端分页。
+
+---
