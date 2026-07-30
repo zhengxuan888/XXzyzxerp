@@ -192,3 +192,16 @@ git diff --check
 - 生产加密、异地备份、对象存储版本恢复和最终 RTO/RPO 仍需在预发布环境验证并由创始人确认。
 
 ---
+
+## 2026-07-31 财务四眼原则补充门禁
+
+- 新增业务板块级 `FinanceControlPolicy`；未配置时以严格默认拒绝同一员工完成制单、审批、过账的任意冲突组合。
+- 服务端按稳定 `userId` 而非 Membership ID 比对，故员工切换另一个岗位/Membership 也不能绕过；每次审批和过账都在 Serializable 事务内重新读取策略。
+- 财务内控页面和 API 使用 `finance.control_policy.read/manage` 动作，且只接受 `ALL` / `BUSINESS_UNIT` Scope；未因任何角色名称、部门名称或业务板块名称写死规则。
+- 验证：`pnpm run test` 34 个文件、124 项通过；`pnpm run ts-check`、`pnpm run lint`、`pnpm exec prisma validate`、`pnpm run build` 全部通过。
+- 本机临时服务层 UAT：同一员工通过第二个 Membership 审批自己创建的结算单和付款，均被 `FINANCE_MAKER_CHECKER_REQUIRED` 拒绝；临时数据已清理。
+- 本轮未部署、未 Push、未连接旧 ERP、生产数据库、银行、物流商或第三方账号。
+
+仍需在后续财务批次补齐：对账建议人与确认人分离、付款核销人与过账人分离、已过账事实的受控冲销/复核、真实财务岗位矩阵 UAT。
+
+---

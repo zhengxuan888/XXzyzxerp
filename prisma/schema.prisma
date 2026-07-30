@@ -268,6 +268,7 @@ model LegalEntity {
   financePayments               FinancePayment[]
   financeStatementTemplates     FinanceStatementTemplate[]
   financeStatementImportBatches FinanceStatementImportBatch[]
+  financeControlPolicies        FinanceControlPolicy[]
 }
 
 model BusinessUnit {
@@ -322,6 +323,7 @@ model BusinessUnit {
   financePayments               FinancePayment[]
   financeStatementTemplates     FinanceStatementTemplate[]
   financeStatementImportBatches FinanceStatementImportBatch[]
+  financeControlPolicy          FinanceControlPolicy?
 
   @@unique([legalEntityId, code])
   @@index([legalEntityId])
@@ -568,6 +570,7 @@ model Membership {
   previewedFinanceStatementImportBatches FinanceStatementImportBatch[] @relation("FinanceStatementImportBatchPreviewer")
   confirmedFinanceStatementImportBatches FinanceStatementImportBatch[] @relation("FinanceStatementImportBatchConfirmer")
   cancelledFinanceStatementImportBatches FinanceStatementImportBatch[] @relation("FinanceStatementImportBatchCanceller")
+  updatedFinanceControlPolicies          FinanceControlPolicy[]        @relation("FinanceControlPolicyUpdater")
 
   @@index([userId, isActive])
   @@index([businessUnitId, isActive])
@@ -1557,6 +1560,33 @@ model FinancePaymentAllocation {
   @@unique([paymentId, statementId])
   @@index([statementId, createdAt])
   @@index([createdByMembershipId, createdAt])
+}
+
+// Business-unit policy for finance separation of duties. It is data rather
+// than a role-name switch: authorized administrators may configure it without
+// changing application code. A missing row is interpreted as the strict safe
+// default by the finance service so a newly created business unit never loses
+// maker/checker protection during setup.
+model FinanceControlPolicy {
+  id                                           String   @id @default(uuid())
+  legalEntityId                                String
+  businessUnitId                               String   @unique
+  requireStatementApproverDifferentFromCreator Boolean  @default(true)
+  requireStatementPosterDifferentFromCreator   Boolean  @default(true)
+  requireStatementPosterDifferentFromApprover  Boolean  @default(true)
+  requirePaymentApproverDifferentFromCreator   Boolean  @default(true)
+  requirePaymentPosterDifferentFromCreator     Boolean  @default(true)
+  requirePaymentPosterDifferentFromApprover    Boolean  @default(true)
+  updatedByMembershipId                        String?
+  createdAt                                    DateTime @default(now())
+  updatedAt                                    DateTime @updatedAt
+
+  legalEntity         LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  businessUnit        BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  updatedByMembership Membership?  @relation("FinanceControlPolicyUpdater", fields: [updatedByMembershipId], references: [id], onDelete: SetNull)
+
+  @@index([legalEntityId])
+  @@index([updatedByMembershipId, updatedAt])
 }
 
 model Expense {

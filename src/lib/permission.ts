@@ -12,6 +12,11 @@ export type PermissionContext = {
   userId: string;
   membershipId: string;
   actionKey: string;
+  // Some configuration records govern an entire business unit and must not be
+  // changed through a narrower department/site/self grant. Callers opt in to
+  // this restriction; ordinary record permissions keep their existing scope
+  // behavior.
+  allowedScopes?: readonly PermissionScope[];
   targetBusinessUnitId?: string | null;
   targetDepartmentId?: string | null;
   targetSiteId?: string | null;
@@ -280,6 +285,7 @@ export async function checkPermission(ctx: PermissionContext): Promise<Permissio
     // server-side evaluator, do not silently widen access by ignoring it.
     if (perm.conditions != null) continue;
     const scope = normalizeScope(perm.scope);
+    if (ctx.allowedScopes && !ctx.allowedScopes.includes(scope)) continue;
     if (scope === "SUBORDINATES") {
       if (ctx.targetBusinessUnitId !== membership.businessUnitId) continue;
       if (await isInReportingScope(membership.id, ctx.targetMembershipId, ctx.targetUserId, false, membership.businessUnitId)) return { allowed: true, reasons: ["SCOPE_SUBORDINATES_OK", "ROLE_PERMISSION"], source: "role" };
@@ -315,6 +321,7 @@ export async function checkPermission(ctx: PermissionContext): Promise<Permissio
     if (expired) continue;
 
     const scope = normalizeScope(grant.scope);
+    if (ctx.allowedScopes && !ctx.allowedScopes.includes(scope)) continue;
     if (scope === "SUBORDINATES") {
       if (ctx.targetBusinessUnitId !== grant.businessUnitId) continue;
       if (await isInReportingScope(membership.id, ctx.targetMembershipId, ctx.targetUserId, false, grant.businessUnitId)) return { allowed: true, reasons: ["SCOPE_SUBORDINATES_OK", "ACCESS_GRANT"], source: "access_grant" };

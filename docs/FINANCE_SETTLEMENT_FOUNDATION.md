@@ -11,7 +11,7 @@
 
 ## 已落地的模型与迁移
 
-本地迁移：`202607310004_finance_settlement_foundation`、`202607310005_finance_integrity_hardening`。
+本地迁移：`202607310004_finance_settlement_foundation`、`202607310005_finance_integrity_hardening`、`202607310006_finance_statement_imports`、`202607310007_finance_statement_import_cancellation`、`202607310008_finance_control_policies`。
 
 - `FinanceCounterparty`：物流商、仓储商或其他结算对象。
 - `FinanceStatement` / `FinanceStatementLine`：供应商账单或 COD 回款结算单及逐行明细。
@@ -22,7 +22,7 @@
 
 ## 权限、菜单与审计
 
-迁移写入 18 个稳定的财务 Action：
+核心财务 Action（角色、菜单、Scope 与附加授权的关系均由数据库配置）包括：
 
 - `finance.counterparty.read` / `finance.counterparty.manage`
 - `finance.statement.read` / `finance.statement.create` / `finance.statement.update`
@@ -30,12 +30,17 @@
 - `finance.settlement.approve` / `finance.settlement.post` / `finance.settlement.void`
 - `finance.payment.read` / `finance.payment.create` / `finance.payment.approve` / `finance.payment.post` / `finance.payment.void` / `finance.payment.allocate`
 - `finance.pii.read`（为后续独立敏感字段门禁预留；本批没有新增此类字段）
+- `finance.control_policy.read` / `finance.control_policy.manage`
 
 菜单 `finance-settlements` 的路径是 `/admin/finance-settlements`，依赖 `finance.statement.read`。服务端从当前 Membership 计算业务板块、部门、站点、下属层级和条件 Scope；RolePermission 与未到期的 Access Grant 共同编译为可访问范围。角色名、部门名和业务板块名均不参与硬编码判断。每次鉴权同时校验用户、Membership、法人实体和业务板块仍处于有效状态且组织链一致；停用或跨法人错误归属的旧会话会被服务端拒绝。
 
 **默认拒绝：** 此迁移不会给任何现有角色插入 RolePermission、MenuPermission、AccessGrant 或 DelegationRule。管理员必须在角色权限中显式授予相应 Action 和菜单可见性，页面与 API 才会同时开放。这样不会把财务数据误开给物流、销售或旧角色。
 
 所有结算对象、结算单、逐行对账、付款、核销和状态改变的写操作都会写入 Audit Log。服务端会拒绝跨业务板块读取、没有 Scope 的写入，以及已过期/被撤销授权。
+
+### 财务岗位分离
+
+`FinanceControlPolicy` 为每个业务板块保存制单、审批、过账的岗位分离规则。缺失配置时采用严格默认：结算单和付款均要求制单人、审批人、过账人为不同员工。服务端在 Serializable 状态变更事务内按 `userId` 比较，而不是只比较 Membership，因此同一员工无法通过切换多个岗位上下文绕过。策略本身由 `finance.control_policy.read` / `finance.control_policy.manage` 动态授权，且仅接受业务板块级或全局 Scope；详见 [FINANCE_SEGREGATION_OF_DUTIES.md](FINANCE_SEGREGATION_OF_DUTIES.md)。
 
 ## 已实现状态与业务约束
 
@@ -76,18 +81,17 @@
 
 | Gate | 结果 |
 | --- | --- |
-| `pnpm prisma:validate` | 通过 |
-| `pnpm exec prisma migrate status` | 通过；26 个迁移均已应用到本机 V2 数据库 |
-| `pnpm ts-check` | 通过 |
-| `pnpm lint` | 通过 |
-| `pnpm test` | 31 个测试文件、111 项测试通过 |
-| 财务定向测试 | 4 个文件、28 项测试通过（金额、状态机、Scope/Grant、停用组织拒绝、SELF 创建归属） |
-| 未登录财务 API | 结算单、结算对象、付款接口均返回 HTTP 401 |
-| Docker | PostgreSQL 16 与 Redis 7 均为 healthy |
+| `pnpm run test` | 34 个测试文件、124 项测试通过 |
+| `pnpm exec prisma validate` | 通过 |
+| `pnpm run ts-check` | 通过 |
+| `pnpm run lint` | 通过 |
+| `pnpm run build` | 通过；路由包含财务内控页面与 API |
+| 岗位分离定向测试 | 5 项测试通过；含同一员工切换 Membership 仍被拒绝 |
+| 本机临时 UAT | 同一员工使用第二个 Membership 审批自己创建的结算单/付款，均返回 `FINANCE_MAKER_CHECKER_REQUIRED`；临时数据清理完成 |
 
 ## 尚未完成（不得误当作本批能力）
 
-- 物流商/银行账单 Excel 或 CSV 模板、预检、确认导入、文件哈希、原文件下载与导入幂等。
+- 真实物流商/银行账单的字段字典确认、模板配置和人工 UAT；当前已具备配置化模板、私有预检、确认导入、文件哈希、取消预检和幂等基础，但未接真实账单。
 - 自动匹配、汇率、金额容差、账单附件/凭证和付款核销到单条账单明细。
 - 银行、支付、真实物流商、Ship24 或旧 ERP 的真实数据接入。
 - `finance.pii.read` 对未来敏感字段的实际 UI/API 门禁。
@@ -96,4 +100,4 @@
 
 ## 下一批建议
 
-在财务负责人确认权限矩阵后，优先实现“物流商结算模板配置 → 上传预检 → 错误清单 → 人工确认导入 → 对账异常工作台”，并继续保持模板、字段映射、菜单、卡片和角色权限全部配置驱动。
+在财务负责人确认权限矩阵后，优先实现受控的付款/结算核销冲销、对账双人复核和真实财务 UAT，并继续保持模板、字段映射、菜单、卡片和角色权限全部配置驱动。

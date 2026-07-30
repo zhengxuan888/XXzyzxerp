@@ -133,6 +133,8 @@ const actionDefs: SeedAction[] = [
   { key: "finance.statement_import.confirm", name: "确认账单导入", namespace: "finance", scope: "BUSINESS_UNIT" },
   { key: "finance.statement_import.cancel", name: "取消账单预检", namespace: "finance", scope: "BUSINESS_UNIT" },
   { key: "finance.statement_artifact.read", name: "下载账单原件", namespace: "finance", scope: "BUSINESS_UNIT" },
+  { key: "finance.control_policy.read", name: "查看财务内控规则", namespace: "finance", scope: "BUSINESS_UNIT" },
+  { key: "finance.control_policy.manage", name: "配置财务内控规则", namespace: "finance", scope: "BUSINESS_UNIT" },
 
   { key: "expense.read", name: "Expense read", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "expense.create", name: "Expense create", namespace: "erp", scope: "BUSINESS_UNIT" },
@@ -360,6 +362,14 @@ const menuDefs = [
     path: "/admin/finance-imports",
     requiredActionKey: "finance.statement_import.read",
     sortOrder: 146,
+    isActive: true,
+  },
+  {
+    key: "finance-controls",
+    label: "财务内控",
+    path: "/admin/finance-controls",
+    requiredActionKey: "finance.control_policy.read",
+    sortOrder: 147,
     isActive: true,
   },
   {
@@ -1026,6 +1036,17 @@ async function main() {
 
   const founderMembership = await prisma.membership.findFirstOrThrow({
     where: { userId: founderUser.id, businessUnitId: businessUnit.id, isPrimary: true, isActive: true },
+  });
+  // Create a strict default without overwriting a business unit's later
+  // authorized configuration. This remains seed data, not a code dependency.
+  await prisma.financeControlPolicy.upsert({
+    where: { businessUnitId: businessUnit.id },
+    update: {},
+    create: {
+      legalEntityId: legalEntity.id,
+      businessUnitId: businessUnit.id,
+      updatedByMembershipId: founderMembership.id,
+    },
   });
   const demoConnection = await prisma.channelConnection.upsert({
     where: {

@@ -88,6 +88,41 @@ describe("permission utils", () => {
     expect(result.reasons).toEqual(expect.arrayContaining(["SCOPE_BUSINESS_UNIT_OK"]));
   });
 
+  it("can require business-unit scope for configuration records", async () => {
+    membershipFindFirst.mockResolvedValue(activeMembership({
+      id: "m1",
+      businessUnitId: "BU_A",
+      departmentId: "D1",
+      siteId: "S1",
+      userId: "u1",
+      roleId: "role_finance",
+      isActive: true,
+      endedAt: null,
+      role: { id: "role_finance" },
+    }));
+    rolePermissionFindMany.mockResolvedValue([{ scope: "DEPARTMENT" }]);
+    accessGrantFindMany.mockResolvedValue([]);
+
+    const denied = await checkPermission({
+      userId: "u1",
+      membershipId: "m1",
+      actionKey: "finance.control_policy.manage",
+      targetBusinessUnitId: "BU_A",
+      allowedScopes: ["ALL", "BUSINESS_UNIT"],
+    });
+    expect(denied.allowed).toBe(false);
+
+    rolePermissionFindMany.mockResolvedValue([{ scope: "BUSINESS_UNIT" }]);
+    const allowed = await checkPermission({
+      userId: "u1",
+      membershipId: "m1",
+      actionKey: "finance.control_policy.manage",
+      targetBusinessUnitId: "BU_A",
+      allowedScopes: ["ALL", "BUSINESS_UNIT"],
+    });
+    expect(allowed.allowed).toBe(true);
+  });
+
   it("fails closed when the active Membership organization chain is disabled or inconsistent", async () => {
     rolePermissionFindMany.mockResolvedValue([{ scope: "BUSINESS_UNIT" }]);
     accessGrantFindMany.mockResolvedValue([]);

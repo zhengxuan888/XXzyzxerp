@@ -9,6 +9,7 @@ import {
 import { writeAuditLog } from "@/lib/audit";
 import { createFinanceAccessPlan, type FinanceAccessMembership, type FinanceAccessTarget } from "@/lib/finance/access";
 import { parseCurrencyScale, parseMinorAmount } from "@/lib/finance/money";
+import { checkFinanceSegregation, resolveFinanceSegregationPolicy } from "@/lib/finance/segregation-policy";
 import {
   actionForPaymentCommand,
   actionForStatementCommand,
@@ -461,6 +462,8 @@ export async function transitionStatement(actor: FinanceActor, statementId: stri
             },
           },
         },
+        createdByMembership: { select: { userId: true } },
+        approvedByMembership: { select: { userId: true } },
       },
     });
     if (!current || current.status !== statement.status) throw new FinanceServiceError("STATEMENT_STALE", "结算单状态已变化，请刷新后重试。", 409);
@@ -482,6 +485,29 @@ export async function transitionStatement(actor: FinanceActor, statementId: stri
       if (allocationCount > 0) {
         throw new FinanceServiceError("STATEMENT_HAS_PAYMENT_ALLOCATIONS", "结算单已有付款核销，必须先走受控冲销流程，不能直接作废。", 409);
       }
+    }
+    if (command === "approve" || command === "post") {
+      const policy = resolveFinanceSegregationPolicy(await tx.financeControlPolicy.findUnique({
+        where: { businessUnitId: current.businessUnitId },
+        select: {
+          requireStatementApproverDifferentFromCreator: true,
+          requireStatementPosterDifferentFromCreator: true,
+          requireStatementPosterDifferentFromApprover: true,
+          requirePaymentApproverDifferentFromCreator: true,
+          requirePaymentPosterDifferentFromCreator: true,
+          requirePaymentPosterDifferentFromApprover: true,
+        },
+      }));
+      const segregation = checkFinanceSegregation({
+        command: `statement.${command}`,
+        actorUserId: actor.userId,
+        subject: {
+          createdByUserId: current.createdByMembership.userId,
+          approvedByUserId: current.approvedByMembership?.userId ?? null,
+        },
+        policy,
+      });
+      if (!segregation.allowed) throw new FinanceServiceError(segregation.code, segregation.message, 409);
     }
     const now = new Date();
     const data: Prisma.FinanceStatementUpdateManyMutationInput = {
@@ -867,7 +893,11 @@ export async function transitionPayment(actor: FinanceActor, paymentId: string, 
   return prisma.$transaction(async (tx) => {
     const current = await tx.financePayment.findFirst({
       where: { id: payment.id, businessUnitId: actor.membership.businessUnitId },
-      include: { allocations: { include: { statement: true } } },
+      include: {
+        allocations: { include: { statement: true } },
+        createdByMembership: { select: { userId: true } },
+        approvedByMembership: { select: { userId: true } },
+      },
     });
     if (!current || current.status !== payment.status) throw new FinanceServiceError("PAYMENT_STALE", "付款记录状态已变化，请刷新后重试。", 409);
     if (input.command === "post") {
@@ -880,6 +910,29 @@ export async function transitionPayment(actor: FinanceActor, paymentId: string, 
     }
     if (input.command === "void" && current.allocations.length) {
       throw new FinanceServiceError("PAYMENT_HAS_ALLOCATIONS", "付款记录已有核销，必须先走受控冲销流程，不能直接作废。", 409);
+    }
+    if (command === "approve" || command === "post") {
+      const policy = resolveFinanceSegregationPolicy(await tx.financeControlPolicy.findUnique({
+        where: { businessUnitId: current.businessUnitId },
+        select: {
+          requireStatementApproverDifferentFromCreator: true,
+          requireStatementPosterDifferentFromCreator: true,
+          requireStatementPosterDifferentFromApprover: true,
+          requirePaymentApproverDifferentFromCreator: true,
+          requirePaymentPosterDifferentFromCreator: true,
+          requirePaymentPosterDifferentFromApprover: true,
+        },
+      }));
+      const segregation = checkFinanceSegregation({
+        command: `payment.${command}`,
+        actorUserId: actor.userId,
+        subject: {
+          createdByUserId: current.createdByMembership.userId,
+          approvedByUserId: current.approvedByMembership?.userId ?? null,
+        },
+        policy,
+      });
+      if (!segregation.allowed) throw new FinanceServiceError(segregation.code, segregation.message, 409);
     }
     const now = new Date();
     const data: Prisma.FinancePaymentUpdateManyMutationInput = {
