@@ -70,3 +70,16 @@ pg_restore --exit-on-error --no-owner --no-acl --dbname erp_v2_restore_drill erp
 - 审计日志无法记录高风险写操作。
 
 每次演练都应留下：操作人、审批人、版本、备份校验和、实际 RPO/RTO、失败点和改进项。
+# 本地自动恢复演练
+
+本地 Docker 环境必须使用可重复脚本验证“备份可恢复”，不能只验证 `pg_dump` 成功：
+
+```powershell
+pnpm run backup:drill
+```
+
+脚本会创建唯一隔离数据库，验证备份 SHA-256、全部 public 表行数、Prisma 迁移以及 Local Demo 附件的存在性、字节数和 SHA-256，然后清理演练资源。最近一次证据见 `docs/LOCAL_BACKUP_RESTORE_DRILL_REPORT.md`。
+
+该命令仅适用于本地 Docker 演练。生产备份仍必须使用独立凭据、加密存储、异地副本和审批流程。
+
+---

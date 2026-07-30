@@ -41,6 +41,7 @@ yarn-error.log*
 /.codex-dev-visible.err.log
 /design-menu-current.png
 /.local-storage/
+/.backup-drill/
 /.local-logs/
 
 # env files (can opt-in for committing if needed)

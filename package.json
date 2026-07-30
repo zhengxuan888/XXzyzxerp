@@ -22,6 +22,7 @@
     "config:check:local": "node scripts/validate-config.mjs --mode=local --file=.env",
     "config:check:staging": "node scripts/validate-config.mjs --mode=staging --file=.env.staging",
     "deploy:dry-run": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deployment-dry-run.ps1",
+    "backup:drill": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup-restore-drill.ps1",
     "ship24:sync": "tsx scripts/ship24-sync.ts",
     "notifications:dispatch": "tsx scripts/dispatch-feishu-notifications.ts"
   },
