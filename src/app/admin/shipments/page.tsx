@@ -313,6 +313,7 @@ export default async function ShipmentsPage({
             tags: event.annotation.tags,
             isHandled: event.annotation.isHandled,
             handledAt: event.annotation.handledAt?.toISOString() ?? null,
+            updatedAt: event.annotation.updatedAt.toISOString(),
             handledByMembership: event.annotation.handledByMembership,
           } : null,
         })) : [],

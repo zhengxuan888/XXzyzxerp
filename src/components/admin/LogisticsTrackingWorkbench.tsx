@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { LogisticsQueueKey, LogisticsWorkbenchConfig } from "@/lib/logistics-workbench-config";
 
-type Annotation = { note: string | null; tags: string[]; isHandled: boolean; handledAt: string | null; handledByMembership?: { user?: { fullName: string | null; username: string } } | null };
+type Annotation = { note: string | null; tags: string[]; isHandled: boolean; handledAt: string | null; updatedAt: string; handledByMembership?: { user?: { fullName: string | null; username: string } } | null };
 type TrackingEvent = { id: string; occurredAt: string; eventType: string; statusMilestone: string | null; location: string | null; memo: string | null; annotation: Annotation | null };
 type TrackingRow = { id: string; trackingNo: string | null; carrier: string | null; status: string; urgency: "critical" | "high" | "normal"; urgencyLabel: string; priorityTag: string; dueStatus: string; canViewTrackingNo: boolean; canViewTimeline: boolean; canAnnotate: boolean; eventTotal: number; unhandledEventCount: number; queueSignals: string[]; followUpOwner: { id: string; user: { username: string; fullName: string | null } } | null; order: { id: string; orderNo: string; recipientName: string | null; recipientPhone: string | null; recipientEmail: string | null; customerWhatsapp: string | null; recipientCountryCode: string | null; codAmountLabel: string; customer: { name: string }; creatorUser: { username: string; fullName: string | null }; ownerMembership: { id: string; department: { id: string; name: string } | null; managerMembership: { id: string; user: { username: string; fullName: string | null } } | null }; items: Array<{ productName: string; quantity: number }> }; events: TrackingEvent[] };
 
@@ -291,6 +291,7 @@ function EventEditor({ shipmentId, event, canAnnotate, quickTags, allowBatchSele
   const [isHandled, setIsHandled] = useState(event.annotation?.isHandled ?? false);
   const [handledAt, setHandledAt] = useState(event.annotation?.handledAt ?? null);
   const [handledBy, setHandledBy] = useState(event.annotation?.handledByMembership?.user ?? null);
+  const [updatedAt, setUpdatedAt] = useState(event.annotation?.updatedAt ?? null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   async function save(nextHandled = isHandled) {
@@ -298,10 +299,11 @@ function EventEditor({ shipmentId, event, canAnnotate, quickTags, allowBatchSele
     if (!note.trim()) { setMessage("请先填写本条轨迹备注"); return; }
     setSaving(true); setMessage("");
     const tags = tagsText.split(/[,，、]/).map((tag) => tag.trim()).filter(Boolean);
-    const response = await fetch(`/api/mvp/shipments/${shipmentId}/events/${event.id}/annotation`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note, tags, isHandled: nextHandled }) });
+    const response = await fetch(`/api/mvp/shipments/${shipmentId}/events/${event.id}/annotation`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note, tags, isHandled: nextHandled, expectedUpdatedAt: updatedAt }) });
     const payload = await response.json().catch(() => null) as {
       data?: {
         handledAt: string | null;
+        updatedAt: string;
         handledByMembership?: { user?: { fullName: string | null; username: string } } | null;
       };
       error?: { message?: string };
@@ -309,6 +311,7 @@ function EventEditor({ shipmentId, event, canAnnotate, quickTags, allowBatchSele
     if (!response.ok) { setMessage(payload?.error?.message ?? "保存失败"); return; }
     setIsHandled(nextHandled);
     setHandledAt(payload?.data?.handledAt ?? null);
+    setUpdatedAt(payload?.data?.updatedAt ?? updatedAt);
     setHandledBy(payload?.data?.handledByMembership?.user ?? null);
     setMessage("已保存");
   }
