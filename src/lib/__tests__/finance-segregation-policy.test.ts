@@ -116,4 +116,27 @@ describe("finance segregation of duties policy", () => {
       policy,
     })).toEqual({ allowed: true });
   });
+
+  it("separates payment allocation from both making and approval by default", () => {
+    const policy = resolveFinanceSegregationPolicy(null);
+
+    expect(checkFinanceSegregation({
+      command: "payment.allocate",
+      actorUserId: "user-maker",
+      subject: maker,
+      policy,
+    })).toMatchObject({ allowed: false, code: "FINANCE_MAKER_ALLOCATOR_SEPARATION_REQUIRED" });
+    expect(checkFinanceSegregation({
+      command: "payment.allocate",
+      actorUserId: "user-approver",
+      subject: maker,
+      policy,
+    })).toMatchObject({ allowed: false, code: "FINANCE_APPROVER_ALLOCATOR_SEPARATION_REQUIRED" });
+    expect(checkFinanceSegregation({
+      command: "payment.allocate",
+      actorUserId: "user-allocator",
+      subject: maker,
+      policy,
+    })).toEqual({ allowed: true });
+  });
 });

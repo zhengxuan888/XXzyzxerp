@@ -50,6 +50,16 @@ const controls: Array<{ key: PolicyKey; title: string; description: string }> = 
     title: "对账：建议创建人与处理人不同",
     description: "防止同一员工创建后自行确认、拒绝或忽略对账建议。",
   },
+  {
+    key: "requirePaymentAllocatorDifferentFromCreator",
+    title: "付款：制单人与核销人不同",
+    description: "防止付款制单人自行把付款核销到结算单。",
+  },
+  {
+    key: "requirePaymentAllocatorDifferentFromApprover",
+    title: "付款：审批人与核销人不同",
+    description: "把付款审批与付款核销拆分为不同岗位。",
+  },
 ];
 
 function formatTime(value: string | null) {

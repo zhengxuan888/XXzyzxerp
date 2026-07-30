@@ -18,6 +18,8 @@ const policySelect = {
   requirePaymentPosterDifferentFromCreator: true,
   requirePaymentPosterDifferentFromApprover: true,
   requireReconciliationResolverDifferentFromCreator: true,
+  requirePaymentAllocatorDifferentFromCreator: true,
+  requirePaymentAllocatorDifferentFromApprover: true,
 } as const;
 
 export default async function FinanceControlsPage() {

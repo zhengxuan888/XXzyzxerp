@@ -1549,6 +1549,9 @@ model FinancePaymentAllocation {
   id                    String   @id @default(uuid())
   paymentId             String
   statementId           String
+  // A client-generated key makes an allocation request safe to retry without
+  // turning a network timeout into a second financial allocation.
+  idempotencyKey        String
   amountCents           BigInt
   createdByMembershipId String
   createdAt             DateTime @default(now())
@@ -1557,7 +1560,8 @@ model FinancePaymentAllocation {
   statement           FinanceStatement @relation(fields: [statementId], references: [id], onDelete: Restrict)
   createdByMembership Membership       @relation("FinancePaymentAllocationCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
 
-  @@unique([paymentId, statementId])
+  @@unique([paymentId, idempotencyKey])
+  @@index([paymentId, statementId, createdAt])
   @@index([statementId, createdAt])
   @@index([createdByMembershipId, createdAt])
 }
@@ -1581,6 +1585,8 @@ model FinanceControlPolicy {
   requirePaymentPosterDifferentFromCreator     Boolean  @default(true)
   requirePaymentPosterDifferentFromApprover    Boolean  @default(true)
   requireReconciliationResolverDifferentFromCreator Boolean @default(true)
+  requirePaymentAllocatorDifferentFromCreator  Boolean  @default(true)
+  requirePaymentAllocatorDifferentFromApprover Boolean  @default(true)
   updatedByMembershipId                        String?
   createdAt                                    DateTime @default(now())
   updatedAt                                    DateTime @updatedAt

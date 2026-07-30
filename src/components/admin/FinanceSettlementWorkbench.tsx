@@ -223,6 +223,7 @@ export default function FinanceSettlementWorkbench({ capabilities }: { capabilit
   const [lineForm, setLineForm] = useState({ amount: "", description: "", orderNo: "", trackingNo: "" });
   const [matchForm, setMatchForm] = useState({ referenceType: "ORDER", referenceNo: "", amount: "", reason: "" });
   const [allocationForm, setAllocationForm] = useState({ statementId: "", amount: "" });
+  const [allocationIdempotencyKey, setAllocationIdempotencyKey] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -455,10 +456,11 @@ export default function FinanceSettlementWorkbench({ capabilities }: { capabilit
     try {
       const amountCents = moneyFromDecimal(allocationForm.amount, String(allocationPayment.currencyScale));
       await request<unknown>(`/api/mvp/finance/payments/${allocationPayment.id}/allocations`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ statementId: allocationForm.statementId, amountCents }),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ statementId: allocationForm.statementId, amountCents, idempotencyKey: allocationIdempotencyKey }),
       });
       setAllocationPayment(null);
       setAllocationForm({ statementId: "", amount: "" });
+      setAllocationIdempotencyKey("");
       setNotice("核销分配已保存。付款需要完成核销后才允许过账。");
       await load();
     } catch (allocationError) {
@@ -466,6 +468,12 @@ export default function FinanceSettlementWorkbench({ capabilities }: { capabilit
     } finally {
       setSaving(false);
     }
+  }
+
+  function openAllocation(payment: Payment) {
+    setAllocationPayment(payment);
+    setAllocationForm({ statementId: "", amount: "" });
+    setAllocationIdempotencyKey(crypto.randomUUID());
   }
 
   const availableApprovedStatements = statements.filter((row) => row.status === "APPROVED");
@@ -476,7 +484,7 @@ export default function FinanceSettlementWorkbench({ capabilities }: { capabilit
       ...(selectedStatement.status === "EXCEPTION" && capabilities.canResolveReconciliation ? [["resume_reconciliation", "恢复对账"]] : []),
       ...(selectedStatement.status === "RECONCILING" && capabilities.canApproveStatements ? [["approve", "审批通过"]] : []),
       ...(selectedStatement.status === "APPROVED" && capabilities.canPostStatements ? [["post", "确认过账"]] : []),
-      ...(selectedStatement.status !== "VOIDED" && capabilities.canVoidStatements ? [["void", "作废"]] : []),
+      ...(["DRAFT", "RECONCILING", "EXCEPTION", "APPROVED"].includes(selectedStatement.status) && capabilities.canVoidStatements ? [["void", "作废"]] : []),
     ] as Array<[string, string]>
     : [];
 
@@ -546,7 +554,16 @@ export default function FinanceSettlementWorkbench({ capabilities }: { capabilit
       )}
 
       {activeTab === "payments" && capabilities.canReadPayments && (
-        <section className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div><h2 className="font-bold text-slate-950">付款与核销</h2><p className="mt-1 text-sm text-slate-500">付款必须先审批、按已批准结算单核销，再确认过账；不能静默删除历史。</p></div>{capabilities.canCreatePayments && <Button type="button" onClick={() => setShowPaymentForm(true)} disabled={!capabilities.canReadCounterparties}><Plus size={16} />新建付款草稿</Button>}</div><section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="overflow-x-auto"><table className="min-w-[920px] w-full text-left text-sm"><thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-4 py-3">付款单</th><th className="px-4 py-3">对象 / 方向</th><th className="px-4 py-3">金额</th><th className="px-4 py-3">状态</th><th className="px-4 py-3 text-right">操作</th></tr></thead><tbody className="divide-y divide-slate-100">{loading ? <tr><td colSpan={5} className="px-4 py-14 text-center text-slate-400">正在加载…</td></tr> : !payments.length ? <tr><td colSpan={5} className="px-4 py-14 text-center text-slate-400">当前授权范围内暂无付款记录。</td></tr> : payments.map((payment) => <tr key={payment.id}><td className="px-4 py-3"><p className="font-semibold text-slate-950">{payment.paymentNo}</p><p className="text-xs text-slate-400">{new Date(payment.createdAt).toLocaleString("zh-CN")}</p></td><td className="px-4 py-3"><p className="font-medium text-slate-800">{payment.counterparty?.name ?? "—"}</p><p className="text-xs text-slate-400">{payment.direction === "PAYABLE" ? "付款" : "收款"}</p></td><td className="px-4 py-3 font-semibold text-slate-900">{payment.amountLabel}</td><td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${statusClass(payment.status)}`}>{paymentStatusLabel[payment.status] ?? payment.status}</span></td><td className="px-4 py-3 text-right"><div className="flex justify-end gap-2">{payment.status === "DRAFT" && capabilities.canApprovePayments && <Button size="sm" type="button" variant="outline" onClick={() => void runPaymentAction(payment, "approve")}>审批</Button>}{payment.status === "APPROVED" && capabilities.canAllocatePayments && <Button size="sm" type="button" variant="outline" onClick={() => { setAllocationPayment(payment); setAllocationForm({ statementId: "", amount: "" }); }}>核销</Button>}{payment.status === "APPROVED" && capabilities.canPostPayments && <Button size="sm" type="button" onClick={() => void runPaymentAction(payment, "post")}>过账</Button>}{payment.status !== "VOIDED" && capabilities.canVoidPayments && <Button size="sm" type="button" variant="ghost" className="text-rose-700" onClick={() => void runPaymentAction(payment, "void")}>作废</Button>}</div></td></tr>)}</tbody></table></div><Pager meta={paymentMeta} onPage={setPaymentPage} /></section></section>
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div><h2 className="font-bold text-slate-950">付款与核销</h2><p className="mt-1 text-sm text-slate-500">付款必须先审批、按已批准结算单核销，再确认过账；核销可安全重试，不能静默删除历史。</p></div>
+            {capabilities.canCreatePayments && <Button type="button" onClick={() => setShowPaymentForm(true)} disabled={!capabilities.canReadCounterparties}><Plus size={16} />新建付款草稿</Button>}
+          </div>
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="overflow-x-auto"><table className="min-w-[920px] w-full text-left text-sm"><thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-4 py-3">付款单</th><th className="px-4 py-3">对象 / 方向</th><th className="px-4 py-3">金额</th><th className="px-4 py-3">状态</th><th className="px-4 py-3 text-right">操作</th></tr></thead><tbody className="divide-y divide-slate-100">{loading ? <tr><td colSpan={5} className="px-4 py-14 text-center text-slate-400">正在加载…</td></tr> : !payments.length ? <tr><td colSpan={5} className="px-4 py-14 text-center text-slate-400">当前授权范围内暂无付款记录。</td></tr> : payments.map((payment) => <tr key={payment.id}><td className="px-4 py-3"><p className="font-semibold text-slate-950">{payment.paymentNo}</p><p className="text-xs text-slate-400">{new Date(payment.createdAt).toLocaleString("zh-CN")}</p></td><td className="px-4 py-3"><p className="font-medium text-slate-800">{payment.counterparty?.name ?? "—"}</p><p className="text-xs text-slate-400">{payment.direction === "PAYABLE" ? "付款" : "收款"}</p></td><td className="px-4 py-3 font-semibold text-slate-900">{payment.amountLabel}</td><td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${statusClass(payment.status)}`}>{paymentStatusLabel[payment.status] ?? payment.status}</span></td><td className="px-4 py-3 text-right"><div className="flex justify-end gap-2">{payment.status === "DRAFT" && capabilities.canApprovePayments && <Button size="sm" type="button" variant="outline" onClick={() => void runPaymentAction(payment, "approve")}>审批</Button>}{payment.status === "APPROVED" && capabilities.canAllocatePayments && <Button size="sm" type="button" variant="outline" onClick={() => openAllocation(payment)}>核销</Button>}{payment.status === "APPROVED" && capabilities.canPostPayments && <Button size="sm" type="button" onClick={() => void runPaymentAction(payment, "post")}>过账</Button>}{["DRAFT", "APPROVED"].includes(payment.status) && capabilities.canVoidPayments && <Button size="sm" type="button" variant="ghost" className="text-rose-700" onClick={() => void runPaymentAction(payment, "void")}>作废</Button>}</div></td></tr>)}</tbody></table></div>
+            <Pager meta={paymentMeta} onPage={setPaymentPage} />
+          </section>
+        </section>
       )}
 
       {showCounterpartyForm && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4"><form onSubmit={submitCounterparty} className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-xs font-semibold text-amber-700">配置化主数据</p><h2 className="mt-1 text-xl font-bold text-slate-950">新建结算对象</h2></div><Button type="button" variant="ghost" size="icon" aria-label="关闭" onClick={() => setShowCounterpartyForm(false)}><X size={18} /></Button></div><div className="mt-5 grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium">编码<input required value={counterpartyForm.code} onChange={(event) => setCounterpartyForm({ ...counterpartyForm, code: event.target.value.toUpperCase() })} placeholder="例如 HONGYA" className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3 font-mono" /></label><label className="text-sm font-medium">名称<input required value={counterpartyForm.name} onChange={(event) => setCounterpartyForm({ ...counterpartyForm, name: event.target.value })} placeholder="例如 鸿亚物流" className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3" /></label><label className="text-sm font-medium sm:col-span-2">类型<select value={counterpartyForm.type} onChange={(event) => setCounterpartyForm({ ...counterpartyForm, type: event.target.value })} className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3"><option value="LOGISTICS_PROVIDER">物流服务商</option><option value="WAREHOUSE_PROVIDER">仓储服务商</option><option value="SERVICE_PROVIDER">其他服务商</option><option value="OTHER">其他</option></select></label></div><Button type="submit" disabled={saving} className="mt-5 w-full"><Building2 size={16} />{saving ? "保存中…" : "保存结算对象"}</Button></form></div>}

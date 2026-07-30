@@ -6,6 +6,8 @@ export const financeSegregationPolicyKeys = [
   "requirePaymentPosterDifferentFromCreator",
   "requirePaymentPosterDifferentFromApprover",
   "requireReconciliationResolverDifferentFromCreator",
+  "requirePaymentAllocatorDifferentFromCreator",
+  "requirePaymentAllocatorDifferentFromApprover",
 ] as const;
 
 export type FinanceSegregationPolicyKey = (typeof financeSegregationPolicyKeys)[number];
@@ -25,6 +27,8 @@ export const strictFinanceSegregationPolicy: Readonly<FinanceSegregationPolicy> 
   requirePaymentPosterDifferentFromCreator: true,
   requirePaymentPosterDifferentFromApprover: true,
   requireReconciliationResolverDifferentFromCreator: true,
+  requirePaymentAllocatorDifferentFromCreator: true,
+  requirePaymentAllocatorDifferentFromApprover: true,
 });
 
 export class FinanceSegregationPolicyInputError extends Error {
@@ -96,7 +100,8 @@ export type FinanceSegregationCommand =
   | "statement.approve"
   | "statement.post"
   | "payment.approve"
-  | "payment.post";
+  | "payment.post"
+  | "payment.allocate";
 
 export type FinanceSegregationSubject = {
   createdByUserId: string;
@@ -153,6 +158,7 @@ export function checkFinanceSegregation({
   const isStatement = command.startsWith("statement.");
   const approving = command.endsWith(".approve");
   const posting = command.endsWith(".post");
+  const allocating = command === "payment.allocate";
 
   if (approving) {
     const required = isStatement
@@ -194,6 +200,30 @@ export function checkFinanceSegregation({
         allowed: false,
         code: "FINANCE_APPROVER_POSTER_SEPARATION_REQUIRED",
         message: "当前财务内控要求审批人与过账人必须不同。",
+      };
+    }
+  }
+
+  if (allocating) {
+    if (policy.requirePaymentAllocatorDifferentFromCreator && sameUser(actorUserId, subject.createdByUserId)) {
+      return {
+        allowed: false,
+        code: "FINANCE_MAKER_ALLOCATOR_SEPARATION_REQUIRED",
+        message: "当前财务内控要求付款制单人与核销人必须不同。",
+      };
+    }
+    if (policy.requirePaymentAllocatorDifferentFromApprover && !subject.approvedByUserId) {
+      return {
+        allowed: false,
+        code: "FINANCE_APPROVER_REQUIRED",
+        message: "缺少付款审批人记录，不能执行付款核销。",
+      };
+    }
+    if (policy.requirePaymentAllocatorDifferentFromApprover && sameUser(actorUserId, subject.approvedByUserId)) {
+      return {
+        allowed: false,
+        code: "FINANCE_APPROVER_ALLOCATOR_SEPARATION_REQUIRED",
+        message: "当前财务内控要求付款审批人与核销人必须不同。",
       };
     }
   }

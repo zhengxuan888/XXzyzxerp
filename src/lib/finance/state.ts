@@ -24,15 +24,16 @@ const statementTransitions: Record<FinanceStatementCommand, Partial<Record<Finan
   resume_reconciliation: { EXCEPTION: "RECONCILING" },
   approve: { RECONCILING: "APPROVED" },
   post: { APPROVED: "POSTED" },
-  // A posted statement is not deleted or overwritten. It may be voided only
-  // through an explicit auditable command with a mandatory reason.
-  void: { DRAFT: "VOIDED", RECONCILING: "VOIDED", EXCEPTION: "VOIDED", APPROVED: "VOIDED", POSTED: "VOIDED" },
+  // A posted statement is a financial fact. It must be corrected by the
+  // controlled reversal workflow, never overwritten through direct voiding.
+  void: { DRAFT: "VOIDED", RECONCILING: "VOIDED", EXCEPTION: "VOIDED", APPROVED: "VOIDED" },
 };
 
 const paymentTransitions: Record<FinancePaymentCommand, Partial<Record<FinancePaymentState, FinancePaymentState>>> = {
   approve: { DRAFT: "APPROVED" },
   post: { APPROVED: "POSTED" },
-  void: { DRAFT: "VOIDED", APPROVED: "VOIDED", POSTED: "VOIDED" },
+  // Same invariant for posted payments: no direct mutation of booked facts.
+  void: { DRAFT: "VOIDED", APPROVED: "VOIDED" },
 };
 
 export function nextStatementState(current: FinanceStatementState, command: FinanceStatementCommand) {

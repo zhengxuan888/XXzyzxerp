@@ -5,6 +5,7 @@ import {
   FinanceStatementStatus,
   Prisma,
 } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 
 import { writeAuditLog } from "@/lib/audit";
 import { createFinanceAccessPlan, type FinanceAccessMembership, type FinanceAccessTarget } from "@/lib/finance/access";
@@ -139,6 +140,36 @@ function requiredText(value: unknown, field: string, max = 120) {
   const normalized = value.trim();
   if (!normalized || normalized.length > max) throw new FinanceServiceError("INVALID_INPUT", `${field} 长度不正确。`, 400);
   return normalized;
+}
+
+function allocationIdempotencyKey(value: unknown) {
+  const key = requiredText(value, "核销幂等键", 128);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/.test(key)) {
+    throw new FinanceServiceError("INVALID_ALLOCATION_IDEMPOTENCY_KEY", "核销幂等键格式不正确。", 400);
+  }
+  return key;
+}
+
+function prismaErrorCode(error: unknown) {
+  if (!error || typeof error !== "object" || !("code" in error)) return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : null;
+}
+
+async function withAllocationSerializationRetry<T>(operation: () => Promise<T>) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (prismaErrorCode(error) !== "P2034" || attempt === 1) {
+        if (prismaErrorCode(error) === "P2034") {
+          throw new FinanceServiceError("ALLOCATION_CONCURRENT_MODIFICATION", "另一笔核销正在更新可用余额，请刷新后重试。", 409);
+        }
+        throw error;
+      }
+    }
+  }
+  throw new FinanceServiceError("ALLOCATION_CONCURRENT_MODIFICATION", "核销并发冲突，请刷新后重试。", 409);
 }
 
 function optionalText(value: unknown, max = 2000) {
@@ -985,10 +1016,11 @@ export async function transitionPayment(actor: FinanceActor, paymentId: string, 
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
-export async function allocatePayment(actor: FinanceActor, paymentId: string, input: { statementId?: unknown; amountCents?: unknown }) {
+export async function allocatePayment(actor: FinanceActor, paymentId: string, input: { statementId?: unknown; amountCents?: unknown; idempotencyKey?: unknown }) {
   const payment = await findScopedPayment(actor, paymentId, "finance.payment.allocate");
   const statementId = requiredText(input.statementId, "结算单", 80);
   const amountCents = parseMinorAmount(input.amountCents, "amountCents");
+  const idempotencyKey = allocationIdempotencyKey(input.idempotencyKey);
   const statement = await findScopedStatement(actor, statementId, "finance.payment.allocate");
   await requireScopedAction(actor, "finance.payment.allocate", targetForPayment(payment));
   if (payment.status !== FinancePaymentStatus.APPROVED) throw new FinanceServiceError("PAYMENT_NOT_APPROVED", "只有已批准付款记录可以核销。", 409);
@@ -998,24 +1030,72 @@ export async function allocatePayment(actor: FinanceActor, paymentId: string, in
     throw new FinanceServiceError("CURRENCY_MISMATCH", "付款记录与结算单的币种或最小货币单位不一致。", 400);
   }
 
-  return prisma.$transaction(async (tx) => {
+  return withAllocationSerializationRetry(() => prisma.$transaction(async (tx) => {
     const currentPayment = await tx.financePayment.findFirst({
       where: { id: payment.id, businessUnitId: actor.membership.businessUnitId, status: FinancePaymentStatus.APPROVED },
-      include: { allocations: true },
+      include: {
+        allocations: true,
+        createdByMembership: { select: { userId: true } },
+        approvedByMembership: { select: { userId: true } },
+      },
     });
     const currentStatement = await tx.financeStatement.findFirst({
       where: { id: statement.id, businessUnitId: actor.membership.businessUnitId, status: FinanceStatementStatus.APPROVED },
       include: { paymentAllocations: { include: { payment: { select: { status: true } } } } },
     });
     if (!currentPayment || !currentStatement) throw new FinanceServiceError("ALLOCATION_STALE", "付款或结算单状态已变化，请刷新后重试。", 409);
+    const policy = resolveFinanceSegregationPolicy(await tx.financeControlPolicy.findUnique({
+      where: { businessUnitId: currentPayment.businessUnitId },
+      select: {
+        requirePaymentAllocatorDifferentFromCreator: true,
+        requirePaymentAllocatorDifferentFromApprover: true,
+      },
+    }));
+    const segregation = checkFinanceSegregation({
+      command: "payment.allocate",
+      actorUserId: actor.userId,
+      subject: {
+        createdByUserId: currentPayment.createdByMembership.userId,
+        approvedByUserId: currentPayment.approvedByMembership?.userId ?? null,
+      },
+      policy,
+    });
+    if (!segregation.allowed) throw new FinanceServiceError(segregation.code, segregation.message, 409);
+    const existing = await tx.financePaymentAllocation.findUnique({
+      where: { paymentId_idempotencyKey: { paymentId: currentPayment.id, idempotencyKey } },
+      include: { statement: { select: { id: true, statementNo: true, currency: true, currencyScale: true } } },
+    });
+    if (existing) {
+      if (existing.statementId !== currentStatement.id || existing.amountCents !== amountCents) {
+        throw new FinanceServiceError("ALLOCATION_IDEMPOTENCY_KEY_REUSED", "该核销幂等键已用于另一笔核销，不能复用。", 409);
+      }
+      return { allocation: existing, created: false };
+    }
     const usedByPayment = currentPayment.allocations.reduce((sum, allocation) => sum + allocation.amountCents, BigInt(0));
     const usedByStatement = currentStatement.paymentAllocations
       .filter((allocation) => allocation.payment.status !== FinancePaymentStatus.VOIDED)
       .reduce((sum, allocation) => sum + allocation.amountCents, BigInt(0));
     if (usedByPayment + amountCents > currentPayment.amountCents) throw new FinanceServiceError("PAYMENT_OVER_ALLOCATED", "核销金额超过付款记录可用余额。", 409);
     if (usedByStatement + amountCents > currentStatement.totalAmountCents) throw new FinanceServiceError("STATEMENT_OVER_ALLOCATED", "核销金额超过结算单可用余额。", 409);
-    const allocation = await tx.financePaymentAllocation.create({
-      data: { paymentId: currentPayment.id, statementId: currentStatement.id, amountCents, createdByMembershipId: actor.membership.id },
+    const allocationId = randomUUID();
+    const inserted = await tx.$executeRaw`
+      INSERT INTO "FinancePaymentAllocation" ("id", "paymentId", "statementId", "idempotencyKey", "amountCents", "createdByMembershipId")
+      VALUES (${allocationId}, ${currentPayment.id}, ${currentStatement.id}, ${idempotencyKey}, ${amountCents}, ${actor.membership.id})
+      ON CONFLICT ("paymentId", "idempotencyKey") DO NOTHING
+    `;
+    if (inserted !== 1) {
+      const replay = await tx.financePaymentAllocation.findUnique({
+        where: { paymentId_idempotencyKey: { paymentId: currentPayment.id, idempotencyKey } },
+        include: { statement: { select: { id: true, statementNo: true, currency: true, currencyScale: true } } },
+      });
+      if (!replay) throw new FinanceServiceError("ALLOCATION_IDEMPOTENCY_RETRY", "核销请求正在处理，请稍后刷新确认。", 409);
+      if (replay.statementId !== currentStatement.id || replay.amountCents !== amountCents) {
+        throw new FinanceServiceError("ALLOCATION_IDEMPOTENCY_KEY_REUSED", "该核销幂等键已用于另一笔核销，不能复用。", 409);
+      }
+      return { allocation: replay, created: false };
+    }
+    const allocation = await tx.financePaymentAllocation.findUniqueOrThrow({
+      where: { id: allocationId },
       include: { statement: { select: { id: true, statementNo: true, currency: true, currencyScale: true } } },
     });
     await writeAuditLog({
@@ -1028,8 +1108,13 @@ export async function allocatePayment(actor: FinanceActor, paymentId: string, in
       action: "finance.payment.allocate",
       targetType: "finance_payment_allocation",
       targetId: allocation.id,
-      details: { paymentId: currentPayment.id, statementId: currentStatement.id, amountCents: allocation.amountCents.toString() },
+      details: {
+        paymentId: currentPayment.id,
+        statementId: currentStatement.id,
+        amountCents: allocation.amountCents.toString(),
+        idempotencyKey,
+      },
     }, tx);
-    return allocation;
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    return { allocation, created: true };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 }

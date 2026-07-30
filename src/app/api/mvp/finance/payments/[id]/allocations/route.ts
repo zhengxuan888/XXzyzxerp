@@ -15,7 +15,8 @@ export async function POST(request: NextRequest, props: Props) {
 
   try {
     const body = bodyObject(await request.json().catch(() => null));
-    const row = await allocatePayment({ userId: auth.userId, membership: auth.membership }, id, body);
+    const result = await allocatePayment({ userId: auth.userId, membership: auth.membership }, id, body);
+    const { allocation: row } = result;
     return ok({
       id: row.id,
       paymentId: row.paymentId,
@@ -24,7 +25,8 @@ export async function POST(request: NextRequest, props: Props) {
       amountCents: serializeMinorAmount(row.amountCents),
       createdByMembershipId: row.createdByMembershipId,
       createdAt: row.createdAt.toISOString(),
-    }, { status: 201 });
+      replayed: !result.created,
+    }, { status: result.created ? 201 : 200 });
   } catch (error) {
     return financeErrorResponse(error);
   }

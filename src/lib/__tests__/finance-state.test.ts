@@ -15,12 +15,12 @@ describe("finance statement state machine", () => {
     expect(nextStatementState("EXCEPTION", "resume_reconciliation")).toBe("RECONCILING");
     expect(nextStatementState("RECONCILING", "approve")).toBe("APPROVED");
     expect(nextStatementState("APPROVED", "post")).toBe("POSTED");
-    expect(nextStatementState("POSTED", "void")).toBe("VOIDED");
   });
 
   it("rejects skipped and terminal statement transitions", () => {
     expect(() => nextStatementState("DRAFT", "approve")).toThrow(FinanceStateError);
     expect(() => nextStatementState("RECONCILING", "post")).toThrow(FinanceStateError);
+    expect(() => nextStatementState("POSTED", "void")).toThrow(FinanceStateError);
     expect(() => nextStatementState("VOIDED", "void")).toThrow(FinanceStateError);
   });
 
@@ -36,12 +36,12 @@ describe("finance payment state machine", () => {
   it("permits approval, posting, and explicit voiding", () => {
     expect(nextPaymentState("DRAFT", "approve")).toBe("APPROVED");
     expect(nextPaymentState("APPROVED", "post")).toBe("POSTED");
-    expect(nextPaymentState("POSTED", "void")).toBe("VOIDED");
   });
 
   it("rejects skipped and terminal payment transitions", () => {
     expect(() => nextPaymentState("DRAFT", "post")).toThrow(FinanceStateError);
     expect(() => nextPaymentState("APPROVED", "approve")).toThrow(FinanceStateError);
+    expect(() => nextPaymentState("POSTED", "void")).toThrow(FinanceStateError);
     expect(() => nextPaymentState("VOIDED", "approve")).toThrow(FinanceStateError);
   });
 
