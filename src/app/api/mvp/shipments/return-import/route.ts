@@ -208,6 +208,25 @@ export async function POST(request: NextRequest) {
         });
         results.push({ orderId: order.id, shipmentId: shipment.id, trackingNo: row.trackingNo });
       }
+
+      await writeAuditLog({
+        actorUserId: auth.userId,
+        actorMembershipId: auth.membership.id,
+        module: "logistics.return_import",
+        action: "shipment.tracking.batch_import",
+        targetType: "shipment_import",
+        targetId: crypto.randomUUID(),
+        businessUnitId: auth.membership.businessUnitId,
+        roleId: auth.membership.roleId,
+        details: {
+          fileName: file.name,
+          totalRows: preview.length,
+          importedRows: results.length,
+          rejectedRows: preview.filter((row) => row.result === "REJECTED").length,
+          orderIds: results.map((row) => row.orderId),
+        },
+      }, tx);
+
       return results;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   } catch (error) {
@@ -223,24 +242,6 @@ export async function POST(request: NextRequest) {
     }
     throw error;
   }
-
-  await writeAuditLog({
-    actorUserId: auth.userId,
-    actorMembershipId: auth.membership.id,
-    module: "logistics.return_import",
-    action: "shipment.tracking.batch_import",
-    targetType: "shipment_import",
-    targetId: crypto.randomUUID(),
-    businessUnitId: auth.membership.businessUnitId,
-    roleId: auth.membership.roleId,
-    details: {
-      fileName: file.name,
-      totalRows: preview.length,
-      importedRows: imported.length,
-      rejectedRows: preview.filter((row) => row.result === "REJECTED").length,
-      orderIds: imported.map((row) => row.orderId),
-    } satisfies Prisma.InputJsonObject,
-  });
 
   return ok({ imported, rows: preview, summary: { total: preview.length, imported: imported.length } });
 }

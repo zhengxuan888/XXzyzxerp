@@ -140,50 +140,72 @@ export async function POST(request: NextRequest) {
   const memo = typeof body.memo === "string" ? body.memo.trim().slice(0, 1000) : "";
   let row;
   try {
-    row = existingPending
-      ? await prisma.shipment.update({
-        where: { id: existingPending.id, status: "PENDING" },
-        data: {
-          carrier,
-          trackingNo,
-          memo: memo || null,
-          events: {
-            create: [{
-              eventType: "TRACKING_NUMBER_ASSIGNED",
-              statusMilestone: "PENDING",
-              source: "MANUAL",
-              externalEventKey: `manual-tracking:${existingPending.id}:${trackingNo}`,
-              memo: memo || "手工回填物流单号，尚未确认发货。",
-              actorMembershipId: auth.membership.id,
-            }],
+    row = await prisma.$transaction(async (tx) => {
+      const saved = existingPending
+        ? await tx.shipment.update({
+          where: { id: existingPending.id, status: "PENDING" },
+          data: {
+            carrier,
+            trackingNo,
+            memo: memo || null,
+            events: {
+              create: [{
+                eventType: "TRACKING_NUMBER_ASSIGNED",
+                statusMilestone: "PENDING",
+                source: "MANUAL",
+                externalEventKey: `manual-tracking:${existingPending.id}:${trackingNo}`,
+                memo: memo || "手工回填物流单号，尚未确认发货。",
+                actorMembershipId: auth.membership.id,
+              }],
+            },
           },
-        },
-        include: { order: { select: { orderNo: true } }, events: true },
-      })
-    : await prisma.shipment.create({
-        data: {
-          orderId: order.id,
-          legalEntityId: order.legalEntityId,
-          businessUnitId: order.businessUnitId,
-          siteId: auth.membership.siteId,
-          carrier,
-          trackingNo,
-          status: "PENDING",
-          memo: memo || null,
-          events: {
-            create: [{
-              eventType: "TRACKING_NUMBER_ASSIGNED",
-              statusMilestone: "PENDING",
-              source: "MANUAL",
-              memo: memo || "手工回填物流单号，尚未确认发货。",
-              actorMembershipId: auth.membership.id,
-            }],
+          include: { order: { select: { orderNo: true } }, events: true },
+        })
+        : await tx.shipment.create({
+          data: {
+            orderId: order.id,
+            legalEntityId: order.legalEntityId,
+            businessUnitId: order.businessUnitId,
+            siteId: auth.membership.siteId,
+            carrier,
+            trackingNo,
+            status: "PENDING",
+            memo: memo || null,
+            events: {
+              create: [{
+                eventType: "TRACKING_NUMBER_ASSIGNED",
+                statusMilestone: "PENDING",
+                source: "MANUAL",
+                memo: memo || "手工回填物流单号，尚未确认发货。",
+                actorMembershipId: auth.membership.id,
+              }],
+            },
           },
-        },
-        include: { order: { select: { orderNo: true } }, events: true },
+          include: { order: { select: { orderNo: true } }, events: true },
         });
+
+      await writeAuditLog({
+        actorUserId: auth.userId,
+        actorMembershipId: auth.membership.id,
+        module: "mvp.shipments",
+        action: existingPending ? "shipment.tracking.assign" : "shipment.create",
+        targetType: "shipment",
+        targetId: saved.id,
+        businessUnitId: saved.businessUnitId,
+        roleId: auth.membership.roleId,
+        details: {
+          orderId: order.id,
+          source: "MANUAL",
+          reusedPendingShipment: Boolean(existingPending),
+          previous: existingPending ? { carrier: existingPending.carrier, trackingNo: existingPending.trackingNo } : null,
+          next: { carrier: saved.carrier, trackingNo: saved.trackingNo },
+        },
+      }, tx);
+
+      return saved;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && ["P2002", "P2034"].includes(error.code)) {
       return fail(
         "SHIPMENT_CONCURRENTLY_CHANGED",
         "该订单或物流单号刚刚被其他人处理，请刷新后核对，系统未覆盖原数据。",
@@ -199,24 +221,6 @@ export async function POST(request: NextRequest) {
     }
     throw error;
   }
-
-  await writeAuditLog({
-    actorUserId: auth.userId,
-    actorMembershipId: auth.membership.id,
-    module: "mvp.shipments",
-    action: existingPending ? "shipment.tracking.assign" : "shipment.create",
-    targetType: "shipment",
-    targetId: row.id,
-    businessUnitId: row.businessUnitId,
-    roleId: auth.membership.roleId,
-    details: {
-      orderId: order.id,
-      source: "MANUAL",
-      reusedPendingShipment: Boolean(existingPending),
-      previous: existingPending ? { carrier: existingPending.carrier, trackingNo: existingPending.trackingNo } : null,
-      next: { carrier: row.carrier, trackingNo: row.trackingNo },
-    },
-  });
 
   return ok(row, { status: 201 });
 }
