@@ -23,6 +23,7 @@ export async function PUT(request: NextRequest, { params }: Props) {
     targetBusinessUnitId: order.businessUnitId,
     targetDepartmentId: order.departmentId,
     targetSiteId: order.siteId,
+    targetUserId: order.creatorUserId,
   });
   if (!permission.allowed) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   if (order.status !== "SUBMITTED") return NextResponse.json({ error: "ORDER_NOT_REVIEWABLE" }, { status: 409 });

@@ -155,3 +155,63 @@ test("销售只能读取自己的订单，业务负责人可以读取本板块�
   const afterSalesOrderPage = await page.request.get(`/admin/orders/${shippedOrder!.id}`);
   expect(await afterSalesOrderPage.text()).toContain("DEMO-TRACK-001");
 });
+
+test("订单动作按归属、角色和状态机拒绝越权", async ({ page }) => {
+  const login = async (username: string) => {
+    const response = await page.request.post("/api/auth/login", { data: { username, password } });
+    expect(response.ok(), `${username}: ${await response.text()}`).toBe(true);
+  };
+  const findOrder = async (orderNo: string) => {
+    const response = await page.request.get("/api/mvp/orders?page=1&pageSize=100");
+    expect(response.ok(), await response.text()).toBe(true);
+    const body = await response.json() as { data: Array<{ id: string; orderNo: string }> };
+    const order = body.data.find((item) => item.orderNo === orderNo);
+    expect(order, `找不到种子订单 ${orderNo}`).toBeTruthy();
+    return order!;
+  };
+  const emptyUpload = (targetType: string, targetId: string) => ({
+    multipart: { targetType, targetId },
+  });
+
+  await login("demo_manager");
+  const peerOrder = await findOrder("DEMO-PEER-ORDER-001");
+  const submittedOrder = await findOrder("DEMO-ORDER-002");
+  const waitingShipmentOrder = await findOrder("DEMO-ORDER-003");
+
+  await login("demo_sales");
+  const submitPeer = await page.request.post(`/api/mvp/orders/${peerOrder.id}/actions`, {
+    data: { action: "submit" },
+  });
+  expect(submitPeer.status()).toBe(403);
+  const salesReviewProof = await page.request.post(
+    "/api/mvp/attachments",
+    emptyUpload("ORDER_REVIEW", submittedOrder.id),
+  );
+  expect(salesReviewProof.status()).toBe(403);
+
+  await login("demo_reviewer");
+  const reviewClaim = await page.request.put(`/api/mvp/orders/${submittedOrder.id}/review-claim`, {
+    data: { action: "claim" },
+  });
+  expect(reviewClaim.ok(), await reviewClaim.text()).toBe(true);
+  const reviewerShip = await page.request.post(`/api/mvp/orders/${waitingShipmentOrder.id}/actions`, {
+    data: { action: "ship" },
+  });
+  expect(reviewerShip.status()).toBe(403);
+  const reviewerReviewProof = await page.request.post(
+    "/api/mvp/attachments",
+    emptyUpload("ORDER_REVIEW", submittedOrder.id),
+  );
+  expect(reviewerReviewProof.status()).toBe(400);
+
+  await login("demo_shipping");
+  const shipBeforeApproval = await page.request.post(`/api/mvp/orders/${submittedOrder.id}/actions`, {
+    data: { action: "ship" },
+  });
+  expect(shipBeforeApproval.status()).toBe(409);
+  const shippingReviewProof = await page.request.post(
+    "/api/mvp/attachments",
+    emptyUpload("ORDER_REVIEW", submittedOrder.id),
+  );
+  expect(shippingReviewProof.status()).toBe(403);
+});

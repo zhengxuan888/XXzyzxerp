@@ -22,6 +22,14 @@ const safeSelect = {
   uploadedByUser: { select: { fullName: true } },
 } as const;
 
+function targetActionKey(targetType: string, fallback: "attachment.read" | "attachment.create") {
+  if (fallback === "attachment.read") return fallback;
+  if (targetType === "ORDER") return "order.update";
+  if (targetType === "ORDER_REVIEW") return "order.review.proof.upload";
+  if (targetType === "SHIPMENT") return "order.ship";
+  return fallback;
+}
+
 async function authorizeTarget(request: NextRequest, actionKey: string, targetType: string, targetId: string) {
   const auth = await requireAuthContext(request);
   if (!auth) return { response: fail("UNAUTHENTICATED", "请先登录。", 401) };
@@ -30,9 +38,11 @@ async function authorizeTarget(request: NextRequest, actionKey: string, targetTy
   const decision = await checkPermission({
     userId: auth.userId,
     membershipId: auth.membership.id,
-    actionKey,
+    actionKey: targetActionKey(targetType, actionKey as "attachment.read" | "attachment.create"),
     targetBusinessUnitId: target.businessUnitId,
     targetDepartmentId: target.departmentId,
+    targetSiteId: target.siteId,
+    targetUserId: target.ownerUserId,
   });
   if (!decision.allowed) return { response: fail("FORBIDDEN", "没有附件操作权限。", 403, decision.reasons) };
   return { auth, target };
@@ -68,9 +78,11 @@ export async function POST(request: NextRequest) {
   const decision = await checkPermission({
     userId: auth.userId,
     membershipId: auth.membership.id,
-    actionKey: "attachment.create",
+    actionKey: targetActionKey(targetType, "attachment.create"),
     targetBusinessUnitId: target.businessUnitId,
     targetDepartmentId: target.departmentId,
+    targetSiteId: target.siteId,
+    targetUserId: target.ownerUserId,
   });
   if (!decision.allowed) return fail("FORBIDDEN", "没有附件操作权限。", 403, decision.reasons);
   const file = form?.get("file");
