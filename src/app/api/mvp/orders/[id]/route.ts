@@ -81,5 +81,25 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
   });
   if (!canRead) return NextResponse.json({ error: "FORBIDDEN", reasons: ["ORDER_READ_SCOPE_DENIED"] }, { status: 403 });
 
-  return NextResponse.json(row);
+  const safeShipments = await Promise.all(row.shipments.map(async (shipment) => {
+    const target = {
+      userId: auth.userId,
+      membershipId: auth.membership.id,
+      targetBusinessUnitId: row.businessUnitId,
+      targetDepartmentId: row.departmentId,
+      targetSiteId: shipment.siteId,
+      targetUserId: row.creatorUserId,
+    };
+    const [trackingNo, timeline] = await Promise.all([
+      checkPermission({ ...target, actionKey: "shipment.tracking_no.view" }),
+      checkPermission({ ...target, actionKey: "shipment.timeline.view" }),
+    ]);
+    return {
+      ...shipment,
+      trackingNo: trackingNo.allowed ? shipment.trackingNo : null,
+      events: timeline.allowed ? shipment.events : [],
+    };
+  }));
+
+  return NextResponse.json({ ...row, shipments: safeShipments });
 }

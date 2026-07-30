@@ -93,7 +93,23 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     }),
   ]);
 
-  const showTrackingNo = !(order.status === "SUBMITTED" || order.status === "WAITING_SHIPMENT");
+  const shipmentPermissions = new Map(
+    await Promise.all(order.shipments.map(async (shipment) => {
+      const target = {
+        userId: session.userId,
+        membershipId: membership.id,
+        targetBusinessUnitId: membership.businessUnitId,
+        targetDepartmentId: order.departmentId,
+        targetSiteId: shipment.siteId,
+        targetUserId: order.creatorUserId,
+      };
+      const [trackingNo, timeline] = await Promise.all([
+        checkPermission({ ...target, actionKey: "shipment.tracking_no.view" }),
+        checkPermission({ ...target, actionKey: "shipment.timeline.view" }),
+      ]);
+      return [shipment.id, { trackingNo: trackingNo.allowed, timeline: timeline.allowed }] as const;
+    })),
+  );
   const templateConfiguration = parseOrderTemplateConfiguration(order.orderTemplate?.configuration);
 
   return (
@@ -190,7 +206,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           targetId={shipment.id}
           canUpload={canCreateAttachments.allowed && canShip.allowed}
           canDelete={canDeleteAttachments.allowed && canShip.allowed}
-          title={`出货凭证 · ${shipment.carrier || "待填写物流商"} · ${shipment.trackingNo || "待回填运单号"}`}
+          title={`出货凭证 · ${shipment.carrier || "待填写物流商"} · ${shipmentPermissions.get(shipment.id)?.trackingNo ? shipment.trackingNo || "待回填运单号" : "物流单号受限"}`}
         />
       ))}
 
@@ -206,12 +222,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 className="flex flex-wrap items-center justify-between gap-2 rounded border border-gray-100 p-3"
               >
                 <span>
-                  {shipment.carrier || "未设置承运商"} / {showTrackingNo ? shipment.trackingNo || "-" : "待回填"}
+                  {shipment.carrier || "未设置承运商"} / {shipmentPermissions.get(shipment.id)?.trackingNo ? shipment.trackingNo || "-" : "物流单号受限"}
                 </span>
                 <span>{zh(shipment.status)}</span>
-                <Link className="text-blue-700 hover:underline" href={`/admin/shipments/${shipment.id}`}>
-                  查看物流
-                </Link>
+                {shipmentPermissions.get(shipment.id)?.timeline && (
+                  <Link className="text-blue-700 hover:underline" href={`/admin/shipments/${shipment.id}`}>
+                    查看物流
+                  </Link>
+                )}
               </li>
             ))}
           </ul>

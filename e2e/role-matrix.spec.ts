@@ -118,8 +118,9 @@ test("销售只能读取自己的订单，业务负责人可以读取本板块�
   await login("demo_manager");
   const managerOrders = await readOrders();
   const peerOrder = managerOrders.data.find((order) => order.orderNo === "DEMO-PEER-ORDER-001");
+  const shippedOrder = managerOrders.data.find((order) => order.orderNo === "DEMO-ORDER-001");
   expect(peerOrder).toBeTruthy();
-  expect(managerOrders.data.some((order) => order.orderNo === "DEMO-ORDER-001")).toBe(true);
+  expect(shippedOrder).toBeTruthy();
 
   await login("demo_sales");
   const salesOrders = await readOrders();
@@ -128,9 +129,29 @@ test("销售只能读取自己的订单，业务负责人可以读取本板块�
   expect(salesOrders.data.some((order) => order.orderNo === "DEMO-PEER-ORDER-001")).toBe(false);
   const peerDetail = await page.request.get(`/api/mvp/orders/${peerOrder!.id}`);
   expect(peerDetail.status()).toBe(403);
+  const salesShipmentDetailResponse = await page.request.get(`/api/mvp/orders/${shippedOrder!.id}`);
+  expect(salesShipmentDetailResponse.ok(), await salesShipmentDetailResponse.text()).toBe(true);
+  const salesShipmentDetail = await salesShipmentDetailResponse.json() as {
+    shipments: Array<{ trackingNo: string | null; events: unknown[] }>;
+  };
+  expect(salesShipmentDetail.shipments.length).toBeGreaterThan(0);
+  expect(salesShipmentDetail.shipments.every((shipment) => shipment.trackingNo === null && shipment.events.length === 0)).toBe(true);
+  const salesOrderPage = await page.request.get(`/admin/orders/${shippedOrder!.id}`);
+  expect(await salesOrderPage.text()).not.toContain("DEMO-TRACK-001");
 
   await login("demo_sales_peer");
   const peerOrders = await readOrders();
   expect(peerOrders.data.some((order) => order.orderNo === "DEMO-PEER-ORDER-001")).toBe(true);
   expect(peerOrders.data.some((order) => order.orderNo === "DEMO-ORDER-001")).toBe(false);
+
+  await login("demo_after_sales");
+  const afterSalesDetailResponse = await page.request.get(`/api/mvp/orders/${shippedOrder!.id}`);
+  expect(afterSalesDetailResponse.ok(), await afterSalesDetailResponse.text()).toBe(true);
+  const afterSalesDetail = await afterSalesDetailResponse.json() as {
+    shipments: Array<{ trackingNo: string | null; events: unknown[] }>;
+  };
+  expect(afterSalesDetail.shipments.some((shipment) => shipment.trackingNo === "DEMO-TRACK-001")).toBe(true);
+  expect(afterSalesDetail.shipments.some((shipment) => shipment.events.length > 0)).toBe(true);
+  const afterSalesOrderPage = await page.request.get(`/admin/orders/${shippedOrder!.id}`);
+  expect(await afterSalesOrderPage.text()).toContain("DEMO-TRACK-001");
 });
