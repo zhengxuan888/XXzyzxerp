@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import type { LogisticsWorkbenchConfig } from "@/lib/logistics-workbench-config";
 import { prisma } from "@/lib/prisma";
 
@@ -18,9 +19,9 @@ export async function queueLogisticsNotification(input: {
   eventType: string;
   priority: LogisticsNotificationPriority;
   config: Pick<LogisticsWorkbenchConfig, "feishuNotificationsEnabled" | "feishuHighPriorityOnly">;
-}) {
+}, client: Pick<Prisma.TransactionClient, "shipmentEvent" | "notificationDelivery"> = prisma) {
   if (!shouldQueueLogisticsNotification(input.config, input.priority)) return { queued: false, reason: "DISABLED_OR_FILTERED" };
-  const shipmentEvent = await prisma.shipmentEvent.findUnique({
+  const shipmentEvent = await client.shipmentEvent.findUnique({
     where: {
       shipmentId_source_externalEventKey: {
         shipmentId: input.shipmentId,
@@ -31,7 +32,7 @@ export async function queueLogisticsNotification(input: {
     select: { id: true },
   });
   if (!shipmentEvent) return { queued: false, reason: "EVENT_NOT_FOUND" };
-  const result = await prisma.notificationDelivery.createMany({
+  const result = await client.notificationDelivery.createMany({
     data: [{
       businessUnitId: input.businessUnitId,
       shipmentId: input.shipmentId,

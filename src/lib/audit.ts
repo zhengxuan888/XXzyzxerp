@@ -2,8 +2,8 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export type AuditLogPayload = {
-  actorUserId: string;
-  actorMembershipId: string;
+  actorUserId?: string | null;
+  actorMembershipId?: string | null;
   module: string;
   action: string;
   targetType: string;
@@ -20,8 +20,8 @@ export async function writeAuditLog(payload: AuditLogPayload, client: AuditClien
   await client.auditLog.create({
     data: {
       action: payload.action,
-      actorUserId: payload.actorUserId,
-      actorMembershipId: payload.actorMembershipId,
+      actorUserId: payload.actorUserId ?? null,
+      actorMembershipId: payload.actorMembershipId ?? null,
       module: payload.module,
       targetType: payload.targetType,
       targetId: payload.targetId ?? null,
