@@ -20,21 +20,35 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
 
-  const canRead = await checkPermission({
-    userId: session.userId,
-    membershipId: membership.id,
-    actionKey: "shipment.read",
-    targetBusinessUnitId: membership.businessUnitId,
+  const shipmentTarget = await prisma.shipment.findFirst({
+    where: { id, businessUnitId: membership.businessUnitId },
+    select: {
+      businessUnitId: true,
+      siteId: true,
+      order: { select: { departmentId: true, creatorUserId: true } },
+    },
   });
-  if (!canRead.allowed) redirect("/admin");
+  if (!shipmentTarget) notFound();
 
-  const canUpload = await checkPermission({
+  const permissionTarget = {
     userId: session.userId,
     membershipId: membership.id,
-    actionKey: "shipment.create",
-    targetBusinessUnitId: membership.businessUnitId,
-    targetDepartmentId: membership.departmentId,
-  });
+    targetBusinessUnitId: shipmentTarget.businessUnitId,
+    targetDepartmentId: shipmentTarget.order.departmentId,
+    targetSiteId: shipmentTarget.siteId,
+    targetUserId: shipmentTarget.order.creatorUserId,
+  };
+  const [canRead, canViewTrackingNo, canViewTimeline, canTrack, canReadAttachments, canUpload, canDeleteAttachments] =
+    await Promise.all([
+      checkPermission({ ...permissionTarget, actionKey: "shipment.read" }),
+      checkPermission({ ...permissionTarget, actionKey: "shipment.tracking_no.view" }),
+      checkPermission({ ...permissionTarget, actionKey: "shipment.timeline.view" }),
+      checkPermission({ ...permissionTarget, actionKey: "shipment.track.update" }),
+      checkPermission({ ...permissionTarget, actionKey: "attachment.read" }),
+      checkPermission({ ...permissionTarget, actionKey: "attachment.create" }),
+      checkPermission({ ...permissionTarget, actionKey: "attachment.delete" }),
+    ]);
+  if (!canRead.allowed) redirect("/admin");
 
   const shipment = await prisma.shipment.findFirst({
     where: {
@@ -43,8 +57,12 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
     },
     include: {
       order: { select: { orderNo: true } },
-      events: { orderBy: { occurredAt: "desc" } },
+      events: {
+        where: canViewTimeline.allowed ? {} : { id: "__permission_denied__" },
+        orderBy: { occurredAt: "desc" },
+      },
       followUps: {
+        where: canViewTimeline.allowed ? {} : { id: "__permission_denied__" },
         orderBy: { createdAt: "desc" },
         include: { actorUser: { select: { fullName: true, username: true } },
         },
@@ -67,7 +85,9 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
               <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">{zh(shipment.status)}</span>
               <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">{zh(shipment.workStatus)}</span>
             </div>
-            <h1 className="mt-3 text-2xl font-bold tracking-tight text-slate-950">{shipment.trackingNo || "未设置物流单号"}</h1>
+            <h1 className="mt-3 text-2xl font-bold tracking-tight text-slate-950">
+              {canViewTrackingNo.allowed ? shipment.trackingNo || "未设置物流单号" : "物流单号受限"}
+            </h1>
             <p className="mt-1 text-sm text-slate-500">关联订单 {shipment.order.orderNo}</p>
           </div>
           <div className="grid gap-2 text-sm sm:grid-cols-2 lg:min-w-[420px]">
@@ -76,7 +96,7 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
             <Info icon={<PackageCheck size={16} />} label="跟进记录" value={`${shipment.followUps.length} 条`} />
             <Info icon={<CalendarClock size={16} />} label="下次跟进" value={shipment.nextFollowUpAt ? new Date(shipment.nextFollowUpAt).toLocaleString("zh-CN") : "未安排"} />
           </div>
-          <ShipmentSyncButton shipmentId={shipment.id} />
+          {canTrack.allowed && canViewTrackingNo.allowed && <ShipmentSyncButton shipmentId={shipment.id} />}
         </div>
       </header>
 
@@ -106,10 +126,24 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
             )}
           </ul>
         </div>
-        <ShipmentEventForm shipmentId={shipment.id} />
+        {canTrack.allowed && canViewTimeline.allowed ? (
+          <ShipmentEventForm shipmentId={shipment.id} />
+        ) : (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
+            当前岗位未配置物流轨迹维护权限。
+          </div>
+        )}
       </section>
 
-      <AttachmentPanel targetType="SHIPMENT" targetId={shipment.id} canUpload={canUpload.allowed} canDelete={canUpload.allowed} title="出货凭证与资料" />
+      {canReadAttachments.allowed && (
+        <AttachmentPanel
+          targetType="SHIPMENT"
+          targetId={shipment.id}
+          canUpload={canUpload.allowed}
+          canDelete={canDeleteAttachments.allowed}
+          title="出货凭证与资料"
+        />
+      )}
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -132,7 +166,13 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
             </ul>
           )}
         </div>
-        <LogisticsFollowUpForm shipmentId={shipment.id} />
+        {canTrack.allowed && canViewTimeline.allowed ? (
+          <LogisticsFollowUpForm shipmentId={shipment.id} />
+        ) : (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
+            当前岗位未配置售后跟进记录权限。
+          </div>
+        )}
       </section>
     </div>
   );
