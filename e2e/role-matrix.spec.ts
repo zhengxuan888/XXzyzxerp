@@ -226,6 +226,15 @@ test("订单动作按归属、角色和状态机拒绝越权", async ({ page }) 
   expect(reviewerReviewProof.status()).toBe(400);
 
   await login("demo_shipping");
+  const waitingShipmentDetail = await page.request.get(`/api/mvp/orders/${waitingShipmentOrder.id}`);
+  expect(waitingShipmentDetail.ok(), await waitingShipmentDetail.text()).toBe(true);
+  const waitingShipmentBody = await waitingShipmentDetail.json() as { shipments: Array<{ id: string }> };
+  expect(waitingShipmentBody.shipments.length).toBeGreaterThan(0);
+  const proofBeforeTracking = await page.request.post(
+    "/api/mvp/attachments",
+    emptyUpload("SHIPMENT", waitingShipmentBody.shipments[0].id),
+  );
+  expect(proofBeforeTracking.status()).toBe(409);
   const shipBeforeApproval = await page.request.post(`/api/mvp/orders/${submittedOrder.id}/actions`, {
     data: { action: "ship" },
   });

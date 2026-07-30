@@ -272,8 +272,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           key={shipment.id}
           targetType="SHIPMENT"
           targetId={shipment.id}
-          canUpload={canCreateAttachments.allowed && canShip.allowed}
-          canDelete={canDeleteAttachments.allowed && canShip.allowed}
+          canUpload={canCreateAttachments.allowed && canShip.allowed && Boolean(shipment.trackingNo)}
+          canDelete={canDeleteAttachments.allowed && canShip.allowed && Boolean(shipment.trackingNo)}
           title={`出货凭证 · ${shipment.carrier || "待填写物流商"} · ${shipmentPermissions.get(shipment.id)?.trackingNo ? shipment.trackingNo || "待回填运单号" : "物流单号受限"}`}
         />
       ))}

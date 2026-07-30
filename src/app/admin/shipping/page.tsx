@@ -71,6 +71,9 @@ export default async function ShippingWorkbenchPage() {
       <header>
         <h1 className="text-2xl font-bold text-slate-950">待发货工作台</h1>
         <p className="mt-1 text-sm text-slate-500">先回填真实物流单号，再上传出货凭证并确认发货；只有确认发货后才进入物流追踪。</p>
+        <p className="mt-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+          支持物流商回传表自动回填，也支持人工补录或更正承运商与物流单号；所有更改都会保留审计记录。
+        </p>
       </header>
       <section className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">核单通过待处理</p><p className="mt-1 text-2xl font-bold text-slate-950">{orders.length}</p></div>
@@ -83,7 +86,7 @@ export default async function ShippingWorkbenchPage() {
         apiBase="/api/mvp"
         resource="shipments"
         listTitle="待发货订单（回填运单号后上传凭证并确认发货）"
-        createLabel="手动回填运单号"
+        createLabel="手动补录 / 更正"
         detailPath="/admin/orders"
         canCreate
         canDelete={false}

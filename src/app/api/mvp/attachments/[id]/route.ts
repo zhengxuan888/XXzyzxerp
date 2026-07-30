@@ -42,6 +42,18 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ id
       return fail("FORBIDDEN", "只能由当前领取人删除自己上传的核单凭证。", 403);
     }
   }
+  if (attachment.targetType === "SHIPMENT") {
+    const shipment = await prisma.shipment.findFirst({
+      where: { id: attachment.targetId, businessUnitId: auth.membership.businessUnitId },
+      select: { status: true },
+    });
+    if (!shipment || shipment.status !== "PENDING") {
+      return fail("SHIPMENT_PROOF_LOCKED", "确认发货后的出货凭证已锁定，不能删除。", 409);
+    }
+    if (attachment.uploadedByMembershipId !== auth.membership.id) {
+      return fail("FORBIDDEN", "只能删除自己上传的出货凭证。", 403);
+    }
+  }
   await localDemoStorage.delete(attachment.storageKey);
   await prisma.attachment.update({ where: { id: attachment.id }, data: { status: "DELETED", deletedAt: new Date() } });
   await writeAuditLog({

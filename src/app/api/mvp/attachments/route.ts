@@ -97,6 +97,18 @@ export async function POST(request: NextRequest) {
       return fail("ORDER_REVIEW_CLAIM_REQUIRED", "请先领取该订单，且只能由领取人上传核单凭证。", 409);
     }
   }
+  if (targetType === "SHIPMENT") {
+    const shipment = await prisma.shipment.findFirst({
+      where: { id: targetId, businessUnitId: auth.membership.businessUnitId },
+      select: { status: true, trackingNo: true },
+    });
+    if (!shipment || shipment.status !== "PENDING") {
+      return fail("SHIPMENT_PROOF_LOCKED", "订单已确认发货，出货凭证已锁定。", 409);
+    }
+    if (!shipment.trackingNo) {
+      return fail("TRACKING_NO_REQUIRED", "请先回填真实物流单号，再上传出货凭证。", 409);
+    }
+  }
   const file = form?.get("file");
   if (!file || typeof file === "string" || typeof file.arrayBuffer !== "function") {
     return fail("FILE_REQUIRED", "请选择需要上传的文件。", 400);

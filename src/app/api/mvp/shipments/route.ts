@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
   const existingPending = await prisma.shipment.findFirst({
     where: { orderId: order.id, businessUnitId: order.businessUnitId, status: "PENDING" },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    select: { id: true },
+    select: { id: true, trackingNo: true, carrier: true },
   });
   const duplicate = await prisma.shipment.findFirst({
     where: {
@@ -190,7 +190,13 @@ export async function POST(request: NextRequest) {
     targetId: row.id,
     businessUnitId: row.businessUnitId,
     roleId: auth.membership.roleId,
-    details: { orderId: order.id, trackingNo: row.trackingNo, reusedPendingShipment: Boolean(existingPending) },
+    details: {
+      orderId: order.id,
+      source: "MANUAL",
+      reusedPendingShipment: Boolean(existingPending),
+      previous: existingPending ? { carrier: existingPending.carrier, trackingNo: existingPending.trackingNo } : null,
+      next: { carrier: row.carrier, trackingNo: row.trackingNo },
+    },
   });
 
   return ok(row, { status: 201 });
