@@ -7,6 +7,7 @@ const endpoints = [
   "/api/mvp/approvals",
   "/api/mvp/attendance",
   "/api/mvp/leave-requests",
+  "/api/mvp/shipments",
 ] as const;
 
 type PaginatedPayload = {
