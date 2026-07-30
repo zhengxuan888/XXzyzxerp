@@ -62,6 +62,7 @@ const actionDefs: SeedAction[] = [
 
   { key: "customer.read", name: "Customer read", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "customer.create", name: "Customer create", namespace: "erp", scope: "BUSINESS_UNIT" },
+  { key: "customer.import", name: "Customer import", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "customer.delete", name: "Customer delete", namespace: "erp", scope: "BUSINESS_UNIT" },
 
   { key: "product.read", name: "Product read", namespace: "erp", scope: "BUSINESS_UNIT" },
@@ -626,6 +627,7 @@ async function main() {
     "delegation.manage",
     "customer.read",
     "customer.create",
+    "customer.import",
     "customer.delete",
     "product.read",
     "product.create",
