@@ -99,6 +99,7 @@ const actionDefs: SeedAction[] = [
 
   { key: "expense.read", name: "Expense read", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "expense.create", name: "Expense create", namespace: "erp", scope: "BUSINESS_UNIT" },
+  { key: "expense.import", name: "Expense import", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "expense.delete", name: "Expense delete", namespace: "erp", scope: "BUSINESS_UNIT" },
 
   { key: "attendance.read", name: "Attendance read", namespace: "erp", scope: "DEPARTMENT" },
@@ -657,6 +658,7 @@ async function main() {
     "logistics_template.export",
     "expense.read",
     "expense.create",
+    "expense.import",
     "expense.delete",
     "attendance.read",
     "attendance.create",
