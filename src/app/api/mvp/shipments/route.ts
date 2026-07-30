@@ -44,21 +44,56 @@ export async function GET(request: NextRequest) {
         }
       : {}),
   };
-  const rows = await prisma.shipment.findMany({
+  // Authorize against lightweight candidates first. Applying skip/take before
+  // row-level permission checks can return short pages and an incorrect total;
+  // loading every event before pagination makes the workbench degrade as history grows.
+  const candidates = await prisma.shipment.findMany({
     where,
-    include: {
+    select: {
+      id: true,
+      businessUnitId: true,
+      siteId: true,
       order: {
         select: {
-          orderNo: true,
           departmentId: true,
           creatorUserId: true,
         },
       },
-      events: { orderBy: [{ occurredAt: "desc" }, { id: "desc" }] },
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
-  const scopedRows = (await Promise.all(rows.map(async (row) => {
+  const authorizedCandidates = (await Promise.all(candidates.map(async (row) => {
+    const read = await checkPermission({
+      userId: auth.userId,
+      membershipId: auth.membership.id,
+      actionKey: "shipment.read",
+      targetBusinessUnitId: row.businessUnitId,
+      targetDepartmentId: row.order.departmentId,
+      targetSiteId: row.siteId,
+      targetUserId: row.order.creatorUserId,
+    });
+    return read.allowed ? row : null;
+  }))).filter((row): row is NonNullable<typeof row> => Boolean(row));
+  const pageCandidates = authorizedCandidates.slice(pagination.skip, pagination.skip + pagination.take);
+  const pageIds = pageCandidates.map((row) => row.id);
+  const pageRows = pageIds.length
+    ? await prisma.shipment.findMany({
+        where: { id: { in: pageIds } },
+        include: {
+          order: {
+            select: {
+              orderNo: true,
+              departmentId: true,
+              creatorUserId: true,
+            },
+          },
+          events: { orderBy: [{ occurredAt: "desc" }, { id: "desc" }] },
+        },
+      })
+    : [];
+  const pageOrder = new Map(pageIds.map((id, index) => [id, index]));
+  pageRows.sort((a, b) => (pageOrder.get(a.id) ?? 0) - (pageOrder.get(b.id) ?? 0));
+  const scopedRows = await Promise.all(pageRows.map(async (row) => {
     const target = {
       userId: auth.userId,
       membershipId: auth.membership.id,
@@ -67,22 +102,20 @@ export async function GET(request: NextRequest) {
       targetSiteId: row.siteId,
       targetUserId: row.order.creatorUserId,
     };
-    const [read, trackingNo, timeline] = await Promise.all([
-      checkPermission({ ...target, actionKey: "shipment.read" }),
+    const [trackingNo, timeline] = await Promise.all([
       checkPermission({ ...target, actionKey: "shipment.tracking_no.view" }),
       checkPermission({ ...target, actionKey: "shipment.timeline.view" }),
     ]);
-    if (!read.allowed) return null;
     return {
       ...row,
       order: { orderNo: row.order.orderNo },
       trackingNo: trackingNo.allowed ? row.trackingNo : null,
       events: timeline.allowed ? row.events : [],
     };
-  }))).filter((row): row is NonNullable<typeof row> => Boolean(row));
+  }));
   return paginated(
-    scopedRows.slice(pagination.skip, pagination.skip + pagination.take),
-    scopedRows.length,
+    scopedRows,
+    authorizedCandidates.length,
     pagination,
   );
 }
