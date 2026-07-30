@@ -126,7 +126,6 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         </p>
         <p className="text-sm text-gray-600">
           状态：{zh(order.status)}
-          {order.status === "SUBMITTED" || order.status === "WAITING_SHIPMENT" ? "（运输中）" : ""}
         </p>
         <p className="text-sm text-gray-600">
           订单金额：{formatMoneyCents(order.productValueCents + order.shippingFeeCents, order.currency)} | COD应收：
