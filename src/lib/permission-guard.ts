@@ -65,6 +65,7 @@ export async function getMembershipAwareMenus(opts: {
     ).map((item) => item.actionKey),
   );
   const menus = await prisma.menu.findMany({ where: { isActive: true } });
+  const parentMenuIds = new Set(menus.flatMap((item) => item.parentId ? [item.parentId] : []));
 
   type MenuPermissionView = Omit<PermissionSource, "id"> & {
     id: string;
@@ -87,6 +88,7 @@ export async function getMembershipAwareMenus(opts: {
     )
     .filter(
       (item) =>
+        !parentMenuIds.has(item.id) &&
         (roleMenuIds.has(item.id) || Boolean(item.requiredActionKey && grantActions.has(item.requiredActionKey))) &&
         (!item.requiredActionKey || allowed.has(item.requiredActionKey)),
     )

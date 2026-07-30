@@ -57,4 +57,35 @@ describe("dynamic menu grant lifecycle", () => {
     const menus = await getMembershipAwareMenus({ membershipId: "m1", userId: "u1" });
     expect(menus.get(null)).toBeUndefined();
   });
+
+  it("does not expose an empty container menu", async () => {
+    menuFindMany.mockResolvedValue([
+      {
+        id: "group",
+        key: "group-logistics",
+        label: "物流与售后",
+        path: "/admin/shipping",
+        icon: null,
+        parentId: null,
+        sortOrder: 1,
+        isActive: true,
+        requiredActionKey: null,
+      },
+      {
+        id: "child",
+        key: "shipments",
+        label: "物流追踪",
+        path: "/admin/shipments",
+        icon: null,
+        parentId: "group",
+        sortOrder: 1,
+        isActive: true,
+        requiredActionKey: "shipment.read",
+      },
+    ]);
+    menuPermissionFindMany.mockResolvedValue([{ menuId: "group" }]);
+    accessGrantFindMany.mockResolvedValue([]);
+    const menus = await getMembershipAwareMenus({ membershipId: "m1", userId: "u1" });
+    expect(menus.get(null)).toBeUndefined();
+  });
 });

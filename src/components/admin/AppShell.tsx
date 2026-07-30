@@ -87,6 +87,10 @@ function flattenNavigation(items: MenuItem[]): SearchableMenu[] {
   );
 }
 
+function menuLabel(item: Pick<MenuItem, "label" | "path">) {
+  return item.path === "/admin" ? "工作台" : zh(item.label);
+}
+
 export default function AppShell({
   menuItems,
   brand = "择优臻选 ERP",
@@ -115,7 +119,7 @@ export default function AppShell({
     const keyword = searchKeyword.trim().toLocaleLowerCase("zh-CN");
     if (!keyword) return searchableMenus.slice(0, 8);
     return searchableMenus.filter((item) =>
-      `${zh(item.label)} ${item.groupLabel ? zh(item.groupLabel) : ""}`.toLocaleLowerCase("zh-CN").includes(keyword),
+      `${menuLabel(item)} ${item.groupLabel ? zh(item.groupLabel) : ""}`.toLocaleLowerCase("zh-CN").includes(keyword),
     ).slice(0, 10);
   }, [searchKeyword, searchableMenus]);
 
@@ -290,7 +294,7 @@ export default function AppShell({
                           {item.path === "/admin" ? <LayoutDashboard size={16} /> : <Search size={15} />}
                         </span>
                         <span className="min-w-0 flex-1">
-                          <strong className="block truncate text-sm text-slate-800">{zh(item.label)}</strong>
+                          <strong className="block truncate text-sm text-slate-800">{menuLabel(item)}</strong>
                           <span className="block truncate text-xs text-slate-400">{item.groupLabel ? `${zh(item.groupLabel)} · ` : ""}{item.path}</span>
                         </span>
                         <span className="text-xs text-slate-300">打开</span>
@@ -342,7 +346,7 @@ export default function AppShell({
                     <li key={item.id} className="pt-1">
                       <button
                         type="button"
-                        title={collapsed ? zh(item.label) : undefined}
+                        title={collapsed ? menuLabel(item) : undefined}
                         aria-expanded={expanded}
                         onClick={() => {
                           if (collapsed) {
@@ -359,7 +363,7 @@ export default function AppShell({
                         <span className="grid size-5 shrink-0 place-items-center"><MenuIcon name={item.icon} /></span>
                         {!collapsed && (
                           <>
-                            <span className="min-w-0 flex-1 truncate text-left">{zh(item.label)}</span>
+                            <span className="min-w-0 flex-1 truncate text-left">{menuLabel(item)}</span>
                             <ChevronRight size={15} className={`transition-transform ${expanded ? "rotate-90" : ""}`} />
                           </>
                         )}
@@ -393,7 +397,7 @@ export default function AppShell({
                   <li key={item.id}>
                     <Link
                       href={item.path}
-                      title={collapsed ? zh(item.label) : undefined}
+                      title={collapsed ? menuLabel(item) : undefined}
                       onClick={() => setMobileOpen(false)}
                       className={`group flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition ${
                         active
@@ -404,7 +408,7 @@ export default function AppShell({
                       <span className="grid size-5 shrink-0 place-items-center">
                         {item.path === "/admin" ? <LayoutDashboard size={18} /> : <MenuIcon name={item.icon} active={active} />}
                       </span>
-                      {!collapsed && <span className="truncate">{zh(item.label)}</span>}
+                      {!collapsed && <span className="truncate">{menuLabel(item)}</span>}
                     </Link>
                   </li>
                 );
