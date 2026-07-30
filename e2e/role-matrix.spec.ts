@@ -196,6 +196,10 @@ test("订单动作按归属、角色和状态机拒绝越权", async ({ page }) 
     emptyUpload("ORDER_REVIEW", submittedOrder.id),
   );
   expect(salesReviewProof.status()).toBe(403);
+  const salesApprove = await page.request.post(`/api/mvp/orders/${submittedOrder.id}/actions`, {
+    data: { action: "approve" },
+  });
+  expect(salesApprove.status()).toBe(403);
 
   await login("demo_reviewer");
   const reviewClaim = await page.request.put(`/api/mvp/orders/${submittedOrder.id}/review-claim`, {
@@ -215,6 +219,14 @@ test("订单动作按归属、角色和状态机拒绝越权", async ({ page }) 
     data: { action: "claim" },
   });
   expect(reclaim.ok(), await reclaim.text()).toBe(true);
+  const rejectWithoutReason = await page.request.post(`/api/mvp/orders/${submittedOrder.id}/actions`, {
+    data: { action: "reject" },
+  });
+  expect(rejectWithoutReason.status()).toBe(400);
+  const voidWithoutReason = await page.request.post(`/api/mvp/orders/${submittedOrder.id}/actions`, {
+    data: { action: "void" },
+  });
+  expect(voidWithoutReason.status()).toBe(400);
   const reviewerShip = await page.request.post(`/api/mvp/orders/${waitingShipmentOrder.id}/actions`, {
     data: { action: "ship" },
   });
@@ -239,6 +251,10 @@ test("订单动作按归属、角色和状态机拒绝越权", async ({ page }) 
     data: { action: "ship" },
   });
   expect(shipBeforeApproval.status()).toBe(409);
+  const shippingVoid = await page.request.post(`/api/mvp/orders/${waitingShipmentOrder.id}/actions`, {
+    data: { action: "void", note: "越权作废测试" },
+  });
+  expect(shippingVoid.status()).toBe(403);
   const shippingReviewProof = await page.request.post(
     "/api/mvp/attachments",
     emptyUpload("ORDER_REVIEW", submittedOrder.id),

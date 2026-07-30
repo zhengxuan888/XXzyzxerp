@@ -93,7 +93,7 @@ export default function UnifiedInbox({ canUploadAttachments, canDeleteAttachment
   const demo = data?.connections.find((connection) => connection.providerKey === "DEMO");
 
   return (
-    <main className="space-y-5" aria-labelledby="inbox-title">
+    <div className="space-y-5" aria-labelledby="inbox-title">
       <section className="rounded-3xl bg-gradient-to-r from-slate-950 via-violet-950 to-slate-900 p-6 text-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -217,7 +217,7 @@ export default function UnifiedInbox({ canUploadAttachments, canDeleteAttachment
         />
       )}
       <style jsx>{`.control{min-height:44px;width:100%;border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:0 10px;font-size:13px;outline:none}.control:focus{border-color:#7c3aed;box-shadow:0 0 0 3px rgba(124,58,237,.12)}`}</style>
-    </main>
+    </div>
   );
 }
 

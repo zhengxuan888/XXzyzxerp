@@ -119,3 +119,34 @@ git diff --check
 - 建立不可变构建版本、健康检查、审计告警和权限缓存失效监控。
 - 真实渠道必须完成 Webhook 验签、Token 轮换、限流、数据保留和隐私审批。
 - 全部 Gate 通过后，由创始人单独授权 Push 和部署；本报告不构成生产部署授权。
+## 2026-07-31 验收收口补充
+
+### 本轮完成
+
+- 核单权限继续按动作拆分验证：销售不能核单通过，核单员退回或作废必须填写原因，发货人员不能越权作废待发货订单。
+- 角色矩阵覆盖销售、核单、发货、售后、财务、人事和业务负责人；菜单、页面直链、API 与数据字段权限保持一致。
+- 修复统一收件箱嵌套 `main` 导致的可访问性语义冲突，平台管理员全部动态菜单页面均存在唯一主内容区。
+- Playwright 使用受控并发与稳定超时；`test:e2e` 在执行浏览器验收前先完成生产构建。
+- 新增独立 `tsconfig.check.json`，类型门禁不再被运行中的 `.next/dev` 临时缓存污染，严格模式与生产路由类型仍保留。
+
+### 验证证据
+
+| Gate | 命令 | 结果 |
+|---|---|---|
+| 单元/集成测试 | `pnpm run test` | 24 个文件、77 项全部通过 |
+| 角色与越权矩阵 | `pnpm exec playwright test e2e/role-matrix.spec.ts --reporter=line` | 10/10 通过 |
+| 动态菜单全路由 | `pnpm exec playwright test e2e/menu-routes.spec.ts --reporter=line` | 1/1 通过 |
+| TypeScript | `pnpm run ts-check` | 通过 |
+| ESLint | `pnpm run lint` | 通过 |
+| Prisma Schema | `pnpm run prisma:validate` | 通过 |
+| 数据库迁移状态 | `pnpm exec prisma migrate status` | 20 个迁移，数据库为最新状态 |
+| 生产构建 | `pnpm run build` | 通过；71 个页面/API 路由生成成功 |
+| 本地健康检查 | `GET /api/health` | `ok: true` |
+
+### 当前边界
+
+- 本轮没有部署、Push、连接真实 Ship24/飞书/消息渠道，也没有导入旧生产数据。
+- 旧系统仍应保持可用；正式替换前仍需员工按销售、核单、发货、售后、财务、人事角色完成真实业务 UAT。
+- Ship24、飞书、对象存储、SMTP、域名 HTTPS、备份恢复和生产监控需要在预发布环境使用用户提供的正式资源验证。
+
+---
