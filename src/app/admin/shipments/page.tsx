@@ -287,6 +287,7 @@ export default async function ShipmentsPage({
       canReassign={canReassign.allowed}
       rows={withDerived.map((row) => ({
         id: row.id,
+        updatedAt: row.updatedAt.toISOString(),
         trackingNo: row.canViewTrackingNo ? row.trackingNo : null,
         canViewTrackingNo: row.canViewTrackingNo,
         canViewTimeline: row.canViewTimeline,

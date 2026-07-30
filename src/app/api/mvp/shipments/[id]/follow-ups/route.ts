@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 
-import type { LogisticsWorkStatus } from "@prisma/client";
+import { Prisma, type LogisticsWorkStatus } from "@prisma/client";
 
 import { requireAuthContext } from "@/lib/api-auth";
 import { fail, ok } from "@/lib/api-response";
@@ -115,43 +115,77 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     }
   }
 
-  const result = await prisma.$transaction(async (tx) => {
-    const updated = await tx.shipment.update({
-      where: { id: shipment.id },
-      data: {
-        workStatus,
-        ownerMembershipId,
-        nextFollowUpAt,
-        closedAt: workStatus === "CLOSED" ? new Date() : null,
-        closeReason: workStatus === "CLOSED" ? note : null,
-      },
-    });
-    const followUp = await tx.logisticsFollowUp.create({
-      data: {
-        shipmentId: shipment.id,
-        businessUnitId: shipment.businessUnitId,
+  const expectedUpdatedAt = typeof body?.expectedUpdatedAt === "string" && !Number.isNaN(Date.parse(body.expectedUpdatedAt))
+    ? new Date(body.expectedUpdatedAt)
+    : null;
+  if (!expectedUpdatedAt) {
+    return fail("SHIPMENT_VERSION_REQUIRED", "缺少物流任务版本，请刷新页面后重试。", 400);
+  }
+
+  let result;
+  try {
+    result = await prisma.$transaction(async (tx) => {
+      const current = await tx.shipment.findUnique({
+        where: { id: shipment.id },
+        select: { updatedAt: true, workStatus: true, ownerMembershipId: true },
+      });
+      if (!current || current.updatedAt.getTime() !== expectedUpdatedAt.getTime()) {
+        throw new Error("FOLLOW_UP_CONCURRENTLY_CHANGED");
+      }
+      const updated = await tx.shipment.update({
+        where: { id: shipment.id, updatedAt: expectedUpdatedAt },
+        data: {
+          workStatus,
+          ownerMembershipId,
+          nextFollowUpAt,
+          closedAt: workStatus === "CLOSED" ? new Date() : null,
+          closeReason: workStatus === "CLOSED" ? note : null,
+        },
+      });
+      const followUp = await tx.logisticsFollowUp.create({
+        data: {
+          shipmentId: shipment.id,
+          businessUnitId: shipment.businessUnitId,
+          actorUserId: auth.userId,
+          actorMembershipId: auth.membership.id,
+          actionType: "AFTERSALES_NOTE",
+          fromStatus: current.workStatus,
+          toStatus: workStatus,
+          note,
+          nextFollowUpAt,
+        },
+      });
+      await writeAuditLog({
         actorUserId: auth.userId,
         actorMembershipId: auth.membership.id,
-        actionType: "AFTERSALES_NOTE",
-        fromStatus: shipment.workStatus,
-        toStatus: workStatus,
-        note,
-        nextFollowUpAt,
-      },
-    });
-    return { shipment: updated, followUp };
-  });
-
-  await writeAuditLog({
-    actorUserId: auth.userId,
-    actorMembershipId: auth.membership.id,
-    module: "sales.logistics_follow_up",
-    action: "shipment.follow_up.create",
-    targetType: "shipment",
-    targetId: shipment.id,
-    businessUnitId: shipment.businessUnitId,
-    roleId: auth.membership.roleId,
-    details: { workStatus, nextFollowUpAt, ownerMembershipId },
-  });
+        module: "sales.logistics_follow_up",
+        action: "shipment.follow_up.create",
+        targetType: "shipment",
+        targetId: shipment.id,
+        businessUnitId: shipment.businessUnitId,
+        roleId: auth.membership.roleId,
+        details: {
+          fromStatus: current.workStatus,
+          toStatus: workStatus,
+          previousOwnerMembershipId: current.ownerMembershipId,
+          ownerMembershipId,
+          nextFollowUpAt,
+        },
+      }, tx);
+      return { shipment: updated, followUp };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  } catch (error) {
+    if (
+      (error instanceof Error && error.message === "FOLLOW_UP_CONCURRENTLY_CHANGED")
+      || (error instanceof Prisma.PrismaClientKnownRequestError && ["P2025", "P2034"].includes(error.code))
+    ) {
+      return fail(
+        "FOLLOW_UP_CONCURRENTLY_CHANGED",
+        "该物流任务已被其他员工认领或更新，请刷新后查看最新负责人，系统未覆盖原数据。",
+        409,
+      );
+    }
+    throw error;
+  }
   return ok(result, { status: 201 });
 }
