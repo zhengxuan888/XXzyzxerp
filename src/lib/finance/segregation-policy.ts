@@ -32,6 +32,12 @@ export class FinanceSegregationPolicyInputError extends Error {
   }
 }
 
+export type FinanceSegregationPolicyChange = {
+  policy: FinanceSegregationPolicy;
+  expectedVersion: number | null;
+  reason: string;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -55,6 +61,33 @@ export function parseFinanceSegregationPolicy(raw: unknown): FinanceSegregationP
     result[key] = raw[key];
     return result;
   }, {} as FinanceSegregationPolicy);
+}
+
+/**
+ * Parses the full write envelope for a finance-control change. Policy writes
+ * must contain an optimistic version and an accountable human reason.
+ */
+export function parseFinanceSegregationPolicyChange(raw: unknown): FinanceSegregationPolicyChange {
+  if (!isRecord(raw)) throw new FinanceSegregationPolicyInputError("财务内控配置格式不正确。");
+  if (!("expectedVersion" in raw)) {
+    throw new FinanceSegregationPolicyInputError("请先刷新财务内控规则后再保存。");
+  }
+
+  const expectedVersion: unknown = raw.expectedVersion;
+  if (expectedVersion !== null && (typeof expectedVersion !== "number" || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1)) {
+    throw new FinanceSegregationPolicyInputError("财务内控规则版本不正确，请刷新后重试。");
+  }
+
+  const reason = typeof raw.reason === "string" ? raw.reason.trim() : "";
+  if (reason.length < 3 || reason.length > 500) {
+    throw new FinanceSegregationPolicyInputError("请填写 3 到 500 个字符的变更原因。");
+  }
+
+  return {
+    policy: parseFinanceSegregationPolicy(raw),
+    expectedVersion: expectedVersion as number | null,
+    reason,
+  };
 }
 
 export type FinanceSegregationCommand =

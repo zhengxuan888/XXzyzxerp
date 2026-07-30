@@ -4,6 +4,7 @@ import {
   checkFinanceSegregation,
   FinanceSegregationPolicyInputError,
   parseFinanceSegregationPolicy,
+  parseFinanceSegregationPolicyChange,
   resolveFinanceSegregationPolicy,
   strictFinanceSegregationPolicy,
 } from "../finance/segregation-policy";
@@ -85,5 +86,18 @@ describe("finance segregation of duties policy", () => {
     })).toThrow(FinanceSegregationPolicyInputError);
 
     expect(parseFinanceSegregationPolicy({ ...strictFinanceSegregationPolicy })).toEqual(strictFinanceSegregationPolicy);
+  });
+
+  it("requires an optimistic version and a human reason for policy changes", () => {
+    const base = { ...strictFinanceSegregationPolicy };
+
+    expect(() => parseFinanceSegregationPolicyChange(base)).toThrow(FinanceSegregationPolicyInputError);
+    expect(() => parseFinanceSegregationPolicyChange({ ...base, expectedVersion: 1, reason: "  " })).toThrow(FinanceSegregationPolicyInputError);
+    expect(() => parseFinanceSegregationPolicyChange({ ...base, expectedVersion: 0, reason: "岗位调整" })).toThrow(FinanceSegregationPolicyInputError);
+    expect(parseFinanceSegregationPolicyChange({ ...base, expectedVersion: 4, reason: "岗位调整" })).toEqual({
+      policy: base,
+      expectedVersion: 4,
+      reason: "岗位调整",
+    });
   });
 });

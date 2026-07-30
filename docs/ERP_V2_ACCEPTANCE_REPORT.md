@@ -120,6 +120,16 @@ git diff --check
 - 建立不可变构建版本、健康检查、审计告警和权限缓存失效监控。
 - 真实渠道必须完成 Webhook 验签、Token 轮换、限流、数据保留和隐私审批。
 - 全部 Gate 通过后，由创始人单独授权 Push 和部署；本报告不构成生产部署授权。
+## 2026-07-31 财务内控配置一致性补充
+
+| Gate | 证据 | 结果 |
+| --- | --- | --- |
+| 内控配置并发保护 | `FinanceControlPolicy.version` + `updateMany` compare-and-swap | 旧版本不会覆盖新版本，返回 409 |
+| 内控配置审计原子性 | 配置更新与 `writeAuditLog(..., tx)` 同一个 Serializable 事务 | 审计失败时配置回滚 |
+| 输入责任 | `finance-segregation-policy.test.ts` | 6/6 通过，缺版本、无理由和非法版本均拒绝 |
+
+本轮仅迁移本地 `erp_v2` 数据库的 `202607310009_finance_control_policy_versions`；没有部署、Push、连接生产或外部账号。
+
 ## 2026-07-31 验收收口补充
 
 ### 本轮完成

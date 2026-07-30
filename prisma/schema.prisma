@@ -1571,6 +1571,9 @@ model FinanceControlPolicy {
   id                                           String   @id @default(uuid())
   legalEntityId                                String
   businessUnitId                               String   @unique
+  // Optimistic concurrency token. A stale administrator must not overwrite
+  // a newer finance-control change without reviewing it again.
+  version                                      Int      @default(1)
   requireStatementApproverDifferentFromCreator Boolean  @default(true)
   requireStatementPosterDifferentFromCreator   Boolean  @default(true)
   requireStatementPosterDifferentFromApprover  Boolean  @default(true)

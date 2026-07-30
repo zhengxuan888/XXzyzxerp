@@ -9,6 +9,7 @@ import { getSessionFromCookie } from "@/lib/session";
 
 const policySelect = {
   id: true,
+  version: true,
   updatedAt: true,
   requireStatementApproverDifferentFromCreator: true,
   requireStatementPosterDifferentFromCreator: true,
@@ -42,6 +43,7 @@ export default async function FinanceControlsPage() {
     initial={{
       ...resolveFinanceSegregationPolicy(row),
       configured: Boolean(row),
+      version: row?.version ?? null,
       updatedAt: row?.updatedAt.toISOString() ?? null,
     }}
   />;
