@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 
-import type { OrderStatus, Prisma } from "@prisma/client";
+import { Prisma, type OrderStatus } from "@prisma/client";
 
 import { requireAuthContext } from "@/lib/api-auth";
 import { fail, ok } from "@/lib/api-response";
@@ -193,7 +193,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
 
         const shippedAt = new Date();
         const shipment = await tx.shipment.update({
-          where: { id: pendingShipment.id },
+          where: { id: pendingShipment.id, status: "PENDING" },
           data: {
             carrier: nextCarrier,
             trackingNo: nextTrackingNo,
@@ -267,6 +267,16 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     return ok(result);
   } catch (error) {
     if (error instanceof InventoryError) return fail(error.code, error.message, 409);
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError
+      && ["P2002", "P2025", "P2034"].includes(error.code)
+    ) {
+      return fail(
+        "ORDER_CONCURRENTLY_CHANGED",
+        "订单或物流记录刚刚被其他人处理，请刷新后核对，系统未重复发货。",
+        409,
+      );
+    }
     if (error instanceof Error && error.message === "ORDER_CONCURRENTLY_CHANGED") {
       return fail("ORDER_CONCURRENTLY_CHANGED", "订单已变更，请稍后重试", 409);
     }
