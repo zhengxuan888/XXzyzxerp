@@ -60,5 +60,11 @@ describe("Ship24 tracking adapter", () => {
     expect(shouldApplyProviderStatus("DELIVERED", "IN_TRANSIT")).toBe(false);
     expect(shouldApplyProviderStatus("CLOSED", "EXCEPTION")).toBe(false);
     expect(shouldApplyProviderStatus("IN_TRANSIT", "DELIVERED")).toBe(true);
+    expect(shouldApplyProviderStatus("OUT_FOR_DELIVERY", "IN_TRANSIT")).toBe(false);
+    expect(shouldApplyProviderStatus("IN_TRANSIT", "PICKED_UP")).toBe(false);
+    expect(shouldApplyProviderStatus("EXCEPTION", "OUT_FOR_DELIVERY")).toBe(true);
+    expect(shouldApplyProviderStatus("IN_TRANSIT", "RETURNING")).toBe(true);
+    expect(shouldApplyProviderStatus("RETURNING", "RETURNED")).toBe(true);
+    expect(shouldApplyProviderStatus("RETURNED", "IN_TRANSIT")).toBe(false);
   });
 });

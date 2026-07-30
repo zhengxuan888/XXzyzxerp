@@ -44,8 +44,24 @@ export function providerFollowUpAt(rawStatus: string, occurredAt: Date) {
 }
 
 export function shouldApplyProviderStatus(current: ShipmentStatus, next: ShipmentStatus) {
-  const terminal = new Set<ShipmentStatus>(["DELIVERED", "CLOSED", "CANCELLED"]);
-  return !terminal.has(current) || terminal.has(next);
+  if (current === next) return true;
+  const terminal = new Set<ShipmentStatus>(["DELIVERED", "RETURNED", "CLOSED", "CANCELLED"]);
+  if (terminal.has(current)) return false;
+  if (next === "DELIVERED" || next === "RETURNING" || next === "RETURNED" || next === "CANCELLED" || next === "CLOSED") {
+    return true;
+  }
+  if (current === "RETURNING") return false;
+  if (current === "EXCEPTION") return true;
+  if (next === "EXCEPTION") return true;
+  const progressRank: Partial<Record<ShipmentStatus, number>> = {
+    PENDING: 0,
+    PICKED_UP: 1,
+    IN_TRANSIT: 2,
+    OUT_FOR_DELIVERY: 3,
+  };
+  const currentRank = progressRank[current];
+  const nextRank = progressRank[next];
+  return currentRank !== undefined && nextRank !== undefined && nextRank >= currentRank;
 }
 
 export class ProviderConfigurationError extends Error {}

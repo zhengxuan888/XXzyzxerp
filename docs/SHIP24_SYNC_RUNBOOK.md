@@ -6,7 +6,6 @@
 SHIP24_ENABLED="true"
 SHIP24_API_KEY="由 Secret Manager 注入"
 SHIP24_API_BASE_URL="https://api.ship24.com"
-SHIP24_SYNC_INTERVAL_MINUTES="30"
 ```
 
 同步脚本不会在没有 `SHIP24_ENABLED=true` 或没有 API Key 时运行。间隔建议 30 分钟，需要降低频率时设置为 60。
