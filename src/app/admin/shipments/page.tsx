@@ -2,16 +2,14 @@
 
 import LogisticsTrackingWorkbench from "@/components/admin/LogisticsTrackingWorkbench";
 import LogisticsWorkbenchSettings from "@/components/admin/LogisticsWorkbenchSettings";
-import type { Prisma } from "@prisma/client";
 import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
 import { checkPermission } from "@/lib/permission";
 import { HIGH_PRIORITY_SHIPMENT_EVENTS, shipmentEventMeta } from "@/lib/logistics";
 import { prisma } from "@/lib/prisma";
 import { formatMoneyCents } from "@/lib/money";
-import { parseLogisticsWorkbenchConfig } from "@/lib/logistics-workbench-config";
+import { logisticsQueueKeys, parseLogisticsWorkbenchConfig, type LogisticsQueueKey } from "@/lib/logistics-workbench-config";
 
-type ShipmentQueue = "high_priority" | "needs_attention" | "in_transit" | "all";
 type Urgency = "critical" | "high" | "normal";
 
 const NOW_TS = Date.now();
@@ -68,14 +66,51 @@ function urgencyScore(urgency: Urgency) {
   return 1;
 }
 
+function matchesQueueSignals(
+  row: { status: string; urgency: Urgency; eventTotal: number; unhandledEventCount: number; queueSignals: Set<string> },
+  queue: LogisticsQueueKey,
+  configuredMatches: string[],
+) {
+  if (queue === "all") return true;
+  if (queue === "critical" || queue === "high" || queue === "normal") return row.urgency === queue;
+  if (queue === "unhandled") return row.unhandledEventCount > 0;
+  if (queue === "in_transit") return ["PICKED_UP", "IN_TRANSIT"].includes(row.status);
+  if (queue === "out_for_delivery") return row.status === "OUT_FOR_DELIVERY";
+  if (queue === "delivered") return ["DELIVERED", "CLOSED"].includes(row.status);
+  if (queue === "exception") return row.status === "EXCEPTION";
+  if (queue === "returning") return ["RETURNING", "RETURNED"].includes(row.status);
+  if (!configuredMatches.length) return false;
+  const signals = new Set(row.queueSignals);
+  signals.add(`STATUS:${row.status.toUpperCase()}`);
+  if (row.eventTotal === 0) signals.add("NO_EVENTS");
+  return configuredMatches.some((match) => signals.has(match.trim().toUpperCase()));
+}
+
 export default async function ShipmentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ queue?: string; overdue?: string; showOnly?: string }>;
+  searchParams: Promise<{
+    queue?: string;
+    overdue?: string;
+    q?: string;
+    departmentId?: string;
+    managerMembershipId?: string;
+    creatorMembershipId?: string;
+    status?: string;
+    carrier?: string;
+    destination?: string;
+    owner?: string;
+    page?: string;
+    pageSize?: string;
+  }>;
 }) {
   const params = await searchParams;
-  const queue = (params.queue as ShipmentQueue | undefined) ?? "all";
+  const queue = logisticsQueueKeys.includes(params.queue as LogisticsQueueKey)
+    ? params.queue as LogisticsQueueKey
+    : "all";
   const overdueOnly = params.overdue === "1";
+  const pageSize = [10, 20, 50].includes(Number(params.pageSize)) ? Number(params.pageSize) : 10;
+  const requestedPage = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
 
   const session = await getSessionFromCookie();
   if (!session?.activeMembershipId) redirect("/login");
@@ -126,21 +161,8 @@ export default async function ShipmentsPage({
   });
   const workbenchConfig = parseLogisticsWorkbenchConfig(workbenchSetting);
 
-  const queueWhere: Prisma.ShipmentWhereInput | undefined =
-    queue === "needs_attention"
-      ? { workStatus: "NEEDS_ATTENTION" as const }
-      : queue === "high_priority"
-        ? {
-            events: {
-              some: { eventType: { in: [...HIGH_PRIORITY_SHIPMENT_EVENTS] } },
-            },
-          }
-        : queue === "in_transit"
-          ? { status: { in: ["PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY"] } }
-          : undefined;
-
   const rows = await prisma.shipment.findMany({
-    where: { businessUnitId: membership.businessUnitId, status: { not: "PENDING" }, ...queueWhere },
+    where: { businessUnitId: membership.businessUnitId, status: { not: "PENDING" } },
     include: {
       order: {
         select: {
@@ -274,6 +296,67 @@ export default async function ShipmentsPage({
       if (urgencyDelta !== 0) return urgencyDelta;
       return new Date(b.createdAt as Date).getTime() - new Date(a.createdAt as Date).getTime();
     });
+  const keyword = params.q?.trim().toLocaleLowerCase() ?? "";
+  const ownerFilter = params.owner === "mine" || params.owner === "unassigned" ? params.owner : "all";
+  const baseFiltered = withDerived.filter((row) => {
+    if (params.departmentId && row.order.ownerMembership.department?.id !== params.departmentId) return false;
+    if (params.managerMembershipId && row.order.ownerMembership.managerMembership?.id !== params.managerMembershipId) return false;
+    if (params.creatorMembershipId && row.order.ownerMembership.id !== params.creatorMembershipId) return false;
+    if (params.status && row.status !== params.status) return false;
+    if (params.carrier && row.carrier !== params.carrier) return false;
+    if (params.destination && row.order.recipientCountryCode !== params.destination) return false;
+    if (ownerFilter === "mine" && row.ownerMembership?.id !== membership.id) return false;
+    if (ownerFilter === "unassigned" && row.ownerMembership) return false;
+    if (!keyword) return true;
+    const searchable = [
+      row.canViewTrackingNo ? row.trackingNo : null,
+      row.order.orderNo,
+      row.order.recipientName,
+      row.order.recipientEmail,
+      row.order.customerWhatsapp,
+      row.order.creatorUser.fullName,
+      row.order.creatorUser.username,
+      ...row.order.items.map((item) => item.productName),
+    ].filter(Boolean).join(" ").toLocaleLowerCase();
+    return searchable.includes(keyword);
+  });
+  const matchesCard = (row: (typeof baseFiltered)[number], key: LogisticsQueueKey) => {
+    const configuredMatches = workbenchConfig.cards.find((card) => card.key === key)?.matches ?? [];
+    return matchesQueueSignals({
+      status: row.status,
+      urgency: row.urgency,
+      eventTotal: row._count.events,
+      unhandledEventCount: row.canViewTimeline ? (unhandledEventCounts.get(row.id) ?? 0) : 0,
+      queueSignals: row.canViewTimeline ? (queueSignals.get(row.id) ?? new Set<string>()) : new Set<string>(),
+    }, key, configuredMatches);
+  };
+  const queueCounts = Object.fromEntries(
+    workbenchConfig.cards.map((card) => [card.key, baseFiltered.filter((row) => matchesCard(row, card.key)).length]),
+  ) as Partial<Record<LogisticsQueueKey, number>>;
+  const filteredRows = baseFiltered.filter((row) => matchesCard(row, queue));
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const page = Math.min(requestedPage, pageCount);
+  const pageRows = filteredRows.slice((page - 1) * pageSize, page * pageSize);
+
+  const departments = [...new Map(withDerived.flatMap((row) => row.order.ownerMembership.department
+    ? [[row.order.ownerMembership.department.id, row.order.ownerMembership.department] as const]
+    : [])).values()].sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
+  const managers = [...new Map(withDerived.flatMap((row) => row.order.ownerMembership.managerMembership
+    ? [[row.order.ownerMembership.managerMembership.id, {
+        id: row.order.ownerMembership.managerMembership.id,
+        name: row.order.ownerMembership.managerMembership.user.fullName || row.order.ownerMembership.managerMembership.user.username,
+        departmentId: row.order.ownerMembership.department?.id ?? null,
+      }] as const]
+    : [])).values()].sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
+  const creators = [...new Map(withDerived.map((row) => [row.order.ownerMembership.id, {
+    id: row.order.ownerMembership.id,
+    name: row.order.creatorUser.fullName || row.order.creatorUser.username,
+    departmentId: row.order.ownerMembership.department?.id ?? null,
+    managerMembershipId: row.order.ownerMembership.managerMembership?.id ?? null,
+  }] as const)).values()].sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
+  const statuses = [...new Set(withDerived.map((row) => row.status))].sort();
+  const carriers = [...new Set(withDerived.map((row) => row.carrier).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b, "zh-CN"));
+  const destinations = [...new Set(withDerived.map((row) => row.order.recipientCountryCode).filter((value): value is string => Boolean(value)))].sort();
 
   return (
     <div className="space-y-4">
@@ -285,7 +368,10 @@ export default async function ShipmentsPage({
       canAnnotate={canViewTimeline.allowed && canAnnotate.allowed}
       currentMembershipId={membership.id}
       canReassign={canReassign.allowed}
-      rows={withDerived.map((row) => ({
+      pagination={{ page, pageSize, total: filteredRows.length, pageCount }}
+      queueCounts={queueCounts}
+      filterOptions={{ departments, managers, creators, statuses, carriers, destinations }}
+      rows={pageRows.map((row) => ({
         id: row.id,
         updatedAt: row.updatedAt.toISOString(),
         trackingNo: row.canViewTrackingNo ? row.trackingNo : null,

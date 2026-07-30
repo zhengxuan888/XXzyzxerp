@@ -2,20 +2,14 @@
 
 import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Mail, MessageCircle, Package, Save, Search, Truck, UserRound } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
 import type { LogisticsQueueKey, LogisticsWorkbenchConfig } from "@/lib/logistics-workbench-config";
 
 type Annotation = { note: string | null; tags: string[]; isHandled: boolean; handledAt: string | null; updatedAt: string; handledByMembership?: { user?: { fullName: string | null; username: string } } | null };
 type TrackingEvent = { id: string; occurredAt: string; eventType: string; statusMilestone: string | null; location: string | null; memo: string | null; annotation: Annotation | null };
 type TrackingRow = { id: string; updatedAt: string; trackingNo: string | null; carrier: string | null; status: string; urgency: "critical" | "high" | "normal"; urgencyLabel: string; priorityTag: string; dueStatus: string; canViewTrackingNo: boolean; canViewTimeline: boolean; canAnnotate: boolean; eventTotal: number; unhandledEventCount: number; queueSignals: string[]; followUpOwner: { id: string; user: { username: string; fullName: string | null } } | null; order: { id: string; orderNo: string; recipientName: string | null; recipientPhone: string | null; recipientEmail: string | null; customerWhatsapp: string | null; recipientCountryCode: string | null; codAmountLabel: string; customer: { name: string }; creatorUser: { username: string; fullName: string | null }; ownerMembership: { id: string; department: { id: string; name: string } | null; managerMembership: { id: string; user: { username: string; fullName: string | null } } | null }; items: Array<{ productName: string; quantity: number }> }; events: TrackingEvent[] };
 
-function matchesConfiguredCard(row: TrackingRow, matches: string[]) {
-  if (!matches.length) return false;
-  const signals = new Set(row.queueSignals);
-  signals.add(`STATUS:${row.status.toUpperCase()}`);
-  if (row.eventTotal === 0) signals.add("NO_EVENTS");
-  return matches.some((match) => signals.has(match.trim().toUpperCase()));
-}
 export default function LogisticsTrackingWorkbench({
   rows,
   config,
@@ -24,6 +18,9 @@ export default function LogisticsTrackingWorkbench({
   canAnnotate,
   currentMembershipId,
   canReassign,
+  pagination,
+  queueCounts,
+  filterOptions,
 }: {
   rows: TrackingRow[];
   config: LogisticsWorkbenchConfig;
@@ -32,95 +29,69 @@ export default function LogisticsTrackingWorkbench({
   canAnnotate: boolean;
   currentMembershipId: string;
   canReassign: boolean;
-}) {
-  const [keyword, setKeyword] = useState("");
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [queue, setQueue] = useState<LogisticsQueueKey>("all");
-  const [departmentId, setDepartmentId] = useState("");
-  const [managerMembershipId, setManagerMembershipId] = useState("");
-  const [creatorMembershipId, setCreatorMembershipId] = useState("");
-  const [shipmentStatus, setShipmentStatus] = useState("");
-  const [carrier, setCarrier] = useState("");
-  const [destination, setDestination] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [ownerQueue, setOwnerQueue] = useState<"all" | "mine" | "unassigned">("all");
-  const [claimedOwners, setClaimedOwners] = useState<Record<string, string>>({});
-  const visibleRows = useMemo(() => {
-    const term = keyword.trim().toLowerCase();
-    const selectedCard = config.cards.find((card) => card.key === queue);
-    return rows.filter((row) => {
-      if (queue === "critical" && row.urgency !== "critical") return false;
-      if (queue === "high" && row.urgency !== "high") return false;
-      if (queue === "normal" && row.urgency !== "normal") return false;
-      if (queue === "unhandled" && row.unhandledEventCount === 0) return false;
-      if (queue === "in_transit" && !["PICKED_UP", "IN_TRANSIT"].includes(row.status)) return false;
-      if (queue === "out_for_delivery" && row.status !== "OUT_FOR_DELIVERY") return false;
-      if (queue === "delivered" && !["DELIVERED", "CLOSED"].includes(row.status)) return false;
-      if (queue === "exception" && row.status !== "EXCEPTION") return false;
-      if (queue === "returning" && !["RETURNING", "RETURNED"].includes(row.status)) return false;
-      if (selectedCard?.matches.length && !matchesConfiguredCard(row, selectedCard.matches)) return false;
-      if (departmentId && row.order.ownerMembership.department?.id !== departmentId) return false;
-      if (managerMembershipId && row.order.ownerMembership.managerMembership?.id !== managerMembershipId) return false;
-      if (creatorMembershipId && row.order.ownerMembership.id !== creatorMembershipId) return false;
-      if (shipmentStatus && row.status !== shipmentStatus) return false;
-      if (carrier && row.carrier !== carrier) return false;
-      if (destination && row.order.recipientCountryCode !== destination) return false;
-      const ownerId = claimedOwners[row.id] ?? row.followUpOwner?.id ?? null;
-      if (ownerQueue === "mine" && ownerId !== currentMembershipId) return false;
-      if (ownerQueue === "unassigned" && ownerId) return false;
-      if (!term) return true;
-      return `${row.trackingNo} ${row.order.orderNo} ${row.order.recipientName} ${row.order.recipientEmail} ${row.order.customerWhatsapp} ${row.order.creatorUser.fullName} ${row.order.creatorUser.username} ${row.order.items.map((item) => item.productName).join(" ")}`.toLowerCase().includes(term);
-    });
-  }, [carrier, claimedOwners, config.cards, creatorMembershipId, currentMembershipId, departmentId, destination, keyword, managerMembershipId, ownerQueue, queue, rows, shipmentStatus]);
-  const pageCount = Math.max(1, Math.ceil(visibleRows.length / pageSize));
-  const safePage = Math.min(page, pageCount);
-  const pagedRows = visibleRows.slice((safePage - 1) * pageSize, safePage * pageSize);
-  const countFor = (key: LogisticsQueueKey) => {
-    if (key === "all") return rows.length;
-    if (key === "unhandled") return rows.filter((row) => row.unhandledEventCount > 0).length;
-    if (key === "critical" || key === "high" || key === "normal") return rows.filter((row) => row.urgency === key).length;
-    if (key === "in_transit") return rows.filter((row) => ["PICKED_UP", "IN_TRANSIT"].includes(row.status)).length;
-    if (key === "out_for_delivery") return rows.filter((row) => row.status === "OUT_FOR_DELIVERY").length;
-    if (key === "delivered") return rows.filter((row) => ["DELIVERED", "CLOSED"].includes(row.status)).length;
-    if (key === "exception") return rows.filter((row) => row.status === "EXCEPTION").length;
-    if (key === "returning") return rows.filter((row) => ["RETURNING", "RETURNED"].includes(row.status)).length;
-    const card = config.cards.find((item) => item.key === key);
-    return card ? rows.filter((row) => matchesConfiguredCard(row, card.matches)).length : 0;
+  pagination: { page: number; pageSize: number; total: number; pageCount: number };
+  queueCounts: Partial<Record<LogisticsQueueKey, number>>;
+  filterOptions: {
+    departments: Array<{ id: string; name: string }>;
+    managers: Array<{ id: string; name: string; departmentId: string | null }>;
+    creators: Array<{ id: string; name: string; departmentId: string | null; managerMembershipId: string | null }>;
+    statuses: string[];
+    carriers: string[];
+    destinations: string[];
   };
+}) {
+  const router = useRouter();
+  const urlSearchParams = useSearchParams();
+  const [keyword, setKeyword] = useState(urlSearchParams.get("q") ?? "");
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const queue = (urlSearchParams.get("queue") ?? "all") as LogisticsQueueKey;
+  const departmentId = urlSearchParams.get("departmentId") ?? "";
+  const managerMembershipId = urlSearchParams.get("managerMembershipId") ?? "";
+  const creatorMembershipId = urlSearchParams.get("creatorMembershipId") ?? "";
+  const shipmentStatus = urlSearchParams.get("status") ?? "";
+  const carrier = urlSearchParams.get("carrier") ?? "";
+  const destination = urlSearchParams.get("destination") ?? "";
+  const ownerQueue = (urlSearchParams.get("owner") ?? "all") as "all" | "mine" | "unassigned";
+  const [claimedOwners, setClaimedOwners] = useState<Record<string, string>>({});
+  const replaceQuery = (updates: Record<string, string | null>, resetPage = true) => {
+    const next = new URLSearchParams(urlSearchParams.toString());
+    for (const [key, value] of Object.entries(updates)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+    if (resetPage) next.delete("page");
+    router.replace(`/admin/shipments${next.size ? `?${next.toString()}` : ""}`);
+  };
+  const pagedRows = rows;
+  const countFor = (key: LogisticsQueueKey) => queueCounts[key] ?? 0;
   const toneFor = (key: LogisticsQueueKey) => key === "critical" || key === "exception" ? "border-rose-200 bg-rose-50 text-rose-900" : key === "high" || key === "out_for_delivery" ? "border-amber-200 bg-amber-50 text-amber-900" : key === "normal" || key === "delivered" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : key === "unhandled" || key === "returning" ? "border-violet-200 bg-violet-50 text-violet-900" : key === "in_transit" ? "border-sky-200 bg-sky-50 text-sky-900" : "border-slate-200 bg-white text-slate-900";
   const queueCards = config.cards.filter((card) => card.isVisible).map((card) => ({ ...card, count: countFor(card.key), tone: toneFor(card.key) }));
-  const departments = [...new Map(rows.flatMap((row) => row.order.ownerMembership.department ? [[row.order.ownerMembership.department.id, row.order.ownerMembership.department] as const] : [])).values()].sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
-  const managers = [...new Map(rows.flatMap((row) => row.order.ownerMembership.managerMembership ? [[row.order.ownerMembership.managerMembership.id, row.order.ownerMembership.managerMembership] as const] : [])).values()].sort((a, b) => (a.user.fullName || a.user.username).localeCompare(b.user.fullName || b.user.username, "zh-CN"));
-  const creators = [...new Map(rows.map((row) => [row.order.ownerMembership.id, { id: row.order.ownerMembership.id, user: row.order.creatorUser }] as const)).values()].sort((a, b) => (a.user.fullName || a.user.username).localeCompare(b.user.fullName || b.user.username, "zh-CN"));
-  const shipmentStatuses = [...new Set(rows.map((row) => row.status))].sort();
-  const carriers = [...new Set(rows.map((row) => row.carrier).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b, "zh-CN"));
-  const destinations = [...new Set(rows.map((row) => row.order.recipientCountryCode).filter((value): value is string => Boolean(value)))].sort();
+  const { departments, managers, creators, statuses: shipmentStatuses, carriers, destinations } = filterOptions;
 
   return <div className="space-y-4">
     <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div><div className="flex items-center gap-2 text-violet-700"><Truck size={20} /><span className="text-sm font-semibold">物流与售后</span></div><h1 className="mt-2 text-2xl font-bold text-slate-950">物流追踪工作台</h1><p className="mt-1 text-sm text-slate-500">集中查看客户、订单、产品与物流轨迹；每条轨迹都可以单独备注、打标签和标记处理完成。</p></div>
-        <label className="flex h-11 w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 focus-within:border-violet-400 focus-within:ring-4 focus-within:ring-violet-100 lg:max-w-md"><Search size={17} className="text-slate-400" /><input value={keyword} onChange={(event) => { setKeyword(event.target.value); setPage(1); }} className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder={canViewTrackingNo ? "订单号、物流单号、客户、销售、产品" : "订单号、客户、销售、产品"} /></label>
+        <form onSubmit={(event) => { event.preventDefault(); replaceQuery({ q: keyword.trim() || null }); }} className="flex h-11 w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 focus-within:border-violet-400 focus-within:ring-4 focus-within:ring-violet-100 lg:max-w-md"><Search size={17} className="text-slate-400" /><input value={keyword} onChange={(event) => setKeyword(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder={canViewTrackingNo ? "订单号、物流单号、客户、销售、产品" : "订单号、客户、销售、产品"} /><button type="submit" className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white">搜索</button></form>
       </div>
     </header>
     <section className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 xl:grid-cols-6">
-      <label className="grid gap-1 text-xs font-medium text-slate-500">部门<select value={departmentId} onChange={(event) => { setDepartmentId(event.target.value); setManagerMembershipId(""); setCreatorMembershipId(""); setPage(1); }} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部部门</option>{departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select></label>
-      <label className="grid gap-1 text-xs font-medium text-slate-500">直属经理<select value={managerMembershipId} onChange={(event) => { setManagerMembershipId(event.target.value); setCreatorMembershipId(""); setPage(1); }} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部经理</option>{managers.filter((manager) => !departmentId || rows.some((row) => row.order.ownerMembership.department?.id === departmentId && row.order.ownerMembership.managerMembership?.id === manager.id)).map((manager) => <option key={manager.id} value={manager.id}>{manager.user.fullName || manager.user.username}</option>)}</select></label>
-      <label className="grid gap-1 text-xs font-medium text-slate-500">销售<select value={creatorMembershipId} onChange={(event) => { setCreatorMembershipId(event.target.value); setPage(1); }} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部销售</option>{creators.filter((creator) => rows.some((row) => row.order.ownerMembership.id === creator.id && (!departmentId || row.order.ownerMembership.department?.id === departmentId) && (!managerMembershipId || row.order.ownerMembership.managerMembership?.id === managerMembershipId))).map((creator) => <option key={creator.id} value={creator.id}>{creator.user.fullName || creator.user.username}</option>)}</select></label>
-      <label className="grid gap-1 text-xs font-medium text-slate-500">物流状态<select value={shipmentStatus} onChange={(event) => { setShipmentStatus(event.target.value); setPage(1); }} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部状态</option>{shipmentStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
-      <label className="grid gap-1 text-xs font-medium text-slate-500">物流商<select value={carrier} onChange={(event) => { setCarrier(event.target.value); setPage(1); }} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部物流商</option>{carriers.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-      <label className="grid gap-1 text-xs font-medium text-slate-500">目的地<select value={destination} onChange={(event) => { setDestination(event.target.value); setPage(1); }} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部目的地</option>{destinations.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+      <label className="grid gap-1 text-xs font-medium text-slate-500">部门<select value={departmentId} onChange={(event) => replaceQuery({ departmentId: event.target.value || null, managerMembershipId: null, creatorMembershipId: null })} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部部门</option>{departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select></label>
+      <label className="grid gap-1 text-xs font-medium text-slate-500">直属经理<select value={managerMembershipId} onChange={(event) => replaceQuery({ managerMembershipId: event.target.value || null, creatorMembershipId: null })} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部经理</option>{managers.filter((manager) => !departmentId || manager.departmentId === departmentId).map((manager) => <option key={manager.id} value={manager.id}>{manager.name}</option>)}</select></label>
+      <label className="grid gap-1 text-xs font-medium text-slate-500">销售<select value={creatorMembershipId} onChange={(event) => replaceQuery({ creatorMembershipId: event.target.value || null })} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部销售</option>{creators.filter((creator) => (!departmentId || creator.departmentId === departmentId) && (!managerMembershipId || creator.managerMembershipId === managerMembershipId)).map((creator) => <option key={creator.id} value={creator.id}>{creator.name}</option>)}</select></label>
+      <label className="grid gap-1 text-xs font-medium text-slate-500">物流状态<select value={shipmentStatus} onChange={(event) => replaceQuery({ status: event.target.value || null })} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部状态</option>{shipmentStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
+      <label className="grid gap-1 text-xs font-medium text-slate-500">物流商<select value={carrier} onChange={(event) => replaceQuery({ carrier: event.target.value || null })} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部物流商</option>{carriers.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+      <label className="grid gap-1 text-xs font-medium text-slate-500">目的地<select value={destination} onChange={(event) => replaceQuery({ destination: event.target.value || null })} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部目的地</option>{destinations.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
     </section>
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-      {queueCards.map((card) => <button key={card.key} type="button" onClick={() => { setQueue(card.key); setPage(1); }} className={`rounded-2xl border p-4 text-left shadow-sm transition ${card.tone} ${queue === card.key ? "ring-2 ring-amber-500 ring-offset-2" : "hover:-translate-y-0.5"}`}><p className="text-xs font-medium opacity-70">{card.label}</p><p className="mt-1 text-2xl font-bold">{card.count}</p></button>)}
+      {queueCards.map((card) => <button key={card.key} type="button" onClick={() => replaceQuery({ queue: card.key === "all" ? null : card.key })} className={`rounded-2xl border p-4 text-left shadow-sm transition ${card.tone} ${queue === card.key ? "ring-2 ring-amber-500 ring-offset-2" : "hover:-translate-y-0.5"}`}><p className="text-xs font-medium opacity-70">{card.label}</p><p className="mt-1 text-2xl font-bold">{card.count}</p></button>)}
     </section>
     {!canViewTrackingNo && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">当前角色未配置“查看物流单号”权限，页面已隐藏物流单号。</p>}
     {!canViewTimeline && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">当前角色未配置“查看物流轨迹”权限，页面已隐藏全部轨迹。</p>}
     {canViewTimeline && !canAnnotate && <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">当前角色可查看物流轨迹，但未配置“处理物流轨迹”权限，备注和完成按钮已隐藏。</p>}
     {canAnnotate && <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-sm">
       <span className="font-semibold text-slate-700">任务范围</span>
-      {([["all", "全部任务"], ["mine", "我的待办"], ["unassigned", "未分配"]] as const).map(([value, label]) => <button key={value} type="button" onClick={() => { setOwnerQueue(value); setPage(1); }} className={`rounded-lg px-3 py-1.5 font-medium ${ownerQueue === value ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{label}</button>)}
+      {([["all", "全部任务"], ["mine", "我的待办"], ["unassigned", "未分配"]] as const).map(([value, label]) => <button key={value} type="button" onClick={() => replaceQuery({ owner: value === "all" ? null : value })} className={`rounded-lg px-3 py-1.5 font-medium ${ownerQueue === value ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{label}</button>)}
     </div>}
     {pagedRows.map((row) => { const isOpen = expanded[row.id] ?? false; return <article key={row.id} className={`overflow-hidden rounded-2xl border bg-white shadow-sm ${row.urgency === "critical" ? "border-rose-300" : row.urgency === "high" ? "border-amber-300" : "border-slate-200"}`}>
       <div className="grid gap-4 p-4 xl:grid-cols-[1.2fr_1.3fr_1fr_auto] xl:items-center">
@@ -134,8 +105,8 @@ export default function LogisticsTrackingWorkbench({
       </div>
       {row.canViewTimeline && row.events.length > 0 && <TrackingEventsPanel shipmentId={row.id} initialEvents={row.events} initialTotal={row.eventTotal} expanded={isOpen} canAnnotate={row.canAnnotate} quickTags={config.quickTags} />}
     </article>; })}
-    {!visibleRows.length && <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center text-sm text-slate-500">没有找到匹配的物流订单。</div>}
-    {visibleRows.length > 0 && <footer className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2"><span>共 {visibleRows.length} 条</span><select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }} className="h-9 rounded-lg border border-slate-200 px-2"><option value={10}>10 / 页</option><option value={20}>20 / 页</option><option value={50}>50 / 页</option></select></div><div className="flex items-center gap-2"><span>第 {safePage}/{pageCount} 页</span><button type="button" disabled={safePage <= 1} onClick={() => setPage(safePage - 1)} className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 disabled:opacity-40"><ChevronLeft size={15} />上一页</button><button type="button" disabled={safePage >= pageCount} onClick={() => setPage(safePage + 1)} className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 disabled:opacity-40">下一页<ChevronRight size={15} /></button></div></footer>}
+    {!rows.length && <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center text-sm text-slate-500">没有找到匹配的物流订单。</div>}
+    {pagination.total > 0 && <footer className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2"><span>共 {pagination.total} 条</span><select value={pagination.pageSize} onChange={(event) => replaceQuery({ pageSize: event.target.value })} className="h-9 rounded-lg border border-slate-200 px-2"><option value={10}>10 / 页</option><option value={20}>20 / 页</option><option value={50}>50 / 页</option></select></div><div className="flex items-center gap-2"><span>第 {pagination.page}/{pagination.pageCount} 页</span><button type="button" disabled={pagination.page <= 1} onClick={() => replaceQuery({ page: String(pagination.page - 1) }, false)} className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 disabled:opacity-40"><ChevronLeft size={15} />上一页</button><button type="button" disabled={pagination.page >= pagination.pageCount} onClick={() => replaceQuery({ page: String(pagination.page + 1) }, false)} className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 disabled:opacity-40">下一页<ChevronRight size={15} /></button></div></footer>}
   </div>;
 }
 
