@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 
 import { fail, ok, paginated, parsePagination } from "@/lib/api-response";
 import { requireAuthContext } from "@/lib/api-auth";
@@ -71,55 +72,105 @@ export async function POST(request: NextRequest) {
   });
   if (existing) return ok(existing);
 
-  const result = await prisma.$transaction(
-    async (tx) => {
-      if (quantityDelta > 0) {
-        await tx.inventoryBalance.upsert({
-          where: {
-            businessUnitId_siteId_skuId: { businessUnitId: auth.membership.businessUnitId, siteId, skuId },
-          },
-          update: { onHandQuantity: { increment: quantityDelta }, version: { increment: 1 } },
-          create: { businessUnitId: auth.membership.businessUnitId, siteId, skuId, onHandQuantity: quantityDelta },
-        });
-      } else {
-        const changed = await tx.inventoryBalance.updateMany({
-          where: {
-            businessUnitId: auth.membership.businessUnitId,
-            siteId,
-            skuId,
-            onHandQuantity: { gte: Math.abs(quantityDelta) },
-          },
-          data: { onHandQuantity: { increment: quantityDelta }, version: { increment: 1 } },
-        });
-        if (changed.count !== 1) throw new Error("INSUFFICIENT_STOCK");
+  let result: Awaited<ReturnType<typeof prisma.inventoryTransaction.create>> | null = null;
+  let replayed = false;
+  let concurrencyConflict = false;
+
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const outcome = await prisma.$transaction(
+        async (tx) => {
+          const transactionAlreadyCreated = await tx.inventoryTransaction.findUnique({
+            where: {
+              businessUnitId_idempotencyKey: {
+                businessUnitId: auth.membership.businessUnitId,
+                idempotencyKey,
+              },
+            },
+          });
+          if (transactionAlreadyCreated) {
+            return { record: transactionAlreadyCreated, replayed: true };
+          }
+
+          if (quantityDelta > 0) {
+            await tx.inventoryBalance.upsert({
+              where: {
+                businessUnitId_siteId_skuId: { businessUnitId: auth.membership.businessUnitId, siteId, skuId },
+              },
+              update: { onHandQuantity: { increment: quantityDelta }, version: { increment: 1 } },
+              create: { businessUnitId: auth.membership.businessUnitId, siteId, skuId, onHandQuantity: quantityDelta },
+            });
+          } else {
+            const changed = await tx.inventoryBalance.updateMany({
+              where: {
+                businessUnitId: auth.membership.businessUnitId,
+                siteId,
+                skuId,
+                onHandQuantity: { gte: Math.abs(quantityDelta) },
+              },
+              data: { onHandQuantity: { increment: quantityDelta }, version: { increment: 1 } },
+            });
+            if (changed.count !== 1) throw new Error("INSUFFICIENT_STOCK");
+          }
+          const balance = await tx.inventoryBalance.findUniqueOrThrow({
+            where: {
+              businessUnitId_siteId_skuId: { businessUnitId: auth.membership.businessUnitId, siteId, skuId },
+            },
+          });
+          const record = await tx.inventoryTransaction.create({
+            data: {
+              businessUnitId: auth.membership.businessUnitId,
+              siteId,
+              skuId,
+              actorUserId: auth.userId,
+              actorMembershipId: auth.membership.id,
+              type: "ADJUSTMENT",
+              quantityDelta,
+              onHandAfter: balance.onHandQuantity,
+              reservedAfter: balance.reservedQuantity,
+              idempotencyKey,
+              reason: typeof body?.reason === "string" ? body.reason : null,
+            },
+          });
+          return { record, replayed: false };
+        },
+        { isolationLevel: "Serializable" },
+      );
+      result = outcome.record;
+      replayed = outcome.replayed;
+      break;
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message === "INSUFFICIENT_STOCK") {
+        return fail("INSUFFICIENT_STOCK", "Adjustment would create negative stock.", 409);
       }
-      const balance = await tx.inventoryBalance.findUniqueOrThrow({
-        where: {
-          businessUnitId_siteId_skuId: { businessUnitId: auth.membership.businessUnitId, siteId, skuId },
-        },
-      });
-      return tx.inventoryTransaction.create({
-        data: {
-          businessUnitId: auth.membership.businessUnitId,
-          siteId,
-          skuId,
-          actorUserId: auth.userId,
-          actorMembershipId: auth.membership.id,
-          type: "ADJUSTMENT",
-          quantityDelta,
-          onHandAfter: balance.onHandQuantity,
-          reservedAfter: balance.reservedQuantity,
-          idempotencyKey,
-          reason: typeof body?.reason === "string" ? body.reason : null,
-        },
-      });
-    },
-    { isolationLevel: "Serializable" },
-  ).catch((error: unknown) => {
-    if (error instanceof Error && error.message === "INSUFFICIENT_STOCK") return null;
-    throw error;
-  });
-  if (!result) return fail("INSUFFICIENT_STOCK", "Adjustment would create negative stock.", 409);
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        result = await prisma.inventoryTransaction.findUnique({
+          where: {
+            businessUnitId_idempotencyKey: {
+              businessUnitId: auth.membership.businessUnitId,
+              idempotencyKey,
+            },
+          },
+        });
+        if (result) {
+          replayed = true;
+          break;
+        }
+      }
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+        concurrencyConflict = true;
+        if (attempt < 3) continue;
+        break;
+      }
+      throw error;
+    }
+  }
+
+  if (!result && concurrencyConflict) {
+    return fail("INVENTORY_CONCURRENTLY_CHANGED", "Inventory changed concurrently. Please retry.", 409);
+  }
+  if (!result) return fail("INVENTORY_ADJUSTMENT_FAILED", "Inventory adjustment failed.", 409);
+  if (replayed) return ok(result);
 
   await writeAuditLog({
     actorUserId: auth.userId,
