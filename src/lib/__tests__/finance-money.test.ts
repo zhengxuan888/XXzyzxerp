@@ -4,6 +4,7 @@ import {
   FinanceMoneyValidationError,
   formatMinorAmount,
   parseCurrencyScale,
+  parseDecimalAmountToMinor,
   parseMinorAmount,
   serializeMinorAmount,
 } from "../finance/money";
@@ -48,5 +49,14 @@ describe("finance money invariants", () => {
     expect(formatMinorAmount(BigInt("-123"), "usd", 2)).toBe("-USD 1.23");
     expect(parseCurrencyScale("0")).toBe(0);
     expect(parseCurrencyScale(undefined)).toBe(2);
+  });
+
+  it("parses displayed workbook decimals exactly and rejects ambiguous or scientific values", () => {
+    expect(parseDecimalAmountToMinor("1,234.56", 2)).toBe(BigInt("123456"));
+    expect(parseDecimalAmountToMinor("9", 2)).toBe(BigInt("900"));
+    expect(parseDecimalAmountToMinor("100", 0)).toBe(BigInt("100"));
+    for (const value of ["1.234,56", "1e3", "-1", "+1", "1.234", "0"]) {
+      expect(() => parseDecimalAmountToMinor(value, 2)).toThrow(FinanceMoneyValidationError);
+    }
   });
 });

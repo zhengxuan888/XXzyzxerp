@@ -35,10 +35,14 @@ export type FinanceAccessPlan = {
   canAccessStatements: boolean;
   canAccessCounterparties: boolean;
   canAccessPayments: boolean;
+  canAccessImportTemplates: boolean;
+  canAccessStatementImports: boolean;
   sourceCount: number;
   statementWhere: Prisma.FinanceStatementWhereInput;
   counterpartyWhere: Prisma.FinanceCounterpartyWhereInput;
   paymentWhere: Prisma.FinancePaymentWhereInput;
+  importTemplateWhere: Prisma.FinanceStatementTemplateWhereInput;
+  importBatchWhere: Prisma.FinanceStatementImportBatchWhereInput;
   allows: (target: FinanceAccessTarget) => boolean;
   allowsCreate: (target: FinanceAccessTarget) => boolean;
 };
@@ -168,6 +172,40 @@ function paymentClause(source: CompiledSource, membership: FinanceAccessMembersh
   return null;
 }
 
+function importTemplateClause(source: CompiledSource, membership: FinanceAccessMembership): Prisma.FinanceStatementTemplateWhereInput | null {
+  const base = { businessUnitId: source.businessUnitId };
+  if (source.scope === "ALL" || source.scope === "BUSINESS_UNIT") return base;
+  if (source.scope === "DEPARTMENT") return source.departmentId ? { ...base, departmentId: source.departmentId } : null;
+  if (source.scope === "DEPARTMENT_TREE") {
+    const departmentIds = [...source.departmentIds];
+    return departmentIds.length ? { ...base, departmentId: { in: departmentIds } } : null;
+  }
+  if (source.scope === "SELF") return { ...base, createdByMembershipId: membership.id };
+  if (source.scope === "SUBORDINATES") {
+    const membershipIds = [...source.subordinateMembershipIds];
+    return membershipIds.length ? { ...base, createdByMembershipId: { in: membershipIds } } : null;
+  }
+  // Templates are business configuration rather than a site-level record.
+  return null;
+}
+
+function importBatchClause(source: CompiledSource, membership: FinanceAccessMembership): Prisma.FinanceStatementImportBatchWhereInput | null {
+  const base = { businessUnitId: source.businessUnitId };
+  if (source.scope === "ALL" || source.scope === "BUSINESS_UNIT") return base;
+  if (source.scope === "DEPARTMENT") return source.departmentId ? { ...base, departmentId: source.departmentId } : null;
+  if (source.scope === "DEPARTMENT_TREE") {
+    const departmentIds = [...source.departmentIds];
+    return departmentIds.length ? { ...base, departmentId: { in: departmentIds } } : null;
+  }
+  if (source.scope === "SITE") return source.siteId ? { ...base, siteId: source.siteId } : null;
+  if (source.scope === "SELF") return { ...base, previewedByMembershipId: membership.id };
+  if (source.scope === "SUBORDINATES") {
+    const membershipIds = [...source.subordinateMembershipIds];
+    return membershipIds.length ? { ...base, previewedByMembershipId: { in: membershipIds } } : null;
+  }
+  return null;
+}
+
 /**
  * Compiles one configured Action plus valid access grants into database
  * predicates. It runs on every request so an expired or revoked grant is not
@@ -248,16 +286,26 @@ export async function createFinanceAccessPlan({
   const paymentClauses = compiled
     .map((source) => paymentClause(source, membership))
     .filter((clause): clause is Prisma.FinancePaymentWhereInput => Boolean(clause));
+  const importTemplateClauses = compiled
+    .map((source) => importTemplateClause(source, membership))
+    .filter((clause): clause is Prisma.FinanceStatementTemplateWhereInput => Boolean(clause));
+  const importBatchClauses = compiled
+    .map((source) => importBatchClause(source, membership))
+    .filter((clause): clause is Prisma.FinanceStatementImportBatchWhereInput => Boolean(clause));
 
   return {
-    allowed: statementClauses.length > 0 || counterpartyClauses.length > 0 || paymentClauses.length > 0,
+    allowed: statementClauses.length > 0 || counterpartyClauses.length > 0 || paymentClauses.length > 0 || importTemplateClauses.length > 0 || importBatchClauses.length > 0,
     canAccessStatements: statementClauses.length > 0,
     canAccessCounterparties: counterpartyClauses.length > 0,
     canAccessPayments: paymentClauses.length > 0,
+    canAccessImportTemplates: importTemplateClauses.length > 0,
+    canAccessStatementImports: importBatchClauses.length > 0,
     sourceCount: compiled.length,
     statementWhere: statementClauses.length ? { OR: statementClauses } : { OR: [] },
     counterpartyWhere: counterpartyClauses.length ? { OR: counterpartyClauses } : { OR: [] },
     paymentWhere: paymentClauses.length ? { OR: paymentClauses } : { OR: [] },
+    importTemplateWhere: importTemplateClauses.length ? { OR: importTemplateClauses } : { OR: [] },
+    importBatchWhere: importBatchClauses.length ? { OR: importBatchClauses } : { OR: [] },
     allows: (target) => compiled.some((source) => matchesSource(source, membership, target)),
     allowsCreate: (target) => compiled.some((source) => matchesCreateSource(source, membership, target)),
   };

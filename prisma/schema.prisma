@@ -178,6 +178,24 @@ enum FinanceStatementStatus {
   VOIDED
 }
 
+// An uploaded workbook is never a financial fact on its own. It remains a
+// private, reviewable preview until an authorized person explicitly confirms
+// creation of DRAFT statements.
+enum FinanceStatementImportBatchStatus {
+  PREVIEWED
+  IMPORTING
+  IMPORTED
+  CANCELLED
+}
+
+enum FinanceStatementImportRowStatus {
+  READY
+  WARNING
+  REJECTED
+  IMPORTED
+  SKIPPED
+}
+
 enum FinanceLineReconciliationStatus {
   UNMATCHED
   SUGGESTED
@@ -220,34 +238,36 @@ model LegalEntity {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  businessUnits      BusinessUnit[]
-  memberships        Membership[]
-  customers          Customer[]
-  products           Product[]
-  orders             Order[]
-  documents          Document[]
-  announcements      Announcement[]
-  attendanceRecords  Attendance[]
-  leaveRequests      LeaveRequest[]
-  expenses           Expense[]
-  auditLogs          AuditLog[]
-  shipments          Shipment[]
-  approvalRecords    ApprovalRecord[]
-  orderTemplates     OrderTemplate[]
-  logisticsTemplates LogisticsProviderTemplate[]
-  channelConnections ChannelConnection[]
-  conversations      Conversation[]
-  inboxAuditEvents   InboxAuditEvent[]
-  attachments        Attachment[]
-  dailyGoals         DailyGoal[]
-  teamGoals          TeamGoal[]
-  logisticsExportBatches      LogisticsExportBatch[]
-  logisticsReturnImportBatches LogisticsReturnImportBatch[]
-  logisticsBatchArtifacts     LogisticsBatchArtifact[]
-  financeCounterparties       FinanceCounterparty[]
-  financeStatements           FinanceStatement[]
-  financeReconciliations      FinanceReconciliation[]
-  financePayments             FinancePayment[]
+  businessUnits                 BusinessUnit[]
+  memberships                   Membership[]
+  customers                     Customer[]
+  products                      Product[]
+  orders                        Order[]
+  documents                     Document[]
+  announcements                 Announcement[]
+  attendanceRecords             Attendance[]
+  leaveRequests                 LeaveRequest[]
+  expenses                      Expense[]
+  auditLogs                     AuditLog[]
+  shipments                     Shipment[]
+  approvalRecords               ApprovalRecord[]
+  orderTemplates                OrderTemplate[]
+  logisticsTemplates            LogisticsProviderTemplate[]
+  channelConnections            ChannelConnection[]
+  conversations                 Conversation[]
+  inboxAuditEvents              InboxAuditEvent[]
+  attachments                   Attachment[]
+  dailyGoals                    DailyGoal[]
+  teamGoals                     TeamGoal[]
+  logisticsExportBatches        LogisticsExportBatch[]
+  logisticsReturnImportBatches  LogisticsReturnImportBatch[]
+  logisticsBatchArtifacts       LogisticsBatchArtifact[]
+  financeCounterparties         FinanceCounterparty[]
+  financeStatements             FinanceStatement[]
+  financeReconciliations        FinanceReconciliation[]
+  financePayments               FinancePayment[]
+  financeStatementTemplates     FinanceStatementTemplate[]
+  financeStatementImportBatches FinanceStatementImportBatch[]
 }
 
 model BusinessUnit {
@@ -260,46 +280,48 @@ model BusinessUnit {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  legalEntity               LegalEntity                 @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  departments               Department[]
-  sites                     Site[]
-  memberships               Membership[]
-  auditLogs                 AuditLog[]
-  accessGrants              AccessGrant[]
-  customers                 Customer[]
-  products                  Product[]
-  orders                    Order[]
-  documents                 Document[]
-  announcements             Announcement[]
-  attendance                Attendance[]
-  leaveRequests             LeaveRequest[]
-  expenses                  Expense[]
-  shipments                 Shipment[]
-  approvalRecords           ApprovalRecord[]
-  inventoryBalances         InventoryBalance[]
-  inventoryTransactions     InventoryTransaction[]
-  inventoryReservations     InventoryReservation[]
-  orderTemplates            OrderTemplate[]
-  logisticsTemplates        LogisticsProviderTemplate[]
-  logisticsFollowUps        LogisticsFollowUp[]
-  logisticsEventAnnotations LogisticsEventAnnotation[]
-  logisticsWorkbenchSetting LogisticsWorkbenchSetting?
-  channelConnections        ChannelConnection[]
-  contactIdentities         ContactIdentity[]
-  conversations             Conversation[]
-  inboxTags                 InboxTag[]
-  inboxAuditEvents          InboxAuditEvent[]
-  attachments               Attachment[]
-  dailyGoals                DailyGoal[]
-  teamGoals                 TeamGoal[]
-  notificationDeliveries    NotificationDelivery[]
-  logisticsExportBatches      LogisticsExportBatch[]
-  logisticsReturnImportBatches LogisticsReturnImportBatch[]
-  logisticsBatchArtifacts     LogisticsBatchArtifact[]
-  financeCounterparties       FinanceCounterparty[]
-  financeStatements           FinanceStatement[]
-  financeReconciliations      FinanceReconciliation[]
-  financePayments             FinancePayment[]
+  legalEntity                   LegalEntity                   @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  departments                   Department[]
+  sites                         Site[]
+  memberships                   Membership[]
+  auditLogs                     AuditLog[]
+  accessGrants                  AccessGrant[]
+  customers                     Customer[]
+  products                      Product[]
+  orders                        Order[]
+  documents                     Document[]
+  announcements                 Announcement[]
+  attendance                    Attendance[]
+  leaveRequests                 LeaveRequest[]
+  expenses                      Expense[]
+  shipments                     Shipment[]
+  approvalRecords               ApprovalRecord[]
+  inventoryBalances             InventoryBalance[]
+  inventoryTransactions         InventoryTransaction[]
+  inventoryReservations         InventoryReservation[]
+  orderTemplates                OrderTemplate[]
+  logisticsTemplates            LogisticsProviderTemplate[]
+  logisticsFollowUps            LogisticsFollowUp[]
+  logisticsEventAnnotations     LogisticsEventAnnotation[]
+  logisticsWorkbenchSetting     LogisticsWorkbenchSetting?
+  channelConnections            ChannelConnection[]
+  contactIdentities             ContactIdentity[]
+  conversations                 Conversation[]
+  inboxTags                     InboxTag[]
+  inboxAuditEvents              InboxAuditEvent[]
+  attachments                   Attachment[]
+  dailyGoals                    DailyGoal[]
+  teamGoals                     TeamGoal[]
+  notificationDeliveries        NotificationDelivery[]
+  logisticsExportBatches        LogisticsExportBatch[]
+  logisticsReturnImportBatches  LogisticsReturnImportBatch[]
+  logisticsBatchArtifacts       LogisticsBatchArtifact[]
+  financeCounterparties         FinanceCounterparty[]
+  financeStatements             FinanceStatement[]
+  financeReconciliations        FinanceReconciliation[]
+  financePayments               FinancePayment[]
+  financeStatementTemplates     FinanceStatementTemplate[]
+  financeStatementImportBatches FinanceStatementImportBatch[]
 
   @@unique([legalEntityId, code])
   @@index([legalEntityId])
@@ -321,21 +343,23 @@ model Department {
   parent       Department?  @relation("DepartmentTree", fields: [parentId], references: [id], onDelete: SetNull)
   children     Department[] @relation("DepartmentTree")
 
-  memberships        Membership[]
-  sites              Site[]
-  accessGrants       AccessGrant[]
-  customers          Customer[]
-  orders             Order[]
-  expenses           Expense[]
-  documents          Document[]
-  channelConnections ChannelConnection[]
-  conversations      Conversation[]
-  attachments        Attachment[]
-  teamGoals          TeamGoal[]
-  logisticsExportBatches LogisticsExportBatch[]
-  financeCounterparties FinanceCounterparty[]
-  financeStatements     FinanceStatement[]
-  financePayments       FinancePayment[]
+  memberships                   Membership[]
+  sites                         Site[]
+  accessGrants                  AccessGrant[]
+  customers                     Customer[]
+  orders                        Order[]
+  expenses                      Expense[]
+  documents                     Document[]
+  channelConnections            ChannelConnection[]
+  conversations                 Conversation[]
+  attachments                   Attachment[]
+  teamGoals                     TeamGoal[]
+  logisticsExportBatches        LogisticsExportBatch[]
+  financeCounterparties         FinanceCounterparty[]
+  financeStatements             FinanceStatement[]
+  financePayments               FinancePayment[]
+  financeStatementTemplates     FinanceStatementTemplate[]
+  financeStatementImportBatches FinanceStatementImportBatch[]
 
   @@unique([businessUnitId, code, parentId])
   @@index([businessUnitId, parentId])
@@ -354,19 +378,20 @@ model Site {
   businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
   department   Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
 
-  memberships           Membership[]
-  accessGrants          AccessGrant[]
-  orders                Order[]
-  expenses              Expense[]
-  documents             Document[]
-  announcements         Announcement[]
-  attendance            Attendance[]
-  shipments             Shipment[]
-  inventoryBalances     InventoryBalance[]
-  inventoryTransactions InventoryTransaction[]
-  inventoryReservations InventoryReservation[]
-  financeStatements     FinanceStatement[]
-  financePayments       FinancePayment[]
+  memberships                   Membership[]
+  accessGrants                  AccessGrant[]
+  orders                        Order[]
+  expenses                      Expense[]
+  documents                     Document[]
+  announcements                 Announcement[]
+  attendance                    Attendance[]
+  shipments                     Shipment[]
+  inventoryBalances             InventoryBalance[]
+  inventoryTransactions         InventoryTransaction[]
+  inventoryReservations         InventoryReservation[]
+  financeStatements             FinanceStatement[]
+  financePayments               FinancePayment[]
+  financeStatementImportBatches FinanceStatementImportBatch[]
 
   @@unique([businessUnitId, code])
   @@index([departmentId])
@@ -505,40 +530,43 @@ model Membership {
   grantedAccess  AccessGrant[] @relation("GrantedAccess")
   receivedAccess AccessGrant[] @relation("ReceivedAccess")
 
-  actionAudits                AuditLog[]                 @relation("ActorMembership")
-  submittedApprovals          ApprovalRecord[]           @relation("SubmittedApprovals")
-  approvedApprovals           ApprovalRecord[]           @relation("ApprovedApprovals")
-  attendanceRecords           Attendance[]               @relation("MembershipAttendance")
-  leaveRequests               LeaveRequest[]             @relation("LeaveRequester")
-  leaveApprovals              LeaveRequest[]             @relation("LeaveApprover")
-  shipmentEvents              ShipmentEvent[]            @relation("MembershipShipmentEvents")
-  ownedShipments              Shipment[]                 @relation("ShipmentAftersalesOwner")
-  logisticsFollowUps          LogisticsFollowUp[]
-  handledLogisticsAnnotations LogisticsEventAnnotation[] @relation("LogisticsAnnotationHandler")
-  inventoryTransactions       InventoryTransaction[]
-  assignedConversations       ConversationAssignment[]   @relation("ConversationAssignee")
-  conversationAssignmentsMade ConversationAssignment[]   @relation("ConversationAssigner")
-  inboxAuditEvents            InboxAuditEvent[]          @relation("InboxAuditMembership")
-  uploadedAttachments         Attachment[]               @relation("AttachmentUploaderMembership")
-  dailyGoals                  DailyGoal[]                @relation("DailyGoalOwner")
-  goalsSetForOthers           DailyGoal[]                @relation("DailyGoalSetter")
-  teamGoalsSet                TeamGoal[]                 @relation("TeamGoalSetter")
-  logisticsExportBatches      LogisticsExportBatch[]      @relation("LogisticsExportBatchCreator")
-  logisticsReturnImportBatches LogisticsReturnImportBatch[] @relation("LogisticsReturnImportBatchPreviewer")
-  logisticsBatchArtifacts     LogisticsBatchArtifact[]     @relation("LogisticsBatchArtifactCreator")
-  createdFinanceCounterparties FinanceCounterparty[]        @relation("FinanceCounterpartyCreator")
-  createdFinanceStatements     FinanceStatement[]           @relation("FinanceStatementCreator")
-  approvedFinanceStatements    FinanceStatement[]           @relation("FinanceStatementApprover")
-  postedFinanceStatements      FinanceStatement[]           @relation("FinanceStatementPoster")
-  voidedFinanceStatements      FinanceStatement[]           @relation("FinanceStatementVoider")
-  createdFinanceReconciliations FinanceReconciliation[]     @relation("FinanceReconciliationCreator")
-  confirmedFinanceReconciliations FinanceReconciliation[]   @relation("FinanceReconciliationConfirmer")
-  voidedFinanceReconciliations FinanceReconciliation[]      @relation("FinanceReconciliationVoider")
-  createdFinancePayments       FinancePayment[]             @relation("FinancePaymentCreator")
-  approvedFinancePayments      FinancePayment[]             @relation("FinancePaymentApprover")
-  postedFinancePayments        FinancePayment[]             @relation("FinancePaymentPoster")
-  voidedFinancePayments        FinancePayment[]             @relation("FinancePaymentVoider")
-  createdFinancePaymentAllocations FinancePaymentAllocation[] @relation("FinancePaymentAllocationCreator")
+  actionAudits                           AuditLog[]                    @relation("ActorMembership")
+  submittedApprovals                     ApprovalRecord[]              @relation("SubmittedApprovals")
+  approvedApprovals                      ApprovalRecord[]              @relation("ApprovedApprovals")
+  attendanceRecords                      Attendance[]                  @relation("MembershipAttendance")
+  leaveRequests                          LeaveRequest[]                @relation("LeaveRequester")
+  leaveApprovals                         LeaveRequest[]                @relation("LeaveApprover")
+  shipmentEvents                         ShipmentEvent[]               @relation("MembershipShipmentEvents")
+  ownedShipments                         Shipment[]                    @relation("ShipmentAftersalesOwner")
+  logisticsFollowUps                     LogisticsFollowUp[]
+  handledLogisticsAnnotations            LogisticsEventAnnotation[]    @relation("LogisticsAnnotationHandler")
+  inventoryTransactions                  InventoryTransaction[]
+  assignedConversations                  ConversationAssignment[]      @relation("ConversationAssignee")
+  conversationAssignmentsMade            ConversationAssignment[]      @relation("ConversationAssigner")
+  inboxAuditEvents                       InboxAuditEvent[]             @relation("InboxAuditMembership")
+  uploadedAttachments                    Attachment[]                  @relation("AttachmentUploaderMembership")
+  dailyGoals                             DailyGoal[]                   @relation("DailyGoalOwner")
+  goalsSetForOthers                      DailyGoal[]                   @relation("DailyGoalSetter")
+  teamGoalsSet                           TeamGoal[]                    @relation("TeamGoalSetter")
+  logisticsExportBatches                 LogisticsExportBatch[]        @relation("LogisticsExportBatchCreator")
+  logisticsReturnImportBatches           LogisticsReturnImportBatch[]  @relation("LogisticsReturnImportBatchPreviewer")
+  logisticsBatchArtifacts                LogisticsBatchArtifact[]      @relation("LogisticsBatchArtifactCreator")
+  createdFinanceCounterparties           FinanceCounterparty[]         @relation("FinanceCounterpartyCreator")
+  createdFinanceStatements               FinanceStatement[]            @relation("FinanceStatementCreator")
+  approvedFinanceStatements              FinanceStatement[]            @relation("FinanceStatementApprover")
+  postedFinanceStatements                FinanceStatement[]            @relation("FinanceStatementPoster")
+  voidedFinanceStatements                FinanceStatement[]            @relation("FinanceStatementVoider")
+  createdFinanceReconciliations          FinanceReconciliation[]       @relation("FinanceReconciliationCreator")
+  confirmedFinanceReconciliations        FinanceReconciliation[]       @relation("FinanceReconciliationConfirmer")
+  voidedFinanceReconciliations           FinanceReconciliation[]       @relation("FinanceReconciliationVoider")
+  createdFinancePayments                 FinancePayment[]              @relation("FinancePaymentCreator")
+  approvedFinancePayments                FinancePayment[]              @relation("FinancePaymentApprover")
+  postedFinancePayments                  FinancePayment[]              @relation("FinancePaymentPoster")
+  voidedFinancePayments                  FinancePayment[]              @relation("FinancePaymentVoider")
+  createdFinancePaymentAllocations       FinancePaymentAllocation[]    @relation("FinancePaymentAllocationCreator")
+  createdFinanceStatementTemplates       FinanceStatementTemplate[]    @relation("FinanceStatementTemplateCreator")
+  previewedFinanceStatementImportBatches FinanceStatementImportBatch[] @relation("FinanceStatementImportBatchPreviewer")
+  confirmedFinanceStatementImportBatches FinanceStatementImportBatch[] @relation("FinanceStatementImportBatchConfirmer")
 
   @@index([userId, isActive])
   @@index([businessUnitId, isActive])
@@ -722,23 +750,23 @@ model Order {
   createdAt                   DateTime    @default(now())
   updatedAt                   DateTime    @updatedAt
 
-  legalEntity           LegalEntity            @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  businessUnit          BusinessUnit           @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  department            Department?            @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  site                  Site?                  @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  customer              Customer               @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  creatorUser           User                   @relation("OrderCreator", fields: [creatorUserId], references: [id], onDelete: Restrict)
-  ownerMembership       Membership             @relation("OrderOwner", fields: [ownedByMembershipId], references: [id], onDelete: Restrict)
-  reviewClaimedBy       Membership?            @relation("OrderReviewClaim", fields: [reviewClaimedByMembershipId], references: [id], onDelete: SetNull)
-  orderTemplate         OrderTemplate?         @relation(fields: [orderTemplateId], references: [id], onDelete: SetNull)
-  items                 OrderItem[]
-  shipments             Shipment[]
-  expenses              Expense[]
-  inventoryTransactions InventoryTransaction[]
-  inventoryReservations InventoryReservation[]
+  legalEntity               LegalEntity                @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit              BusinessUnit               @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department                Department?                @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  site                      Site?                      @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  customer                  Customer                   @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  creatorUser               User                       @relation("OrderCreator", fields: [creatorUserId], references: [id], onDelete: Restrict)
+  ownerMembership           Membership                 @relation("OrderOwner", fields: [ownedByMembershipId], references: [id], onDelete: Restrict)
+  reviewClaimedBy           Membership?                @relation("OrderReviewClaim", fields: [reviewClaimedByMembershipId], references: [id], onDelete: SetNull)
+  orderTemplate             OrderTemplate?             @relation(fields: [orderTemplateId], references: [id], onDelete: SetNull)
+  items                     OrderItem[]
+  shipments                 Shipment[]
+  expenses                  Expense[]
+  inventoryTransactions     InventoryTransaction[]
+  inventoryReservations     InventoryReservation[]
   logisticsExportBatchItems LogisticsExportBatchItem[]
-  financeStatementLines FinanceStatementLine[]
-  financeReconciliations FinanceReconciliation[]
+  financeStatementLines     FinanceStatementLine[]
+  financeReconciliations    FinanceReconciliation[]
 
   @@unique([businessUnitId, orderNo])
   @@index([legalEntityId, businessUnitId])
@@ -786,8 +814,8 @@ model LogisticsProviderTemplate {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  legalEntity  LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  legalEntity   LegalEntity            @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit  BusinessUnit           @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
   exportBatches LogisticsExportBatch[]
 
   @@unique([businessUnitId, code])
@@ -795,7 +823,7 @@ model LogisticsProviderTemplate {
 }
 
 model LogisticsExportBatch {
-  id                    String                      @id @default(uuid())
+  id                    String                     @id @default(uuid())
   legalEntityId         String
   businessUnitId        String
   departmentId          String?
@@ -804,18 +832,18 @@ model LogisticsExportBatch {
   batchNo               String
   templateSnapshot      Json
   orderCount            Int
-  status                LogisticsExportBatchStatus  @default(EXPORTED)
+  status                LogisticsExportBatchStatus @default(EXPORTED)
   dispatchNote          String?
   dispatchedAt          DateTime?
   createdByMembershipId String
-  createdAt             DateTime                    @default(now())
-  updatedAt             DateTime                    @updatedAt
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
 
-  legalEntity         LegalEntity                @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  businessUnit        BusinessUnit               @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  department          Department?                @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  template            LogisticsProviderTemplate  @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  createdByMembership Membership                 @relation("LogisticsExportBatchCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  legalEntity         LegalEntity                  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit        BusinessUnit                 @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department          Department?                  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  template            LogisticsProviderTemplate    @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  createdByMembership Membership                   @relation("LogisticsExportBatchCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
   items               LogisticsExportBatchItem[]
   returnImports       LogisticsReturnImportBatch[]
   artifacts           LogisticsBatchArtifact[]
@@ -827,19 +855,19 @@ model LogisticsExportBatch {
 }
 
 model LogisticsExportBatchItem {
-  id                String   @id @default(uuid())
-  exportBatchId     String
-  orderId           String
-  orderNoSnapshot   String
-  rowHash           String
-  payloadSnapshot   Json
-  trackingNo        String?
-  importedAt        DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id              String    @id @default(uuid())
+  exportBatchId   String
+  orderId         String
+  orderNoSnapshot String
+  rowHash         String
+  payloadSnapshot Json
+  trackingNo      String?
+  importedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   exportBatch LogisticsExportBatch @relation(fields: [exportBatchId], references: [id], onDelete: Cascade)
-  order       Order                 @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  order       Order                @relation(fields: [orderId], references: [id], onDelete: Restrict)
 
   @@unique([exportBatchId, orderId])
   @@index([orderId])
@@ -847,57 +875,57 @@ model LogisticsExportBatchItem {
 }
 
 model LogisticsReturnImportBatch {
-  id                    String                           @id @default(uuid())
-  legalEntityId         String
-  businessUnitId        String
-  exportBatchId         String
-  originalName          String
-  storageKey            String
-  mimeType              String
-  sizeBytes             Int
-  sha256                String
-  mappingSnapshot       Json
-  totalRows             Int
-  readyRows             Int
-  warningRows           Int
-  rejectedRows          Int
-  importedRows          Int                              @default(0)
-  status                LogisticsReturnImportBatchStatus @default(PREVIEWED)
+  id                      String                           @id @default(uuid())
+  legalEntityId           String
+  businessUnitId          String
+  exportBatchId           String
+  originalName            String
+  storageKey              String
+  mimeType                String
+  sizeBytes               Int
+  sha256                  String
+  mappingSnapshot         Json
+  totalRows               Int
+  readyRows               Int
+  warningRows             Int
+  rejectedRows            Int
+  importedRows            Int                              @default(0)
+  status                  LogisticsReturnImportBatchStatus @default(PREVIEWED)
   previewedByMembershipId String
-  previewedAt           DateTime                         @default(now())
-  importedAt            DateTime?
-  createdAt             DateTime                         @default(now())
-  updatedAt             DateTime                         @updatedAt
+  previewedAt             DateTime                         @default(now())
+  importedAt              DateTime?
+  createdAt               DateTime                         @default(now())
+  updatedAt               DateTime                         @updatedAt
 
-  legalEntity         LegalEntity          @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  businessUnit        BusinessUnit         @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  exportBatch         LogisticsExportBatch @relation(fields: [exportBatchId], references: [id], onDelete: Restrict)
-  previewedByMembership Membership          @relation("LogisticsReturnImportBatchPreviewer", fields: [previewedByMembershipId], references: [id], onDelete: Restrict)
-  rows                LogisticsReturnImportRow[]
-  artifacts           LogisticsBatchArtifact[]
+  legalEntity           LegalEntity                @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit          BusinessUnit               @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  exportBatch           LogisticsExportBatch       @relation(fields: [exportBatchId], references: [id], onDelete: Restrict)
+  previewedByMembership Membership                 @relation("LogisticsReturnImportBatchPreviewer", fields: [previewedByMembershipId], references: [id], onDelete: Restrict)
+  rows                  LogisticsReturnImportRow[]
+  artifacts             LogisticsBatchArtifact[]
 
+  @@unique([exportBatchId, sha256])
   @@index([businessUnitId, status, previewedAt])
   @@index([exportBatchId, status])
   @@index([sha256])
-  @@unique([exportBatchId, sha256])
 }
 
 model LogisticsReturnImportRow {
-  id                String                          @id @default(uuid())
-  importBatchId     String
-  rowNumber         Int
-  orderNo           String
-  trackingNo        String
-  carrier           String?
-  providerStatus    String?
-  sourceRowHash     String
-  orderId           String?
-  shipmentId        String?
-  status            LogisticsReturnImportRowStatus
-  message           String
-  importedAt        DateTime?
-  createdAt         DateTime                        @default(now())
-  updatedAt         DateTime                        @updatedAt
+  id             String                         @id @default(uuid())
+  importBatchId  String
+  rowNumber      Int
+  orderNo        String
+  trackingNo     String
+  carrier        String?
+  providerStatus String?
+  sourceRowHash  String
+  orderId        String?
+  shipmentId     String?
+  status         LogisticsReturnImportRowStatus
+  message        String
+  importedAt     DateTime?
+  createdAt      DateTime                       @default(now())
+  updatedAt      DateTime                       @updatedAt
 
   importBatch LogisticsReturnImportBatch @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
 
@@ -928,10 +956,10 @@ model LogisticsBatchArtifact {
   returnImportBatch   LogisticsReturnImportBatch? @relation(fields: [returnImportBatchId], references: [id], onDelete: Cascade)
   createdByMembership Membership                  @relation("LogisticsBatchArtifactCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
 
+  @@unique([businessUnitId, storageKey])
   @@index([businessUnitId, createdAt])
   @@index([exportBatchId])
   @@index([returnImportBatchId])
-  @@unique([businessUnitId, storageKey])
 }
 
 model InventoryBalance {
@@ -1056,8 +1084,8 @@ model Shipment {
   financeStatementLines  FinanceStatementLine[]
   financeReconciliations FinanceReconciliation[]
 
-  @@index([orderId, status])
   @@unique([businessUnitId, trackingNo])
+  @@index([orderId, status])
   @@index([businessUnitId, workStatus, nextFollowUpAt])
   @@index([ownerMembershipId, workStatus])
   @@index([businessUnitId, status, createdAt, id])
@@ -1175,26 +1203,28 @@ model NotificationDelivery {
 }
 
 model FinanceCounterparty {
-  id                    String                    @id @default(uuid())
+  id                    String                  @id @default(uuid())
   legalEntityId         String
   businessUnitId        String
   departmentId          String?
   code                  String
   name                  String
   type                  FinanceCounterpartyType
-  isActive              Boolean                   @default(true)
+  isActive              Boolean                 @default(true)
   metadata              Json?
   createdByMembershipId String
-  createdAt             DateTime                  @default(now())
-  updatedAt             DateTime                  @updatedAt
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
 
-  legalEntity         LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
-  businessUnit        BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
-  department          Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  createdByMembership Membership   @relation("FinanceCounterpartyCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
-  statements          FinanceStatement[]
-  reconciliations     FinanceReconciliation[]
-  payments            FinancePayment[]
+  legalEntity            LegalEntity                   @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  businessUnit           BusinessUnit                  @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  department             Department?                   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  createdByMembership    Membership                    @relation("FinanceCounterpartyCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  statements             FinanceStatement[]
+  reconciliations        FinanceReconciliation[]
+  payments               FinancePayment[]
+  statementTemplates     FinanceStatementTemplate[]
+  statementImportBatches FinanceStatementImportBatch[]
 
   @@unique([businessUnitId, code])
   @@index([businessUnitId, isActive, name])
@@ -1232,17 +1262,18 @@ model FinanceStatement {
   createdAt              DateTime               @default(now())
   updatedAt              DateTime               @updatedAt
 
-  legalEntity          LegalEntity           @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
-  businessUnit         BusinessUnit          @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
-  department           Department?           @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  site                 Site?                 @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  counterparty         FinanceCounterparty   @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
-  createdByMembership  Membership            @relation("FinanceStatementCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
-  approvedByMembership Membership?           @relation("FinanceStatementApprover", fields: [approvedByMembershipId], references: [id], onDelete: SetNull)
-  postedByMembership   Membership?           @relation("FinanceStatementPoster", fields: [postedByMembershipId], references: [id], onDelete: SetNull)
-  voidedByMembership   Membership?           @relation("FinanceStatementVoider", fields: [voidedByMembershipId], references: [id], onDelete: SetNull)
+  legalEntity          LegalEntity                  @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  businessUnit         BusinessUnit                 @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  department           Department?                  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  site                 Site?                        @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  counterparty         FinanceCounterparty          @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  createdByMembership  Membership                   @relation("FinanceStatementCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  approvedByMembership Membership?                  @relation("FinanceStatementApprover", fields: [approvedByMembershipId], references: [id], onDelete: SetNull)
+  postedByMembership   Membership?                  @relation("FinanceStatementPoster", fields: [postedByMembershipId], references: [id], onDelete: SetNull)
+  voidedByMembership   Membership?                  @relation("FinanceStatementVoider", fields: [voidedByMembershipId], references: [id], onDelete: SetNull)
   lines                FinanceStatementLine[]
   paymentAllocations   FinancePaymentAllocation[]
+  importSheet          FinanceStatementImportSheet? @relation("FinanceImportSheetStatement")
 
   @@unique([businessUnitId, counterpartyId, statementNo])
   @@index([businessUnitId, status, createdAt, id])
@@ -1268,9 +1299,9 @@ model FinanceStatementLine {
   createdAt            DateTime                        @default(now())
   updatedAt            DateTime                        @updatedAt
 
-  statement       FinanceStatement       @relation(fields: [statementId], references: [id], onDelete: Restrict)
-  order           Order?                 @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  shipment        Shipment?              @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
+  statement       FinanceStatement        @relation(fields: [statementId], references: [id], onDelete: Restrict)
+  order           Order?                  @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  shipment        Shipment?               @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
   reconciliations FinanceReconciliation[]
 
   @@unique([statementId, lineNo])
@@ -1279,8 +1310,152 @@ model FinanceStatementLine {
   @@index([shipmentId])
 }
 
+// A template is configuration data, not executable code. It describes
+// permitted workbook sheets, header aliases and field mappings. New partners
+// or workbook variants are added by configuration rather than code branches.
+model FinanceStatementTemplate {
+  id                    String   @id @default(uuid())
+  legalEntityId         String
+  businessUnitId        String
+  departmentId          String?
+  counterpartyId        String?
+  code                  String
+  name                  String
+  description           String?
+  configuration         Json
+  version               Int      @default(1)
+  isActive              Boolean  @default(true)
+  createdByMembershipId String
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  legalEntity         LegalEntity                   @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  businessUnit        BusinessUnit                  @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  department          Department?                   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  counterparty        FinanceCounterparty?          @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  createdByMembership Membership                    @relation("FinanceStatementTemplateCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  importBatches       FinanceStatementImportBatch[]
+
+  @@unique([businessUnitId, code])
+  @@index([businessUnitId, isActive, createdAt])
+  @@index([departmentId, isActive])
+  @@index([counterpartyId, isActive])
+  @@index([createdByMembershipId, createdAt])
+}
+
+// This is the private, immutable staging record for a workbook. Confirming a
+// batch is the only operation that creates FinanceStatement rows.
+model FinanceStatementImportBatch {
+  id                      String                            @id @default(uuid())
+  legalEntityId           String
+  businessUnitId          String
+  departmentId            String?
+  siteId                  String?
+  templateId              String
+  templateVersion         Int
+  templateSnapshot        Json
+  counterpartyId          String
+  statementNoPrefix       String
+  externalReference       String?
+  periodStart             DateTime?
+  periodEnd               DateTime?
+  issuedAt                DateTime?
+  originalName            String
+  storageKey              String
+  mimeType                String
+  sizeBytes               Int
+  sha256                  String
+  status                  FinanceStatementImportBatchStatus @default(PREVIEWED)
+  totalRows               Int                               @default(0)
+  readyRows               Int                               @default(0)
+  warningRows             Int                               @default(0)
+  rejectedRows            Int                               @default(0)
+  importedRows            Int                               @default(0)
+  previewedByMembershipId String
+  previewedAt             DateTime                          @default(now())
+  confirmedByMembershipId String?
+  confirmedAt             DateTime?
+  cancelledAt             DateTime?
+  createdAt               DateTime                          @default(now())
+  updatedAt               DateTime                          @updatedAt
+
+  legalEntity           LegalEntity                   @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  businessUnit          BusinessUnit                  @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  department            Department?                   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  site                  Site?                         @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  template              FinanceStatementTemplate      @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  counterparty          FinanceCounterparty           @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  previewedByMembership Membership                    @relation("FinanceStatementImportBatchPreviewer", fields: [previewedByMembershipId], references: [id], onDelete: Restrict)
+  confirmedByMembership Membership?                   @relation("FinanceStatementImportBatchConfirmer", fields: [confirmedByMembershipId], references: [id], onDelete: SetNull)
+  sheets                FinanceStatementImportSheet[]
+
+  @@index([businessUnitId, status, previewedAt, id])
+  @@index([departmentId, status, previewedAt])
+  @@index([counterpartyId, status])
+  @@index([templateId, createdAt])
+  @@index([previewedByMembershipId, previewedAt])
+}
+
+// A single workbook can contain multiple configured financial sheets. Each
+// sheet becomes at most one DRAFT FinanceStatement during confirmation.
+model FinanceStatementImportSheet {
+  id                 String               @id @default(uuid())
+  importBatchId      String
+  sheetKey           String
+  sheetName          String
+  headerRowNumber    Int
+  statementNo        String
+  statementType      FinanceStatementType
+  currency           String
+  currencyScale      Int                  @default(2)
+  totalAmountCents   BigInt
+  totalRows          Int                  @default(0)
+  readyRows          Int                  @default(0)
+  warningRows        Int                  @default(0)
+  rejectedRows       Int                  @default(0)
+  importedRows       Int                  @default(0)
+  createdStatementId String?              @unique
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  importBatch      FinanceStatementImportBatch @relation(fields: [importBatchId], references: [id], onDelete: Restrict)
+  createdStatement FinanceStatement?           @relation("FinanceImportSheetStatement", fields: [createdStatementId], references: [id], onDelete: Restrict)
+  rows             FinanceStatementImportRow[]
+
+  @@unique([importBatchId, sheetKey])
+  @@unique([importBatchId, statementNo])
+  @@index([importBatchId, createdAt])
+}
+
+model FinanceStatementImportRow {
+  id                String                          @id @default(uuid())
+  importSheetId     String
+  rowNumber         Int
+  sourceRowHash     String
+  status            FinanceStatementImportRowStatus @default(READY)
+  issueCodes        Json?
+  message           String?
+  sourceReference   String?
+  trackingReference String?
+  description       String?
+  currency          String?
+  currencyScale     Int?
+  amountCents       BigInt?
+  sourceSnapshot    Json?
+  importedAt        DateTime?
+  createdAt         DateTime                        @default(now())
+  updatedAt         DateTime                        @updatedAt
+
+  importSheet FinanceStatementImportSheet @relation(fields: [importSheetId], references: [id], onDelete: Restrict)
+
+  @@unique([importSheetId, rowNumber])
+  @@index([importSheetId, status, rowNumber])
+  @@index([sourceReference])
+  @@index([trackingReference])
+}
+
 model FinanceReconciliation {
-  id                      String                       @id @default(uuid())
+  id                      String                      @id @default(uuid())
   legalEntityId           String
   businessUnitId          String
   counterpartyId          String
@@ -1289,20 +1464,20 @@ model FinanceReconciliation {
   orderId                 String?
   shipmentId              String?
   amountCents             BigInt
-  status                  FinanceReconciliationStatus  @default(SUGGESTED)
-  method                  FinanceMatchMethod           @default(MANUAL)
+  status                  FinanceReconciliationStatus @default(SUGGESTED)
+  method                  FinanceMatchMethod          @default(MANUAL)
   reason                  String?
   createdByMembershipId   String
   confirmedByMembershipId String?
   confirmedAt             DateTime?
   voidedByMembershipId    String?
   voidedAt                DateTime?
-  createdAt               DateTime                     @default(now())
-  updatedAt               DateTime                     @updatedAt
+  createdAt               DateTime                    @default(now())
+  updatedAt               DateTime                    @updatedAt
 
-  legalEntity           LegalEntity           @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
-  businessUnit          BusinessUnit          @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
-  counterparty          FinanceCounterparty   @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  legalEntity           LegalEntity          @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  businessUnit          BusinessUnit         @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  counterparty          FinanceCounterparty  @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
   statementLine         FinanceStatementLine @relation(fields: [statementLineId], references: [id], onDelete: Restrict)
   order                 Order?               @relation(fields: [orderId], references: [id], onDelete: Restrict)
   shipment              Shipment?            @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
@@ -1329,7 +1504,7 @@ model FinancePayment {
   direction              FinancePaymentDirection
   status                 FinancePaymentStatus    @default(DRAFT)
   currency               String
-  currencyScale          Int                    @default(2)
+  currencyScale          Int                     @default(2)
   amountCents            BigInt
   paidAt                 DateTime?
   approvedAt             DateTime?
@@ -1345,15 +1520,15 @@ model FinancePayment {
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
 
-  legalEntity          LegalEntity           @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
-  businessUnit         BusinessUnit          @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
-  department           Department?           @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  site                 Site?                 @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  counterparty         FinanceCounterparty   @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
-  createdByMembership  Membership            @relation("FinancePaymentCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
-  approvedByMembership Membership?           @relation("FinancePaymentApprover", fields: [approvedByMembershipId], references: [id], onDelete: SetNull)
-  postedByMembership   Membership?           @relation("FinancePaymentPoster", fields: [postedByMembershipId], references: [id], onDelete: SetNull)
-  voidedByMembership   Membership?           @relation("FinancePaymentVoider", fields: [voidedByMembershipId], references: [id], onDelete: SetNull)
+  legalEntity          LegalEntity                @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  businessUnit         BusinessUnit               @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  department           Department?                @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  site                 Site?                      @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  counterparty         FinanceCounterparty        @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  createdByMembership  Membership                 @relation("FinancePaymentCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  approvedByMembership Membership?                @relation("FinancePaymentApprover", fields: [approvedByMembershipId], references: [id], onDelete: SetNull)
+  postedByMembership   Membership?                @relation("FinancePaymentPoster", fields: [postedByMembershipId], references: [id], onDelete: SetNull)
+  voidedByMembership   Membership?                @relation("FinancePaymentVoider", fields: [voidedByMembershipId], references: [id], onDelete: SetNull)
   allocations          FinancePaymentAllocation[]
 
   @@unique([businessUnitId, paymentNo])
@@ -1372,7 +1547,7 @@ model FinancePaymentAllocation {
 
   payment             FinancePayment   @relation(fields: [paymentId], references: [id], onDelete: Restrict)
   statement           FinanceStatement @relation(fields: [statementId], references: [id], onDelete: Restrict)
-  createdByMembership Membership        @relation("FinancePaymentAllocationCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  createdByMembership Membership       @relation("FinancePaymentAllocationCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
 
   @@unique([paymentId, statementId])
   @@index([statementId, createdAt])

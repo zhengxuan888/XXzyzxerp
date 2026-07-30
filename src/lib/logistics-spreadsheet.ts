@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 
 export const XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-const MAX_SPREADSHEET_BYTES = 10 * 1024 * 1024;
+export const MAX_PRIVATE_SPREADSHEET_BYTES = 10 * 1024 * 1024;
 const ZIP_SIGNATURE = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
 const LEGACY_XLS_SIGNATURE = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
 
@@ -27,7 +27,7 @@ export function normalizeSpreadsheetName(name: string) {
 export function prepareGeneratedSpreadsheetArtifact(originalName: string, bytes: Uint8Array): LogisticsSpreadsheetArtifact {
   const safeName = normalizeSpreadsheetName(originalName);
   if (!safeName.toLowerCase().endsWith(".xlsx")) throw new Error("XLSX_ARTIFACT_NAME_REQUIRED");
-  if (!bytes.byteLength || bytes.byteLength > MAX_SPREADSHEET_BYTES) throw new Error("FILE_SIZE_LIMIT_EXCEEDED");
+  if (!bytes.byteLength || bytes.byteLength > MAX_PRIVATE_SPREADSHEET_BYTES) throw new Error("FILE_SIZE_LIMIT_EXCEEDED");
   return {
     originalName: safeName,
     storageKey: `${randomUUID()}.xlsx`,
@@ -37,9 +37,14 @@ export function prepareGeneratedSpreadsheetArtifact(originalName: string, bytes:
   };
 }
 
-export function prepareReturnSpreadsheetArtifact(originalName: string, bytes: Uint8Array): LogisticsSpreadsheetArtifact {
+/**
+ * Validates a private XLSX upload before it is stored by the local/demo
+ * adapter. The name is intentionally domain-neutral so finance imports can
+ * reuse the same signature, size and path-traversal protections.
+ */
+export function preparePrivateSpreadsheetArtifact(originalName: string, bytes: Uint8Array): LogisticsSpreadsheetArtifact {
   const safeName = normalizeSpreadsheetName(originalName);
-  if (!bytes.byteLength || bytes.byteLength > MAX_SPREADSHEET_BYTES) throw new Error("FILE_SIZE_LIMIT_EXCEEDED");
+  if (!bytes.byteLength || bytes.byteLength > MAX_PRIVATE_SPREADSHEET_BYTES) throw new Error("FILE_SIZE_LIMIT_EXCEEDED");
   const extension = path.extname(safeName).toLowerCase();
   if (extension === ".xls" || extension === ".xlt" || hasPrefix(bytes, LEGACY_XLS_SIGNATURE)) {
     // Classic binary Excel needs a separate, sandboxed adapter. Never pretend a
@@ -55,4 +60,10 @@ export function prepareReturnSpreadsheetArtifact(originalName: string, bytes: Ui
     sizeBytes: bytes.byteLength,
     sha256: createHash("sha256").update(bytes).digest("hex"),
   };
+}
+
+// Kept as a compatibility wrapper for the existing logistics return-import
+// workflow. New callers should use the neutral private-artifact name above.
+export function prepareReturnSpreadsheetArtifact(originalName: string, bytes: Uint8Array): LogisticsSpreadsheetArtifact {
+  return preparePrivateSpreadsheetArtifact(originalName, bytes);
 }

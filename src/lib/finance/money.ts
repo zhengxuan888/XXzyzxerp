@@ -1,4 +1,6 @@
 const UNSIGNED_INTEGER = /^(0|[1-9]\d*)$/;
+const DECIMAL_AMOUNT = /^(0|[1-9]\d*)(?:\.(\d+))?$/;
+const GROUPED_DECIMAL_AMOUNT = /^(0|[1-9]\d{0,2}(?:,\d{3})+)(?:\.(\d+))?$/;
 const ZERO = BigInt(0);
 const ONE = BigInt(1);
 const TEN = BigInt(10);
@@ -50,6 +52,49 @@ export function parseCurrencyScale(value: unknown, fieldName = "currencyScale") 
     throw new FinanceMoneyValidationError(`${fieldName} 必须是 0 到 6 之间的整数。`);
   }
   return parsed;
+}
+
+/**
+ * Parses a human-readable decimal amount without routing it through a JS
+ * floating-point number. This is intentionally strict about locale ambiguity:
+ * `1,234.56` is accepted, while `1.234,56` must be normalized by the template
+ * owner before import rather than guessed incorrectly.
+ */
+export function parseDecimalAmountToMinor(
+  value: unknown,
+  currencyScale: number,
+  fieldName = "amount",
+  options?: { allowZero?: boolean },
+) {
+  const allowZero = options?.allowZero ?? false;
+  if (typeof value !== "string") {
+    throw new FinanceMoneyValidationError(`${fieldName} 必须是文本格式的十进制金额。`);
+  }
+  const compact = value.trim().replace(/[\u00a0\s]/g, "");
+  if (!compact || /[eE]/.test(compact) || compact.startsWith("+") || compact.startsWith("-")) {
+    throw new FinanceMoneyValidationError(`${fieldName} 不能使用科学计数法、正负号或空值。`);
+  }
+  const grouped = GROUPED_DECIMAL_AMOUNT.exec(compact);
+  const plain = DECIMAL_AMOUNT.exec(compact);
+  const normalized = grouped ? compact.replace(/,/g, "") : compact;
+  const match = grouped ?? plain;
+  if (!match || (compact.includes(",") && !grouped)) {
+    throw new FinanceMoneyValidationError(`${fieldName} 必须是非负十进制金额；仅支持英文小数点和三位逗号分组。`);
+  }
+  const [, wholePart, fractionPart = ""] = DECIMAL_AMOUNT.exec(normalized) ?? [];
+  if (!wholePart || fractionPart.length > currencyScale) {
+    throw new FinanceMoneyValidationError(`${fieldName} 的小数位超过当前币种精度。`);
+  }
+  let multiplier = ONE;
+  for (let index = 0; index < currencyScale; index += 1) multiplier *= TEN;
+  const fraction = currencyScale > 0
+    ? BigInt((fractionPart || "").padEnd(currencyScale, "0") || "0")
+    : ZERO;
+  const amount = BigInt(wholePart) * multiplier + fraction;
+  if (!allowZero && amount === ZERO) {
+    throw new FinanceMoneyValidationError(`${fieldName} 必须大于 0。`);
+  }
+  return amount;
 }
 
 function groupThousands(value: string) {
