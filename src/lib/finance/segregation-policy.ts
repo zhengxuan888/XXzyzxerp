@@ -8,6 +8,9 @@ export const financeSegregationPolicyKeys = [
   "requireReconciliationResolverDifferentFromCreator",
   "requirePaymentAllocatorDifferentFromCreator",
   "requirePaymentAllocatorDifferentFromApprover",
+  "requireAllocationAdjustmentApproverDifferentFromRequester",
+  "requireAllocationAdjustmentApplierDifferentFromRequester",
+  "requireAllocationAdjustmentApplierDifferentFromApprover",
 ] as const;
 
 export type FinanceSegregationPolicyKey = (typeof financeSegregationPolicyKeys)[number];
@@ -29,6 +32,9 @@ export const strictFinanceSegregationPolicy: Readonly<FinanceSegregationPolicy> 
   requireReconciliationResolverDifferentFromCreator: true,
   requirePaymentAllocatorDifferentFromCreator: true,
   requirePaymentAllocatorDifferentFromApprover: true,
+  requireAllocationAdjustmentApproverDifferentFromRequester: true,
+  requireAllocationAdjustmentApplierDifferentFromRequester: true,
+  requireAllocationAdjustmentApplierDifferentFromApprover: true,
 });
 
 export class FinanceSegregationPolicyInputError extends Error {
@@ -101,7 +107,9 @@ export type FinanceSegregationCommand =
   | "statement.post"
   | "payment.approve"
   | "payment.post"
-  | "payment.allocate";
+  | "payment.allocate"
+  | "allocation_adjustment.approve"
+  | "allocation_adjustment.apply";
 
 export type FinanceSegregationSubject = {
   createdByUserId: string;
@@ -155,6 +163,42 @@ export function checkFinanceSegregation({
   subject: FinanceSegregationSubject;
   policy: FinanceSegregationPolicy;
 }): FinanceSegregationDecision {
+  if (command === "allocation_adjustment.approve") {
+    if (policy.requireAllocationAdjustmentApproverDifferentFromRequester && sameUser(actorUserId, subject.createdByUserId)) {
+      return {
+        allowed: false,
+        code: "FINANCE_ALLOCATION_ADJUSTMENT_REQUESTER_APPROVER_SEPARATION_REQUIRED",
+        message: "当前财务内控要求核销调整申请人与审核人必须不同。",
+      };
+    }
+    return { allowed: true };
+  }
+
+  if (command === "allocation_adjustment.apply") {
+    if (policy.requireAllocationAdjustmentApplierDifferentFromRequester && sameUser(actorUserId, subject.createdByUserId)) {
+      return {
+        allowed: false,
+        code: "FINANCE_ALLOCATION_ADJUSTMENT_REQUESTER_APPLIER_SEPARATION_REQUIRED",
+        message: "当前财务内控要求核销调整申请人与执行人必须不同。",
+      };
+    }
+    if (policy.requireAllocationAdjustmentApplierDifferentFromApprover && !subject.approvedByUserId) {
+      return {
+        allowed: false,
+        code: "FINANCE_ALLOCATION_ADJUSTMENT_APPROVER_REQUIRED",
+        message: "核销调整缺少审核人记录，不能执行。",
+      };
+    }
+    if (policy.requireAllocationAdjustmentApplierDifferentFromApprover && sameUser(actorUserId, subject.approvedByUserId)) {
+      return {
+        allowed: false,
+        code: "FINANCE_ALLOCATION_ADJUSTMENT_APPROVER_APPLIER_SEPARATION_REQUIRED",
+        message: "当前财务内控要求核销调整审核人与执行人必须不同。",
+      };
+    }
+    return { allowed: true };
+  }
+
   const isStatement = command.startsWith("statement.");
   const approving = command.endsWith(".approve");
   const posting = command.endsWith(".post");

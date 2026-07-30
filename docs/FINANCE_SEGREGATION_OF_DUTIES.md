@@ -16,8 +16,9 @@
 | --- | --- |
 | 结算单 | 制单人 ≠ 审批人；制单人 ≠ 过账人；审批人 ≠ 过账人 |
 | 付款 | 制单人 ≠ 审批人；制单人 ≠ 过账人；审批人 ≠ 过账人 |
+| 已批准付款核销调整 | 申请人 ≠ 审批人；申请人 ≠ 执行人；审批人 ≠ 执行人 |
 
-管理员可在“财务内控”页面按业务板块配置九个开关。允许关闭只是放宽岗位分离，不会自动授予新的业务操作权限。每次保存会写入 `AuditLog`。
+管理员可在“财务内控”页面按业务板块配置十二个开关。允许关闭只是放宽岗位分离，不会自动授予新的业务操作权限。每次保存会写入 `AuditLog`。
 
 配置动作：
 
@@ -55,7 +56,7 @@
 
 - `FinanceControlPolicy` 新增单调 `version`。保存时必须提交页面读取到的版本与 3–500 字的变更原因；旧版本写入返回 `409 FINANCE_CONTROL_POLICY_STALE`，不会覆盖他人的更新。
 - 规则更新、版本递增和 `AuditLog` 写入均在同一个 PostgreSQL `Serializable` 事务中执行。审计写入失败时，规则更新会一起回滚。
-- 审计详情保存变更原因、变更前后九项开关和版本前后值；不记录任何凭据或敏感业务内容。
+- 审计详情保存变更原因、变更前后十二项开关和版本前后值；不记录任何凭据或敏感业务内容。
 - 页面增加版本提示、变更原因输入与无改动禁用保存，避免无意义的配置写入。
 
 ## 2026-07-31：对账建议岗位分离与审批阻断
@@ -70,7 +71,7 @@
 - 新增两个业务板块级开关：`requirePaymentAllocatorDifferentFromCreator` 与 `requirePaymentAllocatorDifferentFromApprover`。缺少策略记录时按严格默认生效：付款制单人、审批人与核销人必须是不同的稳定 `userId`，切换 Membership 不能绕过。
 - 核销不再限制“同一付款 + 同一结算单”只能一笔。每一次合法的部分核销都保存为独立、不可变的记录，因此先核销 `40/100` 后可以安全补录 `60/100`，不会卡住付款过账。
 - 每笔核销要求前端传入一次性 `idempotencyKey`。网络重试使用同一键会返回同一条记录；同一键但金额或结算单不同则返回 `409 ALLOCATION_IDEMPOTENCY_KEY_REUSED`，不会重复入账。
-- 数据库层新增 `(paymentId, idempotencyKey)` 唯一约束和不可变触发器，直接 `UPDATE` 或 `DELETE` 核销记录会被拒绝。未来修正必须走受控冲销/调整流程，不能抹掉原始财务事实。
+- 数据库层新增 `(paymentId, idempotencyKey)` 唯一约束和不可变触发器，直接 `UPDATE` 或 `DELETE` 核销记录会被拒绝。仍处于 `APPROVED` 且未过账的核销可走下述受控替换流程；任何修正都不能抹掉原始财务事实。
 - 已过账的付款和结算单不再接受直接“作废”状态转换，前端也不再展示该入口；已过账纠正尚未实现为直接写操作。
 
 ### 本地验证
@@ -84,10 +85,44 @@
 
 ### 尚未完成的边界
 
-已过账事实的受控冲销尚未实现。上线前必须补齐独立的“冲销/调整申请 → 不同员工审批 → 不同员工过账”流程、反向不可变财务效果、重复冲销拒绝和真实岗位 UAT；在此之前，已过账单据只能保留和审计，不能在系统内修正。
+已批准但未过账的付款核销受控替换已具备实现；**已过账事实**的更正、总账冲销和会计分录仍未实现。上线前必须补齐独立的“已过账冲销/调整申请 → 不同员工审批 → 不同员工过账”流程、反向不可变会计效果、重复冲销拒绝和真实岗位 UAT；在此之前，已过账单据只能保留和审计，不能在系统内修正。
+
+## 2026-07-31：已批准付款核销的受控替换
+
+该流程只处理仍为 `APPROVED` 的付款核销错误，不是已过账事实的总账冲销，也不会修改或删除原核销记录。
+
+### 流程与业务边界
+
+1. 申请创建为 `PENDING`；审批/拒绝和取消均须通过对应的动态 Action + Scope 校验。申请可被 `APPROVED` 或 `REJECTED`，处于 `PENDING`/`APPROVED` 时可 `CANCELLED`；默认岗位分离要求审批人与申请人不同。
+2. 仅 `APPROVED` 的申请可以 `APPLIED`。执行时原核销保留不变，为同一付款创建一条金额相同、指向**不同**且仍为 `APPROVED` 的替代结算单的新核销，并写入一条 `REVERSAL` 核销效果。
+3. 本批仅支持整笔替换，不支持局部调整；替代结算单必须与原付款属于同一法人实体、业务板块、结算对象、币种和精度。
+4. 申请、原付款、原结算单和替代结算单在申请、审批、执行时都会重新读取并确认仍为 `APPROVED`。任一对象已经 `POSTED` 或状态已变化，服务端拒绝执行。
+5. `REJECTED` 与 `CANCELLED` 不产生财务效果；`APPLIED` 后原核销仍是审计事实，其有效金额由“原金额减去反向效果”计算，不能变为负数。
+
+### 动态授权、范围与岗位分离
+
+- 动作键为 `finance.allocation_adjustment.read`、`request`、`approve`、`apply`、`cancel`；菜单 `finance-allocation-adjustments` 与 `/admin/finance-allocation-adjustments` 仅以这些数据库配置的动作和菜单权限开放，不按角色、部门或业务板块名称硬编码。
+- 迁移不会为任何角色自动新增 RolePermission、MenuPermission 或 Access Grant。管理员必须显式配置动作、菜单及可转授权范围。
+- 每个读取和写入都按当前 Membership 的 Action + Scope + 组织归属校验原付款、原结算单和替代结算单；跨业务板块、跨部门无范围或无权限请求统一拒绝，避免通过 ID 枚举数据。
+- `FinanceControlPolicy` 默认开启三项分离：`requireAllocationAdjustmentApproverDifferentFromRequester`、`requireAllocationAdjustmentApplierDifferentFromRequester`、`requireAllocationAdjustmentApplierDifferentFromApprover`。三者均按稳定 `userId` 比较，切换 Membership 不能绕过。
+
+### 不可变性、并发与审计
+
+- 原 `FinancePaymentAllocation` 继续由数据库不可变触发器保护；`FinancePaymentAllocationEffect` 仅允许插入一次有效 `REVERSAL`，不允许更新或删除。
+- 数据库触发器同时校验申请状态迁移、组织/人员归属、替代核销与申请事实一致，并以延迟约束确保 `APPLIED` 申请恰有一条反向效果。
+- 执行在可重试的 PostgreSQL `Serializable` 事务中重新计算替代结算单的有效核销额；容量不足或并发冲突会受控拒绝，不会让替代结算单超额核销。
+- 申请、审批、拒绝、取消和执行均在同一事务写入 `AuditLog`，记录命令、前后状态、原核销、替代结算单/核销、金额与原因，不记录凭据。
+
+### 本轮最终门禁
+
+- 本地 `erp_v2` 已应用 `202607310013_finance_payment_allocation_adjustments`、`202607310014_harden_finance_allocation_adjustment_guards` 与 `202607310015_freeze_finance_allocation_adjustment_approval_facts`。最后一项迁移在数据库层冻结 `APPROVED` 后的审批人、审批时间和审批理由，不可在取消或执行时被篡改。
+- 回滚式 PostgreSQL UAT 已验证：申请人、审批人与执行人为三名不同员工时，`PENDING → APPROVED → APPLIED` 能在同一事务写入替代核销与 `REVERSAL` 效果；故意篡改既有审批事实会被数据库拒绝；事务完整回滚，无演示财务数据残留。
+- 完整门禁为 `pnpm run test` 35 个测试文件 / 131 项通过，`pnpm run ts-check`、`pnpm run lint`、`pnpm exec prisma validate`、`pnpm exec prisma migrate status` 和 `pnpm run build` 全部通过。
+- 操作仍为默认拒绝：管理员必须在数据库驱动的角色、菜单与协作授权中显式配置 `finance.allocation_adjustment.*` 及对应菜单。本次没有为演示角色自动增权。
+- 仍需在真实财务岗位 UAT 中补足 API 跨范围、权限矩阵与并发容量的端到端用例；`POSTED` 事实的总账冲销/更正仍是上线阻断项，并未因本次功能而解禁。
 
 ## 当前边界与后续项
 
-本批先覆盖结算单和付款的“制单/审批/过账”三段链路。后续应按同一模式增加：对账建议的创建人与确认人分离、核销人与付款过账人分离、已过账事实的受控冲销/作废双人复核，以及可配置的金额阈值审批。
+本批已覆盖结算单和付款的“制单/审批/过账”三段链路、对账建议岗位分离、付款核销岗位分离，以及已批准核销的受控替换。后续重点是：已过账事实的受控冲销/作废双人复核与总账会计分录、真实岗位 UAT，以及可配置的金额阈值审批。
 
 这些后续项没有在本批被宣称为已完成；在上线前需由财务负责人确认实际岗位矩阵和例外处理流程。

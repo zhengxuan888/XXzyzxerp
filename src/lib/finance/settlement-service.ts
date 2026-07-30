@@ -1,5 +1,6 @@
 import {
   FinanceLineReconciliationStatus,
+  FinancePaymentAllocationAdjustmentStatus,
   FinancePaymentStatus,
   FinanceReconciliationStatus,
   FinanceStatementStatus,
@@ -9,6 +10,7 @@ import { randomUUID } from "node:crypto";
 
 import { writeAuditLog } from "@/lib/audit";
 import { createFinanceAccessPlan, type FinanceAccessMembership, type FinanceAccessTarget } from "@/lib/finance/access";
+import { effectiveAllocationAmount, totalEffectiveAllocationAmount } from "@/lib/finance/allocation";
 import { parseCurrencyScale, parseMinorAmount } from "@/lib/finance/money";
 import {
   checkFinanceReconciliationSegregation,
@@ -518,9 +520,28 @@ export async function transitionStatement(actor: FinanceActor, statementId: stri
         throw new FinanceServiceError("UNRESOLVED_RECONCILIATIONS", "存在未匹配、被忽略或金额差异明细，不能批准结算单。", 409);
       }
     }
+    if (input.command === "post") {
+      const openAdjustment = await tx.financePaymentAllocationAdjustment.findFirst({
+        where: {
+          businessUnitId: current.businessUnitId,
+          status: { in: [FinancePaymentAllocationAdjustmentStatus.PENDING, FinancePaymentAllocationAdjustmentStatus.APPROVED] },
+          OR: [
+            { sourceAllocation: { statementId: current.id } },
+            { replacementStatementId: current.id },
+          ],
+        },
+        select: { id: true },
+      });
+      if (openAdjustment) {
+        throw new FinanceServiceError("ALLOCATION_ADJUSTMENT_PENDING", "存在待审核或待执行的核销调整，结算单不能先过账。", 409);
+      }
+    }
     if (input.command === "void") {
-      const allocationCount = await tx.financePaymentAllocation.count({ where: { statementId: current.id } });
-      if (allocationCount > 0) {
+      const allocations = await tx.financePaymentAllocation.findMany({
+        where: { statementId: current.id },
+        include: { effects: { select: { amountCents: true } } },
+      });
+      if (totalEffectiveAllocationAmount(allocations) > BigInt(0)) {
         throw new FinanceServiceError("STATEMENT_HAS_PAYMENT_ALLOCATIONS", "结算单已有付款核销，必须先走受控冲销流程，不能直接作废。", 409);
       }
     }
@@ -948,21 +969,32 @@ export async function transitionPayment(actor: FinanceActor, paymentId: string, 
     const current = await tx.financePayment.findFirst({
       where: { id: payment.id, businessUnitId: actor.membership.businessUnitId },
       include: {
-        allocations: { include: { statement: true } },
+        allocations: { include: { statement: true, effects: { select: { amountCents: true } } } },
         createdByMembership: { select: { userId: true } },
         approvedByMembership: { select: { userId: true } },
       },
     });
     if (!current || current.status !== payment.status) throw new FinanceServiceError("PAYMENT_STALE", "付款记录状态已变化，请刷新后重试。", 409);
     if (input.command === "post") {
-      if (!current.allocations.length) throw new FinanceServiceError("PAYMENT_ALLOCATIONS_REQUIRED", "付款过账前必须至少核销一张已批准结算单。", 409);
-      const allocated = current.allocations.reduce((sum, allocation) => sum + allocation.amountCents, BigInt(0));
+      const openAdjustment = await tx.financePaymentAllocationAdjustment.findFirst({
+        where: {
+          businessUnitId: current.businessUnitId,
+          status: { in: [FinancePaymentAllocationAdjustmentStatus.PENDING, FinancePaymentAllocationAdjustmentStatus.APPROVED] },
+          sourceAllocation: { paymentId: current.id },
+        },
+        select: { id: true },
+      });
+      if (openAdjustment) {
+        throw new FinanceServiceError("ALLOCATION_ADJUSTMENT_PENDING", "存在待审核或待执行的核销调整，付款不能先过账。", 409);
+      }
+      const allocated = totalEffectiveAllocationAmount(current.allocations);
+      if (allocated === BigInt(0)) throw new FinanceServiceError("PAYMENT_ALLOCATIONS_REQUIRED", "付款过账前必须至少核销一张已批准结算单。", 409);
       if (allocated !== current.amountCents) throw new FinanceServiceError("PAYMENT_ALLOCATION_TOTAL_MISMATCH", "付款核销金额必须与付款金额完全一致。", 409);
-      if (current.allocations.some((allocation) => allocation.statement.status !== FinanceStatementStatus.APPROVED)) {
+      if (current.allocations.some((allocation) => effectiveAllocationAmount(allocation) > BigInt(0) && allocation.statement.status !== FinanceStatementStatus.APPROVED)) {
         throw new FinanceServiceError("PAYMENT_STATEMENT_NOT_APPROVED", "只能核销已批准且未过账的结算单。", 409);
       }
     }
-    if (input.command === "void" && current.allocations.length) {
+    if (input.command === "void" && totalEffectiveAllocationAmount(current.allocations) > BigInt(0)) {
       throw new FinanceServiceError("PAYMENT_HAS_ALLOCATIONS", "付款记录已有核销，必须先走受控冲销流程，不能直接作废。", 409);
     }
     if (command === "approve" || command === "post") {
@@ -1034,14 +1066,14 @@ export async function allocatePayment(actor: FinanceActor, paymentId: string, in
     const currentPayment = await tx.financePayment.findFirst({
       where: { id: payment.id, businessUnitId: actor.membership.businessUnitId, status: FinancePaymentStatus.APPROVED },
       include: {
-        allocations: true,
+        allocations: { include: { effects: { select: { amountCents: true } } } },
         createdByMembership: { select: { userId: true } },
         approvedByMembership: { select: { userId: true } },
       },
     });
     const currentStatement = await tx.financeStatement.findFirst({
       where: { id: statement.id, businessUnitId: actor.membership.businessUnitId, status: FinanceStatementStatus.APPROVED },
-      include: { paymentAllocations: { include: { payment: { select: { status: true } } } } },
+      include: { paymentAllocations: { include: { payment: { select: { status: true } }, effects: { select: { amountCents: true } } } } },
     });
     if (!currentPayment || !currentStatement) throw new FinanceServiceError("ALLOCATION_STALE", "付款或结算单状态已变化，请刷新后重试。", 409);
     const policy = resolveFinanceSegregationPolicy(await tx.financeControlPolicy.findUnique({
@@ -1071,16 +1103,16 @@ export async function allocatePayment(actor: FinanceActor, paymentId: string, in
       }
       return { allocation: existing, created: false };
     }
-    const usedByPayment = currentPayment.allocations.reduce((sum, allocation) => sum + allocation.amountCents, BigInt(0));
+    const usedByPayment = totalEffectiveAllocationAmount(currentPayment.allocations);
     const usedByStatement = currentStatement.paymentAllocations
       .filter((allocation) => allocation.payment.status !== FinancePaymentStatus.VOIDED)
-      .reduce((sum, allocation) => sum + allocation.amountCents, BigInt(0));
+      .reduce((sum, allocation) => sum + effectiveAllocationAmount(allocation), BigInt(0));
     if (usedByPayment + amountCents > currentPayment.amountCents) throw new FinanceServiceError("PAYMENT_OVER_ALLOCATED", "核销金额超过付款记录可用余额。", 409);
     if (usedByStatement + amountCents > currentStatement.totalAmountCents) throw new FinanceServiceError("STATEMENT_OVER_ALLOCATED", "核销金额超过结算单可用余额。", 409);
     const allocationId = randomUUID();
     const inserted = await tx.$executeRaw`
-      INSERT INTO "FinancePaymentAllocation" ("id", "paymentId", "statementId", "idempotencyKey", "amountCents", "createdByMembershipId")
-      VALUES (${allocationId}, ${currentPayment.id}, ${currentStatement.id}, ${idempotencyKey}, ${amountCents}, ${actor.membership.id})
+      INSERT INTO "FinancePaymentAllocation" ("id", "legalEntityId", "businessUnitId", "paymentId", "statementId", "idempotencyKey", "amountCents", "createdByMembershipId")
+      VALUES (${allocationId}, ${currentPayment.legalEntityId}, ${currentPayment.businessUnitId}, ${currentPayment.id}, ${currentStatement.id}, ${idempotencyKey}, ${amountCents}, ${actor.membership.id})
       ON CONFLICT ("paymentId", "idempotencyKey") DO NOTHING
     `;
     if (inserted !== 1) {

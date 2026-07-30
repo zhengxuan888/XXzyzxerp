@@ -27,6 +27,9 @@ const policySelect = {
   requireReconciliationResolverDifferentFromCreator: true,
   requirePaymentAllocatorDifferentFromCreator: true,
   requirePaymentAllocatorDifferentFromApprover: true,
+  requireAllocationAdjustmentApproverDifferentFromRequester: true,
+  requireAllocationAdjustmentApplierDifferentFromRequester: true,
+  requireAllocationAdjustmentApplierDifferentFromApprover: true,
 } as const;
 
 type FinanceControlPolicyRow = {
@@ -44,6 +47,9 @@ type FinanceControlPolicyRow = {
   requireReconciliationResolverDifferentFromCreator: boolean;
   requirePaymentAllocatorDifferentFromCreator: boolean;
   requirePaymentAllocatorDifferentFromApprover: boolean;
+  requireAllocationAdjustmentApproverDifferentFromRequester: boolean;
+  requireAllocationAdjustmentApplierDifferentFromRequester: boolean;
+  requireAllocationAdjustmentApplierDifferentFromApprover: boolean;
 };
 
 function policyDto(row: FinanceControlPolicyRow | null) {

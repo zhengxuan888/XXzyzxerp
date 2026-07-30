@@ -139,4 +139,37 @@ describe("finance segregation of duties policy", () => {
       policy,
     })).toEqual({ allowed: true });
   });
+
+  it("requires three distinct employees for a controlled allocation adjustment by default", () => {
+    const policy = resolveFinanceSegregationPolicy(null);
+    const subject = { createdByUserId: "user-requester", approvedByUserId: "user-reviewer" };
+
+    expect(checkFinanceSegregation({
+      command: "allocation_adjustment.approve",
+      actorUserId: "user-requester",
+      subject,
+      policy,
+    })).toMatchObject({ allowed: false, code: "FINANCE_ALLOCATION_ADJUSTMENT_REQUESTER_APPROVER_SEPARATION_REQUIRED" });
+
+    expect(checkFinanceSegregation({
+      command: "allocation_adjustment.apply",
+      actorUserId: "user-requester",
+      subject,
+      policy,
+    })).toMatchObject({ allowed: false, code: "FINANCE_ALLOCATION_ADJUSTMENT_REQUESTER_APPLIER_SEPARATION_REQUIRED" });
+
+    expect(checkFinanceSegregation({
+      command: "allocation_adjustment.apply",
+      actorUserId: "user-reviewer",
+      subject,
+      policy,
+    })).toMatchObject({ allowed: false, code: "FINANCE_ALLOCATION_ADJUSTMENT_APPROVER_APPLIER_SEPARATION_REQUIRED" });
+
+    expect(checkFinanceSegregation({
+      command: "allocation_adjustment.apply",
+      actorUserId: "user-applier",
+      subject,
+      policy,
+    })).toEqual({ allowed: true });
+  });
 });

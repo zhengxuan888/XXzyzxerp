@@ -60,6 +60,21 @@ const controls: Array<{ key: PolicyKey; title: string; description: string }> = 
     title: "付款：审批人与核销人不同",
     description: "把付款审批与付款核销拆分为不同岗位。",
   },
+  {
+    key: "requireAllocationAdjustmentApproverDifferentFromRequester",
+    title: "核销调整：申请人与审核人不同",
+    description: "防止员工自行发起并批准将核销改到另一张结算单。",
+  },
+  {
+    key: "requireAllocationAdjustmentApplierDifferentFromRequester",
+    title: "核销调整：申请人与执行人不同",
+    description: "防止申请人直接执行冲销效果和替代核销。",
+  },
+  {
+    key: "requireAllocationAdjustmentApplierDifferentFromApprover",
+    title: "核销调整：审核人与执行人不同",
+    description: "把调整审核与最终执行拆分为两道独立岗位。",
+  },
 ];
 
 function formatTime(value: string | null) {

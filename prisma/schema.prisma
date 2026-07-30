@@ -229,6 +229,22 @@ enum FinancePaymentStatus {
   VOIDED
 }
 
+// A payment allocation is immutable. Corrections are appended as an explicit
+// adjustment and a reversal effect, never by mutating the original allocation.
+// This first controlled flow is intentionally limited to records that are
+// still APPROVED. POSTED facts require a later accounting-entry module.
+enum FinancePaymentAllocationAdjustmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  APPLIED
+}
+
+enum FinancePaymentAllocationEffectType {
+  REVERSAL
+}
+
 model LegalEntity {
   id        String   @id @default(uuid())
   code      String   @unique
@@ -266,6 +282,9 @@ model LegalEntity {
   financeStatements             FinanceStatement[]
   financeReconciliations        FinanceReconciliation[]
   financePayments               FinancePayment[]
+  financePaymentAllocations     FinancePaymentAllocation[]
+  financePaymentAllocationAdjustments FinancePaymentAllocationAdjustment[]
+  financePaymentAllocationEffects FinancePaymentAllocationEffect[]
   financeStatementTemplates     FinanceStatementTemplate[]
   financeStatementImportBatches FinanceStatementImportBatch[]
   financeControlPolicies        FinanceControlPolicy[]
@@ -321,6 +340,9 @@ model BusinessUnit {
   financeStatements             FinanceStatement[]
   financeReconciliations        FinanceReconciliation[]
   financePayments               FinancePayment[]
+  financePaymentAllocations     FinancePaymentAllocation[]
+  financePaymentAllocationAdjustments FinancePaymentAllocationAdjustment[]
+  financePaymentAllocationEffects FinancePaymentAllocationEffect[]
   financeStatementTemplates     FinanceStatementTemplate[]
   financeStatementImportBatches FinanceStatementImportBatch[]
   financeControlPolicy          FinanceControlPolicy?
@@ -566,6 +588,12 @@ model Membership {
   postedFinancePayments                  FinancePayment[]              @relation("FinancePaymentPoster")
   voidedFinancePayments                  FinancePayment[]              @relation("FinancePaymentVoider")
   createdFinancePaymentAllocations       FinancePaymentAllocation[]    @relation("FinancePaymentAllocationCreator")
+  requestedFinancePaymentAllocationAdjustments FinancePaymentAllocationAdjustment[] @relation("FinanceAllocationAdjustmentRequester")
+  approvedFinancePaymentAllocationAdjustments  FinancePaymentAllocationAdjustment[] @relation("FinanceAllocationAdjustmentApprover")
+  rejectedFinancePaymentAllocationAdjustments  FinancePaymentAllocationAdjustment[] @relation("FinanceAllocationAdjustmentRejecter")
+  cancelledFinancePaymentAllocationAdjustments FinancePaymentAllocationAdjustment[] @relation("FinanceAllocationAdjustmentCanceller")
+  appliedFinancePaymentAllocationAdjustments   FinancePaymentAllocationAdjustment[] @relation("FinanceAllocationAdjustmentApplier")
+  appliedFinancePaymentAllocationEffects       FinancePaymentAllocationEffect[]     @relation("FinanceAllocationEffectApplier")
   createdFinanceStatementTemplates       FinanceStatementTemplate[]    @relation("FinanceStatementTemplateCreator")
   previewedFinanceStatementImportBatches FinanceStatementImportBatch[] @relation("FinanceStatementImportBatchPreviewer")
   confirmedFinanceStatementImportBatches FinanceStatementImportBatch[] @relation("FinanceStatementImportBatchConfirmer")
@@ -1277,6 +1305,7 @@ model FinanceStatement {
   voidedByMembership   Membership?                  @relation("FinanceStatementVoider", fields: [voidedByMembershipId], references: [id], onDelete: SetNull)
   lines                FinanceStatementLine[]
   paymentAllocations   FinancePaymentAllocation[]
+  replacementAllocationAdjustments FinancePaymentAllocationAdjustment[] @relation("FinanceAllocationAdjustmentReplacementStatement")
   importSheet          FinanceStatementImportSheet? @relation("FinanceImportSheetStatement")
 
   @@unique([businessUnitId, counterpartyId, statementNo])
@@ -1547,6 +1576,8 @@ model FinancePayment {
 
 model FinancePaymentAllocation {
   id                    String   @id @default(uuid())
+  legalEntityId         String
+  businessUnitId        String
   paymentId             String
   statementId           String
   // A client-generated key makes an allocation request safe to retry without
@@ -1556,14 +1587,94 @@ model FinancePaymentAllocation {
   createdByMembershipId String
   createdAt             DateTime @default(now())
 
+  legalEntity         LegalEntity      @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  businessUnit        BusinessUnit     @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
   payment             FinancePayment   @relation(fields: [paymentId], references: [id], onDelete: Restrict)
   statement           FinanceStatement @relation(fields: [statementId], references: [id], onDelete: Restrict)
   createdByMembership Membership       @relation("FinancePaymentAllocationCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  effects             FinancePaymentAllocationEffect[] @relation("FinancePaymentAllocationEffects")
+  sourceAdjustments   FinancePaymentAllocationAdjustment[] @relation("FinanceAllocationAdjustmentSource")
+  replacementForAdjustments FinancePaymentAllocationAdjustment[] @relation("FinanceAllocationAdjustmentReplacement")
 
   @@unique([paymentId, idempotencyKey])
+  @@index([legalEntityId, businessUnitId])
   @@index([paymentId, statementId, createdAt])
   @@index([statementId, createdAt])
   @@index([createdByMembershipId, createdAt])
+}
+
+// A four-eye request to move one whole APPROVED allocation to another
+// APPROVED statement. The source allocation remains immutable; APPLIED adds a
+// reversal effect and a new replacement allocation in the same transaction.
+model FinancePaymentAllocationAdjustment {
+  id                       String                                  @id @default(uuid())
+  legalEntityId            String
+  businessUnitId           String
+  sourceAllocationId       String
+  replacementStatementId   String
+  replacementAllocationId  String?                                 @unique
+  amountCents              BigInt
+  status                   FinancePaymentAllocationAdjustmentStatus @default(PENDING)
+  reason                   String
+  idempotencyKey           String
+  requestedByMembershipId  String
+  requestedAt              DateTime                                @default(now())
+  approvedByMembershipId   String?
+  approvedAt               DateTime?
+  approvalReason           String?
+  rejectedByMembershipId   String?
+  rejectedAt               DateTime?
+  rejectionReason          String?
+  cancelledByMembershipId  String?
+  cancelledAt              DateTime?
+  cancellationReason       String?
+  appliedByMembershipId    String?
+  appliedAt                DateTime?
+  createdAt                DateTime                                @default(now())
+  updatedAt                DateTime                                @updatedAt
+
+  legalEntity           LegalEntity               @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  businessUnit          BusinessUnit              @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  sourceAllocation      FinancePaymentAllocation  @relation("FinanceAllocationAdjustmentSource", fields: [sourceAllocationId], references: [id], onDelete: Restrict)
+  replacementStatement  FinanceStatement          @relation("FinanceAllocationAdjustmentReplacementStatement", fields: [replacementStatementId], references: [id], onDelete: Restrict)
+  replacementAllocation FinancePaymentAllocation? @relation("FinanceAllocationAdjustmentReplacement", fields: [replacementAllocationId], references: [id], onDelete: Restrict)
+  requestedByMembership Membership                 @relation("FinanceAllocationAdjustmentRequester", fields: [requestedByMembershipId], references: [id], onDelete: Restrict)
+  approvedByMembership  Membership?                @relation("FinanceAllocationAdjustmentApprover", fields: [approvedByMembershipId], references: [id], onDelete: SetNull)
+  rejectedByMembership  Membership?                @relation("FinanceAllocationAdjustmentRejecter", fields: [rejectedByMembershipId], references: [id], onDelete: SetNull)
+  cancelledByMembership Membership?                @relation("FinanceAllocationAdjustmentCanceller", fields: [cancelledByMembershipId], references: [id], onDelete: SetNull)
+  appliedByMembership   Membership?                @relation("FinanceAllocationAdjustmentApplier", fields: [appliedByMembershipId], references: [id], onDelete: SetNull)
+  reversalEffect        FinancePaymentAllocationEffect?
+
+  @@unique([sourceAllocationId, idempotencyKey])
+  @@index([businessUnitId, status, requestedAt, id])
+  @@index([replacementStatementId, status, requestedAt])
+  @@index([requestedByMembershipId, requestedAt])
+}
+
+// Positive values keep money semantics clear: the effective allocation is the
+// original amount minus all applied effects. Effects are append-only evidence.
+model FinancePaymentAllocationEffect {
+  id                    String                            @id @default(uuid())
+  legalEntityId         String
+  businessUnitId        String
+  allocationId          String
+  adjustmentId          String                            @unique
+  type                  FinancePaymentAllocationEffectType @default(REVERSAL)
+  amountCents           BigInt
+  appliedByMembershipId String
+  appliedAt             DateTime                          @default(now())
+  createdAt             DateTime                          @default(now())
+
+  legalEntity         LegalEntity                        @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  businessUnit        BusinessUnit                       @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  allocation          FinancePaymentAllocation           @relation("FinancePaymentAllocationEffects", fields: [allocationId], references: [id], onDelete: Restrict)
+  adjustment          FinancePaymentAllocationAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Restrict)
+  appliedByMembership Membership                          @relation("FinanceAllocationEffectApplier", fields: [appliedByMembershipId], references: [id], onDelete: Restrict)
+
+  @@unique([allocationId, type])
+  @@index([legalEntityId, businessUnitId])
+  @@index([allocationId, createdAt])
+  @@index([appliedByMembershipId, appliedAt])
 }
 
 // Business-unit policy for finance separation of duties. It is data rather
@@ -1587,6 +1698,9 @@ model FinanceControlPolicy {
   requireReconciliationResolverDifferentFromCreator Boolean @default(true)
   requirePaymentAllocatorDifferentFromCreator  Boolean  @default(true)
   requirePaymentAllocatorDifferentFromApprover Boolean  @default(true)
+  requireAllocationAdjustmentApproverDifferentFromRequester Boolean @default(true)
+  requireAllocationAdjustmentApplierDifferentFromRequester  Boolean @default(true)
+  requireAllocationAdjustmentApplierDifferentFromApprover   Boolean @default(true)
   updatedByMembershipId                        String?
   createdAt                                    DateTime @default(now())
   updatedAt                                    DateTime @updatedAt

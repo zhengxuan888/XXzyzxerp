@@ -1,7 +1,7 @@
 # 财务结算基础（Finance Settlement Foundation）
 
 更新时间：2026-07-31
-状态：本地 V2 验证完成，等待财务角色配置与 UAT；未部署、未 Push。
+状态：已具备本地财务结算基础；本轮“已批准付款核销受控替换”待最终门禁与财务 UAT；未部署、未 Push。
 
 ## 本批范围与边界
 
@@ -11,12 +11,15 @@
 
 ## 已落地的模型与迁移
 
-本地迁移：`202607310004_finance_settlement_foundation`、`202607310005_finance_integrity_hardening`、`202607310006_finance_statement_imports`、`202607310007_finance_statement_import_cancellation`、`202607310008_finance_control_policies`。
+已验证的本地迁移：`202607310004_finance_settlement_foundation`、`202607310005_finance_integrity_hardening`、`202607310006_finance_statement_imports`、`202607310007_finance_statement_import_cancellation`、`202607310008_finance_control_policies`。
+
+本地 `erp_v2` 另已应用 `202607310013_finance_payment_allocation_adjustments`、`202607310014_harden_finance_allocation_adjustment_guards` 与 `202607310015_freeze_finance_allocation_adjustment_approval_facts`。它们只在本地环境验证，绝不等同于已部署生产或已完成真实财务岗位验收。
 
 - `FinanceCounterparty`：物流商、仓储商或其他结算对象。
 - `FinanceStatement` / `FinanceStatementLine`：供应商账单或 COD 回款结算单及逐行明细。
 - `FinanceReconciliation`：订单/运单的人工匹配建议与处理结果。
 - `FinancePayment` / `FinancePaymentAllocation`：付款或收款草稿、审批、核销与过账。
+- `FinancePaymentAllocationAdjustment` / `FinancePaymentAllocationEffect`：对仍为 `APPROVED` 的付款核销发起受控整笔替换，以及保留原核销事实的 `REVERSAL` 效果。
 
 所有核心记录都绑定法人实体和业务板块，必要时绑定部门、站点和 Membership。金额使用 PostgreSQL `BIGINT` 最小货币单位；API 仅以整数文本传输，不使用 JavaScript 浮点数作为资金事实。迁移包含外键、索引、关键唯一约束和状态枚举。财务事实的组织外键使用 `RESTRICT`，管理员停用组织不会级联删除已形成的结算、对账或付款事实。
 
@@ -29,10 +32,11 @@
 - `finance.reconciliation.read` / `finance.reconciliation.match` / `finance.reconciliation.resolve`
 - `finance.settlement.approve` / `finance.settlement.post` / `finance.settlement.void`
 - `finance.payment.read` / `finance.payment.create` / `finance.payment.approve` / `finance.payment.post` / `finance.payment.void` / `finance.payment.allocate`
+- `finance.allocation_adjustment.read` / `finance.allocation_adjustment.request` / `finance.allocation_adjustment.approve` / `finance.allocation_adjustment.apply` / `finance.allocation_adjustment.cancel`
 - `finance.pii.read`（为后续独立敏感字段门禁预留；本批没有新增此类字段）
 - `finance.control_policy.read` / `finance.control_policy.manage`
 
-菜单 `finance-settlements` 的路径是 `/admin/finance-settlements`，依赖 `finance.statement.read`。服务端从当前 Membership 计算业务板块、部门、站点、下属层级和条件 Scope；RolePermission 与未到期的 Access Grant 共同编译为可访问范围。角色名、部门名和业务板块名均不参与硬编码判断。每次鉴权同时校验用户、Membership、法人实体和业务板块仍处于有效状态且组织链一致；停用或跨法人错误归属的旧会话会被服务端拒绝。
+菜单 `finance-settlements` 的路径是 `/admin/finance-settlements`，依赖 `finance.statement.read`；菜单 `finance-allocation-adjustments` 的路径是 `/admin/finance-allocation-adjustments`，依赖 `finance.allocation_adjustment.read`。服务端从当前 Membership 计算业务板块、部门、站点、下属层级和条件 Scope；RolePermission 与未到期的 Access Grant 共同编译为可访问范围。角色名、部门名和业务板块名均不参与硬编码判断。每次鉴权同时校验用户、Membership、法人实体和业务板块仍处于有效状态且组织链一致；停用或跨法人错误归属的旧会话会被服务端拒绝。
 
 **默认拒绝：** 此迁移不会给任何现有角色插入 RolePermission、MenuPermission、AccessGrant 或 DelegationRule。管理员必须在角色权限中显式授予相应 Action 和菜单可见性，页面与 API 才会同时开放。这样不会把财务数据误开给物流、销售或旧角色。
 
@@ -65,6 +69,14 @@
 - 只能核销到同一结算对象、同一币种/精度且已批准的结算单。
 - 过账前，全部核销金额必须等于付款总额。
 
+#### 已批准核销的受控替换
+
+仅未过账的 `APPROVED` 付款核销可以发起替换申请，状态为 `PENDING → APPROVED → APPLIED`，或以 `REJECTED` / `CANCELLED` 结束。`APPLIED` 在同一 Serializable 事务内保留原核销、创建同一付款且金额相同的替代核销，并对原核销写入一条 `REVERSAL` 效果；V1 不支持局部调整。
+
+原付款、原结算单和替代结算单都必须仍为 `APPROVED`，且替代结算单必须不同、组织/结算对象/币种/精度一致。服务端按原付款、原结算单和替代结算单三者分别执行 Action + Scope + Membership 校验；申请、审批、执行三人默认均为不同稳定 `userId`。原核销和反向效果均由数据库触发器保护为不可变，替代结算单的有效核销额在可重试的 Serializable 事务内重新计算，防止并发超额。
+
+`POSTED` 付款或结算单一律不进入本流程；直接 `POSTED → void` 仍被拒绝。已过账更正、总账冲销和会计分录尚未实现，不能因本节的受控替换而视为已经具备。
+
 ## 页面与接口
 
 `/admin/finance-settlements` 提供三个工作区：
@@ -72,6 +84,7 @@
 1. 结算单：列表、筛选、稳定分页、草稿创建、逐行录入、对账、审批、过账、作废。
 2. 结算对象：查询与创建。
 3. 付款与核销：付款草稿、批准、核销、过账、作废。
+4. 核销调整：仅对已批准未过账核销发起、审批、取消和执行受控替换；页面与 API 均按动态 Action + Scope 开放。
 
 三个列表统一使用 `createdAt desc, id desc` 的稳定排序和服务端分页。BigInt 在 DTO 中转换为字符串，避免 JSON 序列化丢失精度。
 
@@ -89,10 +102,21 @@
 | 岗位分离定向测试 | 5 项测试通过；含同一员工切换 Membership 仍被拒绝 |
 | 本机临时 UAT | 同一员工使用第二个 Membership 审批自己创建的结算单/付款，均返回 `FINANCE_MAKER_CHECKER_REQUIRED`；临时数据清理完成 |
 
+上述证据为既有财务基础与岗位分离门禁；以下为本轮核销受控替换的独立最终证据。
+
+### 2026-07-31 受控核销替换最终验证
+
+- 本地迁移已到 `202607310015_freeze_finance_allocation_adjustment_approval_facts`，`prisma migrate status` 显示 36 个迁移全部为最新状态。
+- 本地 PostgreSQL 回滚 UAT 完成了“已批准付款 + 原核销 + 不同的替代结算单 → 审批 → 执行 → 替代核销 + 反向效果”的完整链路。校验通过后事务主动回滚，调整、效果和核销行数均未留存。
+- 替代结算单选项现在返回并显示可用余额，对不足以覆盖调整金额的选项做界面预防；服务端执行时仍在 Serializable 事务内重算余额，前端不是安全信任边界。
+- 本批检查通过：35 个测试文件 / 131 项测试，TypeScript、ESLint、Prisma schema / 迁移状态及 Next.js 生产构建全部通过。
+- 仍不接受 `POSTED` 付款或结算单的直接更正；需要独立的总账冲销与会计分录模块才能解决这一边界。
+
 ## 尚未完成（不得误当作本批能力）
 
 - 真实物流商/银行账单的字段字典确认、模板配置和人工 UAT；当前已具备配置化模板、私有预检、确认导入、文件哈希、取消预检和幂等基础，但未接真实账单。
-- 自动匹配、汇率、金额容差、账单附件/凭证和付款核销到单条账单明细。
+- 自动匹配、汇率、金额容差、账单附件/凭证和付款核销到单条账单明细（当前为付款到结算单级；已批准未过账核销可做受控整笔替换）。
+- 已过账付款或结算单的更正、总账冲销与会计分录；当前仍安全拒绝直接作废或通过核销替换绕过过账锁定。
 - 银行、支付、真实物流商、Ship24 或旧 ERP 的真实数据接入。
 - `finance.pii.read` 对未来敏感字段的实际 UI/API 门禁。
 - 跨范围财务 API/流程 Playwright 或真实财务 UAT。
@@ -100,4 +124,4 @@
 
 ## 下一批建议
 
-在财务负责人确认权限矩阵后，优先实现受控的付款/结算核销冲销、对账双人复核和真实财务 UAT，并继续保持模板、字段映射、菜单、卡片和角色权限全部配置驱动。
+在财务负责人确认权限矩阵后，优先完成已批准核销受控替换的最终门禁与真实财务 UAT；其后独立实现已过账付款/结算单的更正、总账冲销和会计分录，并继续保持模板、字段映射、菜单、卡片和角色权限全部配置驱动。
