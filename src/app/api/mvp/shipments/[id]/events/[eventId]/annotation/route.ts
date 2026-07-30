@@ -19,7 +19,15 @@ export async function PATCH(
       shipmentId: id,
       shipment: { businessUnitId: auth.membership.businessUnitId },
     },
-    include: { shipment: { select: { businessUnitId: true, siteId: true } } },
+    include: {
+      shipment: {
+        select: {
+          businessUnitId: true,
+          siteId: true,
+          order: { select: { departmentId: true, creatorUserId: true } },
+        },
+      },
+    },
   });
   if (!event) return fail("TRACKING_EVENT_NOT_FOUND", "物流轨迹不存在。", 404);
   const permission = await checkPermission({
@@ -27,7 +35,9 @@ export async function PATCH(
     membershipId: auth.membership.id,
     actionKey: "shipment.track.update",
     targetBusinessUnitId: event.shipment.businessUnitId,
+    targetDepartmentId: event.shipment.order.departmentId,
     targetSiteId: event.shipment.siteId,
+    targetUserId: event.shipment.order.creatorUserId,
   });
   if (!permission.allowed) return fail("FORBIDDEN", "无权处理该物流轨迹。", 403);
 
