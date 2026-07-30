@@ -5,6 +5,7 @@ export const financeSegregationPolicyKeys = [
   "requirePaymentApproverDifferentFromCreator",
   "requirePaymentPosterDifferentFromCreator",
   "requirePaymentPosterDifferentFromApprover",
+  "requireReconciliationResolverDifferentFromCreator",
 ] as const;
 
 export type FinanceSegregationPolicyKey = (typeof financeSegregationPolicyKeys)[number];
@@ -23,6 +24,7 @@ export const strictFinanceSegregationPolicy: Readonly<FinanceSegregationPolicy> 
   requirePaymentApproverDifferentFromCreator: true,
   requirePaymentPosterDifferentFromCreator: true,
   requirePaymentPosterDifferentFromApprover: true,
+  requireReconciliationResolverDifferentFromCreator: true,
 });
 
 export class FinanceSegregationPolicyInputError extends Error {
@@ -107,6 +109,30 @@ export type FinanceSegregationDecision =
 
 function sameUser(left: string | null | undefined, right: string | null | undefined) {
   return Boolean(left && right && left === right);
+}
+
+/**
+ * A reconciliation suggestion is a financial control decision too. Compare
+ * stable user IDs (not Membership IDs) so switching context cannot let its
+ * maker confirm, reject or ignore it alone.
+ */
+export function checkFinanceReconciliationSegregation({
+  actorUserId,
+  createdByUserId,
+  policy,
+}: {
+  actorUserId: string;
+  createdByUserId: string;
+  policy: FinanceSegregationPolicy;
+}): FinanceSegregationDecision {
+  if (policy.requireReconciliationResolverDifferentFromCreator && sameUser(actorUserId, createdByUserId)) {
+    return {
+      allowed: false,
+      code: "FINANCE_RECONCILIATION_MAKER_CHECKER_REQUIRED",
+      message: "当前财务内控要求创建对账建议的员工不能自行确认、拒绝或忽略该建议。",
+    };
+  }
+  return { allowed: true };
 }
 
 /**

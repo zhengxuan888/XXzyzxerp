@@ -1580,6 +1580,7 @@ model FinanceControlPolicy {
   requirePaymentApproverDifferentFromCreator   Boolean  @default(true)
   requirePaymentPosterDifferentFromCreator     Boolean  @default(true)
   requirePaymentPosterDifferentFromApprover    Boolean  @default(true)
+  requireReconciliationResolverDifferentFromCreator Boolean @default(true)
   updatedByMembershipId                        String?
   createdAt                                    DateTime @default(now())
   updatedAt                                    DateTime @updatedAt

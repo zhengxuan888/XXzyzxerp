@@ -9,7 +9,11 @@ import {
 import { writeAuditLog } from "@/lib/audit";
 import { createFinanceAccessPlan, type FinanceAccessMembership, type FinanceAccessTarget } from "@/lib/finance/access";
 import { parseCurrencyScale, parseMinorAmount } from "@/lib/finance/money";
-import { checkFinanceSegregation, resolveFinanceSegregationPolicy } from "@/lib/finance/segregation-policy";
+import {
+  checkFinanceReconciliationSegregation,
+  checkFinanceSegregation,
+  resolveFinanceSegregationPolicy,
+} from "@/lib/finance/segregation-policy";
 import {
   actionForPaymentCommand,
   actionForStatementCommand,
@@ -475,9 +479,12 @@ export async function transitionStatement(actor: FinanceActor, statementId: stri
       }
     }
     if (input.command === "approve") {
-      const unresolved = current.lines.filter((line) => !["MATCHED", "IGNORED"].includes(line.reconciliationStatus)).length;
+      // An ignored suggestion is not a reconciled financial line. It must be
+      // replaced by a confirmed match (or the statement must be handled as an
+      // exception/void) before approval can proceed.
+      const unresolved = current.lines.filter((line) => line.reconciliationStatus !== FinanceLineReconciliationStatus.MATCHED).length;
       if (unresolved > 0) {
-        throw new FinanceServiceError("UNRESOLVED_RECONCILIATIONS", "存在未匹配或金额差异明细，不能批准结算单。", 409);
+        throw new FinanceServiceError("UNRESOLVED_RECONCILIATIONS", "存在未匹配、被忽略或金额差异明细，不能批准结算单。", 409);
       }
     }
     if (input.command === "void") {
@@ -728,12 +735,25 @@ export async function resolveReconciliation(actor: FinanceActor, statementId: st
         statementType: statement.type,
         statementLine: { statementId: statement.id },
       },
-      include: { statementLine: { include: { reconciliations: true } } },
+      include: {
+        createdByMembership: { select: { userId: true } },
+        statementLine: { include: { reconciliations: true } },
+      },
     });
     if (!reconciliation) throw new FinanceServiceError("RECONCILIATION_NOT_FOUND", "对账匹配不存在。", 404);
     if (reconciliation.status !== FinanceReconciliationStatus.SUGGESTED) {
       throw new FinanceServiceError("RECONCILIATION_ALREADY_RESOLVED", "该对账匹配已经处理。", 409);
     }
+    const policy = resolveFinanceSegregationPolicy(await tx.financeControlPolicy.findUnique({
+      where: { businessUnitId: statement.businessUnitId },
+      select: { requireReconciliationResolverDifferentFromCreator: true },
+    }));
+    const segregation = checkFinanceReconciliationSegregation({
+      actorUserId: actor.userId,
+      createdByUserId: reconciliation.createdByMembership.userId,
+      policy,
+    });
+    if (!segregation.allowed) throw new FinanceServiceError(segregation.code, segregation.message, 409);
     const nextStatus = command === "confirm"
       ? FinanceReconciliationStatus.CONFIRMED
       : command === "ignore"
@@ -776,8 +796,11 @@ export async function resolveReconciliation(actor: FinanceActor, statementId: st
       .filter((row) => row.status === FinanceReconciliationStatus.CONFIRMED)
       .reduce((sum, row) => sum + row.amountCents, BigInt(0));
     const hasSuggestion = active.some((row) => row.status === FinanceReconciliationStatus.SUGGESTED);
+    // Ignoring a candidate only removes that candidate; it never closes a
+    // statement line or enables approval. The line stays available for a
+    // different match and remains an approval blocker until it is MATCHED.
     const lineStatus = command === "ignore" && active.length === 0
-      ? FinanceLineReconciliationStatus.IGNORED
+      ? FinanceLineReconciliationStatus.UNMATCHED
       : confirmedTotal === reconciliation.statementLine.amountCents && !hasSuggestion
         ? FinanceLineReconciliationStatus.MATCHED
         : hasSuggestion

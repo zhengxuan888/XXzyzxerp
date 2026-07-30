@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  checkFinanceReconciliationSegregation,
   checkFinanceSegregation,
   FinanceSegregationPolicyInputError,
   parseFinanceSegregationPolicy,
@@ -99,5 +100,20 @@ describe("finance segregation of duties policy", () => {
       expectedVersion: 4,
       reason: "岗位调整",
     });
+  });
+
+  it("requires a different employee to resolve a reconciliation suggestion by default", () => {
+    const policy = resolveFinanceSegregationPolicy(null);
+
+    expect(checkFinanceReconciliationSegregation({
+      actorUserId: "user-maker",
+      createdByUserId: "user-maker",
+      policy,
+    })).toMatchObject({ allowed: false, code: "FINANCE_RECONCILIATION_MAKER_CHECKER_REQUIRED" });
+    expect(checkFinanceReconciliationSegregation({
+      actorUserId: "user-resolver",
+      createdByUserId: "user-maker",
+      policy,
+    })).toEqual({ allowed: true });
   });
 });

@@ -130,6 +130,16 @@ git diff --check
 
 本轮仅迁移本地 `erp_v2` 数据库的 `202607310009_finance_control_policy_versions`；没有部署、Push、连接生产或外部账号。
 
+## 2026-07-31 对账岗位分离补充
+
+| Gate | 证据 | 结果 |
+| --- | --- | --- |
+| 对账自处理拒绝 | 本地真实服务层 UAT | 同一员工对自己创建的建议执行忽略，返回 `FINANCE_RECONCILIATION_MAKER_CHECKER_REQUIRED`，记录保持 `SUGGESTED` |
+| 忽略不放行 | `transitionStatement` 审批前检查 | 只有全部明细 `MATCHED` 才可批准；`IGNORED` 不再被视为已完成 |
+| 回滚与清理 | UAT 临时结算对象/结算单/明细/建议均已删除并复核 | 通过 |
+
+迁移 `202607310010_finance_reconciliation_controls` 仅应用于本地 `erp_v2` 数据库。未部署、未 Push、未连接生产或外部账号。
+
 ## 2026-07-31 验收收口补充
 
 ### 本轮完成

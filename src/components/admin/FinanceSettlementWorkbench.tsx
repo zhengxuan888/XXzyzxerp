@@ -411,7 +411,7 @@ export default function FinanceSettlementWorkbench({ capabilities }: { capabilit
 
   async function resolveMatch(lineId: string, reconciliationId: string, command: "confirm" | "reject" | "ignore") {
     if (!selectedStatement) return;
-    const reason = command === "confirm" ? "" : window.prompt(command === "reject" ? "请填写拒绝原因：" : "请填写忽略原因：");
+    const reason = command === "confirm" ? "" : window.prompt(command === "reject" ? "请填写拒绝原因：" : "请填写忽略候选原因：");
     if (command !== "confirm" && !reason?.trim()) return;
     setSaving(true);
     setError("");
@@ -419,7 +419,7 @@ export default function FinanceSettlementWorkbench({ capabilities }: { capabilit
       await request<Reconciliation>(`/api/mvp/finance/statements/${selectedStatement.id}/lines/${lineId}/reconciliations/${reconciliationId}`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ command, reason }),
       });
-      setNotice("对账处理结果已保存并写入审计日志。");
+      setNotice(command === "ignore" ? "候选已忽略，但该明细仍需创建并确认新的匹配后才能审批。" : "对账处理结果已保存并写入审计日志。");
       await openStatement(selectedStatement.id);
     } catch (resolveError) {
       setError(resolveError instanceof Error ? resolveError.message : "处理对账建议失败。");

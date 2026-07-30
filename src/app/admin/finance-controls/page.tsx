@@ -17,6 +17,7 @@ const policySelect = {
   requirePaymentApproverDifferentFromCreator: true,
   requirePaymentPosterDifferentFromCreator: true,
   requirePaymentPosterDifferentFromApprover: true,
+  requireReconciliationResolverDifferentFromCreator: true,
 } as const;
 
 export default async function FinanceControlsPage() {

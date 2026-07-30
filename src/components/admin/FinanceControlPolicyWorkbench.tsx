@@ -45,6 +45,11 @@ const controls: Array<{ key: PolicyKey; title: string; description: string }> = 
     title: "付款：审批人与过账人不同",
     description: "把付款审批与最终过账拆分为两道岗位。",
   },
+  {
+    key: "requireReconciliationResolverDifferentFromCreator",
+    title: "对账：建议创建人与处理人不同",
+    description: "防止同一员工创建后自行确认、拒绝或忽略对账建议。",
+  },
 ];
 
 function formatTime(value: string | null) {

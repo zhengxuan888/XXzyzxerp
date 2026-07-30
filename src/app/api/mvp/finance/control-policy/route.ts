@@ -24,6 +24,7 @@ const policySelect = {
   requirePaymentApproverDifferentFromCreator: true,
   requirePaymentPosterDifferentFromCreator: true,
   requirePaymentPosterDifferentFromApprover: true,
+  requireReconciliationResolverDifferentFromCreator: true,
 } as const;
 
 type FinanceControlPolicyRow = {
@@ -38,6 +39,7 @@ type FinanceControlPolicyRow = {
   requirePaymentApproverDifferentFromCreator: boolean;
   requirePaymentPosterDifferentFromCreator: boolean;
   requirePaymentPosterDifferentFromApprover: boolean;
+  requireReconciliationResolverDifferentFromCreator: boolean;
 };
 
 function policyDto(row: FinanceControlPolicyRow | null) {
