@@ -138,8 +138,10 @@ export async function POST(request: NextRequest) {
   if (duplicate) return fail("TRACKING_NO_ALREADY_EXISTS", "该物流单号已存在。", 409);
 
   const memo = typeof body.memo === "string" ? body.memo.trim().slice(0, 1000) : "";
-  const row = existingPending
-    ? await prisma.shipment.update({
+  let row;
+  try {
+    row = existingPending
+      ? await prisma.shipment.update({
         where: { id: existingPending.id },
         data: {
           carrier,
@@ -179,7 +181,13 @@ export async function POST(request: NextRequest) {
           },
         },
         include: { order: { select: { orderNo: true } }, events: true },
-      });
+        });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return fail("TRACKING_NO_ALREADY_EXISTS", "该物流单号已被其他订单使用，请刷新后核对。", 409);
+    }
+    throw error;
+  }
 
   await writeAuditLog({
     actorUserId: auth.userId,

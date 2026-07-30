@@ -785,7 +785,7 @@ model Shipment {
   notificationDeliveries NotificationDelivery[]
 
   @@index([orderId, status])
-  @@index([businessUnitId, trackingNo])
+  @@unique([businessUnitId, trackingNo])
   @@index([businessUnitId, workStatus, nextFollowUpAt])
   @@index([ownerMembershipId, workStatus])
 }

@@ -1,5 +1,5 @@
 ﻿import { NextRequest } from "next/server";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 import { fail, ok } from "@/lib/api-response";
 import { requireAuthContext } from "@/lib/api-auth";
@@ -157,43 +157,55 @@ export async function POST(request: NextRequest) {
   }
 
   const readyRows = preview.filter((row) => row.result === "READY" && row.orderId);
-  const imported = await prisma.$transaction(async (tx) => {
-    const results = [];
-    for (const row of readyRows) {
-      const order = orderByNo.get(row.orderNo)!;
-      const data = {
-        carrier: row.carrier || "物流商",
-        trackingNo: row.trackingNo,
-        memo: `回传单号 ${row.trackingNo} 由文件 ${file.name} 回填`,
-      };
-      const shipment = row.shipmentId
-        ? await tx.shipment.update({ where: { id: row.shipmentId }, data })
-        : await tx.shipment.create({
-            data: {
-              orderId: order.id,
-              legalEntityId: order.legalEntityId,
-              businessUnitId: order.businessUnitId,
-              siteId: order.siteId ?? auth.membership.siteId,
-              status: "PENDING",
-              ...data,
-            },
-          });
+  let imported;
+  try {
+    imported = await prisma.$transaction(async (tx) => {
+      const results = [];
+      for (const row of readyRows) {
+        const order = orderByNo.get(row.orderNo)!;
+        const data = {
+          carrier: row.carrier || "物流商",
+          trackingNo: row.trackingNo,
+          memo: `回传单号 ${row.trackingNo} 由文件 ${file.name} 回填`,
+        };
+        const shipment = row.shipmentId
+          ? await tx.shipment.update({ where: { id: row.shipmentId }, data })
+          : await tx.shipment.create({
+              data: {
+                orderId: order.id,
+                legalEntityId: order.legalEntityId,
+                businessUnitId: order.businessUnitId,
+                siteId: order.siteId ?? auth.membership.siteId,
+                status: "PENDING",
+                ...data,
+              },
+            });
 
-      await tx.shipmentEvent.create({
-        data: {
-          shipmentId: shipment.id,
-          eventType: "TRACKING_NUMBER_ASSIGNED",
-          statusMilestone: "PENDING",
-          source: "PROVIDER_RETURN_IMPORT",
-          externalEventKey: `return-import:${order.id}:${row.trackingNo}`,
-          memo: `文件回填 第${row.rowNumber}行，物流单号 ${row.trackingNo}`,
-          actorMembershipId: auth.membership.id,
-        },
-      });
-      results.push({ orderId: order.id, shipmentId: shipment.id, trackingNo: row.trackingNo });
+        await tx.shipmentEvent.create({
+          data: {
+            shipmentId: shipment.id,
+            eventType: "TRACKING_NUMBER_ASSIGNED",
+            statusMilestone: "PENDING",
+            source: "PROVIDER_RETURN_IMPORT",
+            externalEventKey: `return-import:${order.id}:${row.trackingNo}`,
+            memo: `文件回填 第${row.rowNumber}行，物流单号 ${row.trackingNo}`,
+            actorMembershipId: auth.membership.id,
+          },
+        });
+        results.push({ orderId: order.id, shipmentId: shipment.id, trackingNo: row.trackingNo });
+      }
+      return results;
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return fail(
+        "TRACKING_NO_ALREADY_EXISTS",
+        "导入期间有物流单号已被其他订单占用，本次导入未写入，请重新预览。",
+        409,
+      );
     }
-    return results;
-  });
+    throw error;
+  }
 
   await writeAuditLog({
     actorUserId: auth.userId,
