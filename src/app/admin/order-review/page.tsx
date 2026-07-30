@@ -78,12 +78,15 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
     ...((start || endExclusive) ? { createdAt: { ...(start ? { gte: start } : {}), ...(endExclusive ? { lt: endExclusive } : {}) } } : {}),
   };
 
-  const [candidateIndex, employees, countries, customerCounts] = await Promise.all([
+  const [rawCandidateIndex, rawCustomerHistory, countries] = await Promise.all([
     prisma.order.findMany({
       where,
       select: {
         id: true,
         customerId: true,
+        departmentId: true,
+        siteId: true,
+        creatorUserId: true,
         recipientEmail: true,
         recipientPhone: true,
         customerWhatsapp: true,
@@ -92,20 +95,46 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
       },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     }),
-    prisma.user.findMany({
-      where: { memberships: { some: { businessUnitId: membership.businessUnitId, isActive: true } } },
-      select: { id: true, username: true, fullName: true },
-      orderBy: { fullName: "asc" },
+    prisma.order.findMany({
+      where: { businessUnitId: membership.businessUnitId, status: { notIn: ["DRAFT", "CANCELLED"] } },
+      select: {
+        id: true,
+        customerId: true,
+        departmentId: true,
+        siteId: true,
+        creatorUserId: true,
+      },
     }),
     prisma.country.findMany({ where: { isActive: true }, select: { code: true, name: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
-    prisma.order.groupBy({
-      by: ["customerId"],
-      where: { businessUnitId: membership.businessUnitId, status: { notIn: ["DRAFT", "CANCELLED"] } },
-      _count: { _all: true },
-    }),
   ]);
 
-  const repeatCustomers = new Set(customerCounts.filter((item) => item._count._all > 1).map((item) => item.customerId));
+  const canReviewOrder = async (order: { departmentId: string | null; siteId: string | null; creatorUserId: string }) => (await checkPermission({
+    userId: session.userId,
+    membershipId: membership.id,
+    actionKey: "order.review",
+    targetBusinessUnitId: membership.businessUnitId,
+    targetDepartmentId: order.departmentId,
+    targetSiteId: order.siteId,
+    targetUserId: order.creatorUserId,
+  })).allowed;
+  const [candidateAccess, historyAccess] = await Promise.all([
+    Promise.all(rawCandidateIndex.map(canReviewOrder)),
+    Promise.all(rawCustomerHistory.map(canReviewOrder)),
+  ]);
+  const candidateIndex = rawCandidateIndex.filter((_, index) => candidateAccess[index]);
+  const customerHistoryCounts = new Map<string, number>();
+  rawCustomerHistory.forEach((order, index) => {
+    if (historyAccess[index]) customerHistoryCounts.set(order.customerId, (customerHistoryCounts.get(order.customerId) ?? 0) + 1);
+  });
+  const repeatCustomers = new Set([...customerHistoryCounts].filter(([, count]) => count > 1).map(([customerId]) => customerId));
+  const visibleEmployeeIds = [...new Set(candidateIndex.map((order) => order.creatorUserId))];
+  const employees = visibleEmployeeIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: visibleEmployeeIds } },
+        select: { id: true, username: true, fullName: true },
+        orderBy: [{ fullName: "asc" }, { username: "asc" }],
+      })
+    : [];
   const duplicateCounts = new Map<string, number>();
   candidateIndex.forEach((order) => {
     const key = duplicateKey(order);
