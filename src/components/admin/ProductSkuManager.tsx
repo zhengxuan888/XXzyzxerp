@@ -3,7 +3,7 @@
 import { LoaderCircle, Pencil, Plus } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
-type Sku = { id: string; code: string; barcode: string | null; isActive: boolean };
+type Sku = { id: string; code: string; barcode: string | null; safetyStockQuantity: number; isActive: boolean };
 
 export default function ProductSkuManager({ productId, skus, canCreate, canUpdate }: {
   productId: string;
@@ -23,6 +23,7 @@ export default function ProductSkuManager({ productId, skus, canCreate, canUpdat
     const payload = {
       code: String(data.get("code") ?? "").trim(),
       barcode: String(data.get("barcode") ?? "").trim() || null,
+      safetyStockQuantity: Number(data.get("safetyStockQuantity") ?? 0),
       isActive: data.get("isActive") === "on",
     };
     try {
@@ -51,11 +52,11 @@ export default function ProductSkuManager({ productId, skus, canCreate, canUpdat
       {editing === "new" && <SkuForm busy={busy} onSubmit={(event) => save(event)} onCancel={() => setEditing(null)} />}
       <div className="mt-4 overflow-x-auto">
         <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 text-left text-xs text-slate-500"><tr><th className="px-3 py-2">SKU 编码</th><th className="px-3 py-2">条码</th><th className="px-3 py-2">状态</th><th className="px-3 py-2 text-right">操作</th></tr></thead>
+          <thead className="bg-slate-50 text-left text-xs text-slate-500"><tr><th className="px-3 py-2">SKU 编码</th><th className="px-3 py-2">条码</th><th className="px-3 py-2">安全库存</th><th className="px-3 py-2">状态</th><th className="px-3 py-2 text-right">操作</th></tr></thead>
           <tbody className="divide-y divide-slate-100">
             {skus.map((sku) => (
               <tr key={sku.id}>
-                <td className="px-3 py-3 font-semibold">{sku.code}</td><td className="px-3 py-3">{sku.barcode ?? "-"}</td>
+                <td className="px-3 py-3 font-semibold">{sku.code}</td><td className="px-3 py-3">{sku.barcode ?? "-"}</td><td className="px-3 py-3">{sku.safetyStockQuantity}</td>
                 <td className="px-3 py-3">{sku.isActive ? "启用" : "停用"}</td>
                 <td className="px-3 py-3 text-right">{canUpdate && <button type="button" onClick={() => setEditing(editing === sku.id ? null : sku.id)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-xs"><Pencil size={14} />编辑</button>}</td>
               </tr>
@@ -73,9 +74,10 @@ export default function ProductSkuManager({ productId, skus, canCreate, canUpdat
 
 function SkuForm({ initial, busy, onSubmit, onCancel }: { initial?: Sku; busy: boolean; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
   const input = "h-10 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-violet-400";
-  return <form onSubmit={onSubmit} className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-3">
+  return <form onSubmit={onSubmit} className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-4">
     <label className="grid gap-1 text-xs font-semibold">SKU 编码<input name="code" required defaultValue={initial?.code} className={input} /></label>
     <label className="grid gap-1 text-xs font-semibold">条码（可选）<input name="barcode" defaultValue={initial?.barcode ?? ""} className={input} /></label>
+    <label className="grid gap-1 text-xs font-semibold">安全库存<input name="safetyStockQuantity" type="number" min="0" step="1" required defaultValue={initial?.safetyStockQuantity ?? 0} className={input} /></label>
     <label className="flex items-center gap-2 pt-5 text-sm"><input type="checkbox" name="isActive" defaultChecked={initial?.isActive ?? true} />启用 SKU</label>
     <div className="flex gap-2 md:col-span-3"><button disabled={busy} className="inline-flex h-9 items-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white">{busy && <LoaderCircle size={14} className="animate-spin" />}保存</button><button type="button" onClick={onCancel} className="h-9 rounded-xl border border-slate-200 bg-white px-4 text-sm">取消</button></div>
   </form>;

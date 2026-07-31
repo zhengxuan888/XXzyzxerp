@@ -6,6 +6,13 @@ import { requireAuthContext } from "@/lib/api-auth";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
+import {
+  enrichInventoryRows,
+  filterInventoryRows,
+  sortInventoryRows,
+  type InventorySort,
+  type InventoryStockFilter,
+} from "@/lib/inventory-workbench";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuthContext(request);
@@ -20,18 +27,42 @@ export async function GET(request: NextRequest) {
   if (!decision.allowed) return fail("FORBIDDEN", "Inventory read denied.", 403, decision.reasons);
 
   const pagination = parsePagination(request);
-  const where = { businessUnitId: auth.membership.businessUnitId };
-  const [items, total] = await prisma.$transaction([
-    prisma.inventoryBalance.findMany({
-      where,
-      include: { site: { select: { code: true, name: true } }, sku: { include: { product: { select: { code: true, name: true } } } } },
-      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-      skip: pagination.skip,
-      take: pagination.take,
-    }),
-    prisma.inventoryBalance.count({ where }),
-  ]);
-  return paginated(items, total, pagination);
+  const query = request.nextUrl.searchParams;
+  const keyword = query.get("q")?.trim().slice(0, 120) ?? "";
+  const siteId = query.get("siteId")?.trim() ?? "";
+  const requestedStock = query.get("stock") as InventoryStockFilter | null;
+  const stock: InventoryStockFilter = ["ALL", "NORMAL", "LOW_STOCK", "OUT_OF_STOCK"].includes(requestedStock ?? "")
+    ? requestedStock as InventoryStockFilter
+    : "ALL";
+  const requestedSort = query.get("sort") as InventorySort | null;
+  const sort: InventorySort = ["UPDATED_DESC", "AVAILABLE_ASC", "AVAILABLE_DESC", "SKU_ASC"].includes(requestedSort ?? "")
+    ? requestedSort as InventorySort
+    : "UPDATED_DESC";
+  const where: Prisma.InventoryBalanceWhereInput = {
+    businessUnitId: auth.membership.businessUnitId,
+    ...(siteId ? { siteId } : {}),
+    ...(keyword ? {
+      OR: [
+        { sku: { is: { code: { contains: keyword, mode: "insensitive" } } } },
+        { sku: { is: { barcode: { contains: keyword, mode: "insensitive" } } } },
+        { sku: { is: { product: { is: { code: { contains: keyword, mode: "insensitive" } } } } } },
+        { sku: { is: { product: { is: { name: { contains: keyword, mode: "insensitive" } } } } } },
+        { site: { is: { code: { contains: keyword, mode: "insensitive" } } } },
+        { site: { is: { name: { contains: keyword, mode: "insensitive" } } } },
+      ],
+    } : {}),
+  };
+  const candidates = await prisma.inventoryBalance.findMany({
+    where,
+    include: {
+      site: { select: { id: true, code: true, name: true } },
+      sku: { include: { product: { select: { id: true, code: true, name: true } } } },
+    },
+    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+  });
+  const items = sortInventoryRows(filterInventoryRows(enrichInventoryRows(candidates), stock), sort);
+  const total = items.length;
+  return paginated(items.slice(pagination.skip, pagination.skip + pagination.take), total, pagination);
 }
 
 export async function POST(request: NextRequest) {

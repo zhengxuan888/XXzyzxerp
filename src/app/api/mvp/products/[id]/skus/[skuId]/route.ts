@@ -18,8 +18,22 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!body || typeof body.code !== "string" || !body.code.trim()) return NextResponse.json({ error: "SKU 编码不能为空。" }, { status: 400 });
   const code = body.code.trim();
+  const safetyStockQuantity = body.safetyStockQuantity === undefined || body.safetyStockQuantity === null || body.safetyStockQuantity === ""
+    ? current.safetyStockQuantity
+    : Number(body.safetyStockQuantity);
+  if (!Number.isSafeInteger(safetyStockQuantity) || safetyStockQuantity < 0) {
+    return NextResponse.json({ error: "安全库存必须是大于或等于 0 的整数。" }, { status: 400 });
+  }
   if (await prisma.productSku.findFirst({ where: { productId: id, code, id: { not: skuId } }, select: { id: true } })) return NextResponse.json({ error: "SKU 编码已存在。" }, { status: 409 });
-  const row = await prisma.productSku.update({ where: { id: skuId }, data: { code, barcode: typeof body.barcode === "string" && body.barcode.trim() ? body.barcode.trim() : null, isActive: body.isActive === true } });
+  const row = await prisma.productSku.update({
+    where: { id: skuId },
+    data: {
+      code,
+      barcode: typeof body.barcode === "string" && body.barcode.trim() ? body.barcode.trim() : null,
+      safetyStockQuantity,
+      isActive: typeof body.isActive === "boolean" ? body.isActive : current.isActive,
+    },
+  });
   await writeAuditLog({ actorUserId: auth.userId, actorMembershipId: auth.membership.id, module: "mvp.products", action: "sku.update", targetType: "product_sku", targetId: row.id, businessUnitId: current.product.businessUnitId, roleId: auth.membership.roleId, details: { previous: current, next: row } });
   return NextResponse.json(row);
 }

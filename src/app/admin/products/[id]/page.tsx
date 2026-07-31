@@ -37,7 +37,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         <h1 className="mt-2 text-2xl font-black text-slate-950">{product.name}</h1>
         <p className="mt-1 text-sm text-slate-500">{product.code} · {product.category ?? "未分类"} · {product.skus.length} 个 SKU</p>
       </header>
-      <ProductSkuManager productId={product.id} skus={product.skus.map((sku) => ({ id: sku.id, code: sku.code, barcode: sku.barcode, isActive: sku.isActive }))} canCreate={skuCreate.allowed} canUpdate={skuUpdate.allowed} />
+      <ProductSkuManager productId={product.id} skus={product.skus.map((sku) => ({ id: sku.id, code: sku.code, barcode: sku.barcode, safetyStockQuantity: sku.safetyStockQuantity, isActive: sku.isActive }))} canCreate={skuCreate.allowed} canUpdate={skuUpdate.allowed} />
       {attachmentRead.allowed && <AttachmentPanel targetType="PRODUCT" targetId={product.id} canUpload={upload.allowed} canDelete={remove.allowed} title="商品图片与资料" />}
     </main>
   );

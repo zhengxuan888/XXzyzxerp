@@ -28,6 +28,12 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     return NextResponse.json({ error: "sku code is required." }, { status: 400 });
   }
   const code = body.code.trim();
+  const safetyStockQuantity = body.safetyStockQuantity === undefined || body.safetyStockQuantity === null || body.safetyStockQuantity === ""
+    ? 0
+    : Number(body.safetyStockQuantity);
+  if (!Number.isSafeInteger(safetyStockQuantity) || safetyStockQuantity < 0) {
+    return NextResponse.json({ error: "安全库存必须是大于或等于 0 的整数。" }, { status: 400 });
+  }
   if (await prisma.productSku.findUnique({ where: { productId_code: { productId: id, code } }, select: { id: true } })) {
     return NextResponse.json({ error: "SKU 编码已存在。" }, { status: 409 });
   }
@@ -38,6 +44,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       code,
       barcode: typeof body.barcode === "string" ? body.barcode : null,
       attributes: typeof body.attributes === "object" && body.attributes !== null ? body.attributes : null,
+      safetyStockQuantity,
       isActive: body.isActive !== false,
     },
   });
