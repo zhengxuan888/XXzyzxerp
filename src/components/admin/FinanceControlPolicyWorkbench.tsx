@@ -126,7 +126,7 @@ export default function FinanceControlPolicyWorkbench({ initial, canManage }: { 
     }
   }
 
-  return <main className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6">
+  return <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6">
     <header className="rounded-3xl border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-slate-50 p-6 shadow-sm">
       <div className="flex items-start gap-4">
         <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-amber-500 text-white shadow-lg shadow-amber-500/20"><ShieldCheck size={24} /></span>
@@ -176,5 +176,5 @@ export default function FinanceControlPolicyWorkbench({ initial, canManage }: { 
         {message && <span role="status" className="text-sm text-slate-600">{message}</span>}
       </div>
     </section>
-  </main>;
+  </div>;
 }

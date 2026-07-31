@@ -406,7 +406,7 @@ export default function FinanceStatementImportWorkbench({ capabilities }: { capa
   }
 
   return (
-    <main className="space-y-6 pb-10">
+    <div className="space-y-6 pb-10">
       <section className="overflow-hidden rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-slate-50 p-6 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-3xl">
@@ -498,6 +498,6 @@ export default function FinanceStatementImportWorkbench({ capabilities }: { capa
           {selectedBatch.status !== "CANCELLED" ? <><div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-950">确认动作是不可逆的业务事实：系统会把当前预检行原子生成草稿结算单；任何一行异常、提示或权限不足都会阻止确认。</div><Button type="button" variant="success" className="w-full" onClick={() => void confirmImport()} disabled={!canConfirmSelected || saving}>{saving ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}{selectedBatch.status === "IMPORTED" ? "已确认导入" : !capabilities.canConfirmImports ? "没有确认导入权限" : selectedBatch.warningRows || selectedBatch.rejectedRows ? "存在预检问题，不能确认" : "确认生成草稿结算单"}</Button></> : null}
         </div>}</aside>
       </section>
-    </main>
+    </div>
   );
 }

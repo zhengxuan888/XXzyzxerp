@@ -34,7 +34,7 @@ export default async function RolesPage() {
     }),
     getSystemConfigurationPermission({ userId: session.userId, membership }),
   ]);
-  if (!canRead.allowed || !canManageGlobalRegistry.allowed) redirect("/admin");
+  if (!canRead.allowed) redirect("/admin");
 
   const [rows, actions] = await Promise.all([
     prisma.role.findMany({ orderBy: { createdAt: "desc" }, include: { rolePermissions: { where: { isAllowed: true } } } }),
@@ -43,8 +43,8 @@ export default async function RolesPage() {
 
   return (
     <RolePermissionManager
-      canCreate={canCreate.allowed}
-      canUpdate={canUpdate.allowed}
+      canCreate={canCreate.allowed && canManageGlobalRegistry.allowed}
+      canUpdate={canUpdate.allowed && canManageGlobalRegistry.allowed}
       roles={rows.map((role) => ({ id: role.id, code: role.code, name: role.name, description: role.description, isSystem: role.isSystem, permissions: role.rolePermissions.map((permission) => ({ actionKey: permission.actionKey, scope: permission.scope })) }))}
       actions={actions.map((action) => ({ key: action.key, name: action.name, namespace: action.namespace, defaultScope: "BUSINESS_UNIT" }))}
     />

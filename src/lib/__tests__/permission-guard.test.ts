@@ -134,4 +134,27 @@ describe("dynamic menu grant lifecycle", () => {
     expect(menus.get(null)).toBeUndefined();
     expect(menus.get("group")?.map((menu) => menu.key)).toEqual(["shipments"]);
   });
+
+  it("does not mistake dashboard shortcut presentation metadata for an access condition", async () => {
+    menuFindMany.mockResolvedValue([
+      {
+        id: "orders",
+        key: "orders",
+        label: "订单管理",
+        path: "/admin/orders",
+        icon: null,
+        parentId: null,
+        sortOrder: 1,
+        isActive: true,
+        requiredActionKey: "shipment.read",
+        requiredCondition: { dashboardShortcut: true, shortcutOrder: 10 },
+      },
+    ]);
+    menuPermissionFindMany.mockResolvedValue([{ menuId: "orders" }]);
+    accessGrantFindMany.mockResolvedValue([]);
+
+    const menus = await getMembershipAwareMenus({ membershipId: "m1", userId: "u1" });
+
+    expect(menus.get(null)?.map((menu) => menu.key)).toEqual(["orders"]);
+  });
 });

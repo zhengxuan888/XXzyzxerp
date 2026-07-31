@@ -12,11 +12,23 @@ type PermissionSource = {
   requiredCondition: unknown;
 };
 
-function hasNoRequiredCondition(value: unknown) {
-  // Conditions need a server-side interpreter. Until a condition is supported
-  // by that interpreter, hiding the menu is safer than letting configuration
-  // look enforced while the API/menu silently ignores it.
-  return value === null || value === undefined;
+function hasNoBlockingCondition(value: unknown) {
+  if (value === null || value === undefined) return true;
+
+  // Dashboard shortcut settings were stored in the legacy `requiredCondition`
+  // JSON column before a dedicated presentation-config column existed. They do
+  // not express an authorization rule: treating them as one hides an otherwise
+  // authorized menu (for example, “订单管理”) from every non-founder role.
+  //
+  // Keep this compatibility narrow and fail closed for every other JSON shape.
+  // When we add an executable condition language, only an explicitly supported
+  // condition envelope should be allowed through here.
+  if (typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record);
+  return keys.length > 0
+    && keys.every((key) => key === "dashboardShortcut" || key === "shortcutOrder")
+    && (record.dashboardShortcut === true || Number.isInteger(record.shortcutOrder));
 }
 
 export type PermissionOptions = {
@@ -105,7 +117,7 @@ export async function getMembershipAwareMenus(opts: {
     .filter(
       (item) =>
         !parentMenuIds.has(item.id) &&
-        hasNoRequiredCondition(item.requiredCondition) &&
+        hasNoBlockingCondition(item.requiredCondition) &&
         (roleMenuIds.has(item.id) || Boolean(item.requiredActionKey && grantActions.has(item.requiredActionKey))) &&
         (!item.requiredActionKey || allowed.has(item.requiredActionKey)),
     )
@@ -128,7 +140,7 @@ export async function getMembershipAwareMenus(opts: {
       const parent = menuById.get(parentId);
       // A group can itself carry a condition. Do not use it as a way to
       // bypass a condition evaluator that has not been implemented yet.
-      if (!parent || !hasNoRequiredCondition(parent.requiredCondition)) break;
+      if (!parent || !hasNoBlockingCondition(parent.requiredCondition)) break;
       visibleIds.add(parent.id);
       parentId = parent.parentId;
     }

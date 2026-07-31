@@ -1,8 +1,31 @@
 # ERP V2 最新交付证据
 
-更新时间：2026-07-29
+更新时间：2026-07-31
 
-当前提交：`14749bf docs: record deployment dry run evidence`
+## 2026-07-31：资源中心收口与全量回归
+
+本轮完成“资源中心 / 软件资产”统一台账的本地可运行闭环，并收口了真实浏览器回归中发现的菜单与权限一致性问题。
+
+- 资源中心和软件资产均按法人、业务板块、部门、站点与 Membership 做服务端范围过滤；创建、编辑、流转、归档、历史、配置以及软件账号标识的读写均为独立 Action。
+- 资源分类、状态、流转动作、排序和启停由数据库配置；没有按公司、部门、角色或业务板块名称写分支。
+- 资产使用乐观版本锁和数据库 `CHECK` 约束，两个并发流转请求只允许一个成功，冲突请求返回 `409`。
+- 修复了仪表盘快捷入口元数据被误当成权限条件、导致有权限员工看不到“订单管理”的问题；未知条件仍保持失败关闭。
+- 业务负责人现在可只读查看角色定义；创建和修改全局角色注册表仍要求 `system.configuration.manage` 的 `ALL` Scope，避免越权授权。
+- 修复了两个财务配置页重复渲染 `<main>` 的可访问性结构问题。
+
+| Gate | 结果 |
+|---|---:|
+| `pnpm run test` | 43 文件 / 154 项通过 |
+| `pnpm exec playwright test --project=chromium` | 33 / 33 通过 |
+| `pnpm run ts-check` | 通过 |
+| `pnpm run lint` | 通过 |
+| `pnpm run prisma:validate` | 通过 |
+| `pnpm run build` | 通过 |
+| `pnpm exec prisma migrate status` | 41 个迁移，数据库 up to date |
+
+本轮只使用本地 PostgreSQL 和虚构 Seed 数据；未部署、未 Push、未连接旧生产库、未导入旧数据、未接入真实第三方账号。
+
+本批前一基线：`c22868d feat: harden scoped workbenches and order operations`
 
 ## 自动化门禁
 

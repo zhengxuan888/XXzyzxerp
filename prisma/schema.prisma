@@ -289,6 +289,11 @@ model LegalEntity {
   financeStatementTemplates           FinanceStatementTemplate[]
   financeStatementImportBatches       FinanceStatementImportBatch[]
   financeControlPolicies              FinanceControlPolicy[]
+  resourceCategories                  ResourceCategory[]
+  resourceStatuses                    ResourceStatus[]
+  resourceLifecycleActions            ResourceLifecycleAction[]
+  resourceAssets                      ResourceAsset[]
+  resourceLifecycleEvents             ResourceLifecycleEvent[]
 }
 
 model BusinessUnit {
@@ -349,6 +354,11 @@ model BusinessUnit {
   financeStatementTemplates           FinanceStatementTemplate[]
   financeStatementImportBatches       FinanceStatementImportBatch[]
   financeControlPolicy                FinanceControlPolicy?
+  resourceCategories                  ResourceCategory[]
+  resourceStatuses                    ResourceStatus[]
+  resourceLifecycleActions            ResourceLifecycleAction[]
+  resourceAssets                      ResourceAsset[]
+  resourceLifecycleEvents             ResourceLifecycleEvent[]
 
   @@unique([legalEntityId, code])
   @@index([legalEntityId])
@@ -388,6 +398,8 @@ model Department {
   financePayments               FinancePayment[]
   financeStatementTemplates     FinanceStatementTemplate[]
   financeStatementImportBatches FinanceStatementImportBatch[]
+  resourceAssets                ResourceAsset[]
+  resourceLifecycleEvents       ResourceLifecycleEvent[]
 
   @@unique([businessUnitId, code, parentId])
   @@index([businessUnitId, parentId])
@@ -420,6 +432,8 @@ model Site {
   financeStatements             FinanceStatement[]
   financePayments               FinancePayment[]
   financeStatementImportBatches FinanceStatementImportBatch[]
+  resourceAssets                ResourceAsset[]
+  resourceLifecycleEvents       ResourceLifecycleEvent[]
 
   @@unique([businessUnitId, code])
   @@index([departmentId])
@@ -603,6 +617,11 @@ model Membership {
   confirmedFinanceStatementImportBatches       FinanceStatementImportBatch[]        @relation("FinanceStatementImportBatchConfirmer")
   cancelledFinanceStatementImportBatches       FinanceStatementImportBatch[]        @relation("FinanceStatementImportBatchCanceller")
   updatedFinanceControlPolicies                FinanceControlPolicy[]               @relation("FinanceControlPolicyUpdater")
+  assignedResourceAssets                       ResourceAsset[]                      @relation("ResourceAssetAssignee")
+  createdResourceAssets                        ResourceAsset[]                      @relation("ResourceAssetCreator")
+  resourceLifecycleEvents                      ResourceLifecycleEvent[]             @relation("ResourceLifecycleActor")
+  transferredFromResourceEvents                ResourceLifecycleEvent[]             @relation("ResourceLifecycleFromAssignee")
+  transferredToResourceEvents                  ResourceLifecycleEvent[]             @relation("ResourceLifecycleToAssignee")
 
   @@index([userId, isActive])
   @@index([businessUnitId, isActive])
@@ -1931,6 +1950,197 @@ model Document {
   department   Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   site         Site?        @relation(fields: [siteId], references: [id], onDelete: SetNull)
   ownerUser    User         @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+}
+
+// Resource configuration is stored per business unit. Categories, statuses
+// and lifecycle actions are data, so new kinds of equipment or software never
+// require a role-name, department-name or business-unit-name code branch.
+model ResourceCategory {
+  id             String   @id @default(uuid())
+  legalEntityId  String
+  businessUnitId String
+  code           String
+  name           String
+  description    String?
+  isSoftware     Boolean  @default(false)
+  sortOrder      Int      @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  legalEntity  LegalEntity     @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit    @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  assets       ResourceAsset[]
+
+  @@unique([businessUnitId, code])
+  @@index([businessUnitId, isActive, sortOrder])
+}
+
+model ResourceStatus {
+  id             String   @id @default(uuid())
+  legalEntityId  String
+  businessUnitId String
+  code           String
+  name           String
+  color          String?
+  isTerminal     Boolean  @default(false)
+  sortOrder      Int      @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  legalEntity        LegalEntity               @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit       BusinessUnit              @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  assets             ResourceAsset[]           @relation("ResourceAssetStatus")
+  sourceActions      ResourceLifecycleAction[] @relation("ResourceActionFromStatus")
+  destinationActions ResourceLifecycleAction[] @relation("ResourceActionToStatus")
+  eventsFrom         ResourceLifecycleEvent[]  @relation("ResourceLifecycleFromStatus")
+  eventsTo           ResourceLifecycleEvent[]  @relation("ResourceLifecycleToStatus")
+
+  @@unique([businessUnitId, code])
+  @@index([businessUnitId, isActive, sortOrder])
+}
+
+model ResourceLifecycleAction {
+  id                     String   @id @default(uuid())
+  legalEntityId          String
+  businessUnitId         String
+  code                   String
+  name                   String
+  fromStatusId           String?
+  toStatusId             String?
+  availableQuantityDelta Int      @default(0)
+  archiveAsset           Boolean  @default(false)
+  requiresAssignee       Boolean  @default(false)
+  sortOrder              Int      @default(0)
+  isActive               Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  legalEntity  LegalEntity              @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit             @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  fromStatus   ResourceStatus?          @relation("ResourceActionFromStatus", fields: [fromStatusId], references: [id], onDelete: SetNull)
+  toStatus     ResourceStatus?          @relation("ResourceActionToStatus", fields: [toStatusId], references: [id], onDelete: SetNull)
+  events       ResourceLifecycleEvent[]
+
+  @@unique([businessUnitId, code])
+  @@index([businessUnitId, isActive, sortOrder])
+  @@index([fromStatusId])
+  @@index([toStatusId])
+}
+
+// ResourceAsset is the safe, organisation-scoped asset ledger. It holds only
+// operational metadata. Passwords, API tokens, full licence keys and other
+// secrets deliberately have no columns and must never be put in audit JSON.
+model ResourceAsset {
+  id                    String    @id @default(uuid())
+  legalEntityId         String
+  businessUnitId        String
+  departmentId          String?
+  siteId                String?
+  categoryId            String
+  statusId              String
+  resourceNo            String
+  name                  String
+  brandModel            String?
+  serialNumber          String?
+  ownership             String?
+  location              String?
+  quantity              Int       @default(1)
+  availableQuantity     Int       @default(1)
+  lowStockThreshold     Int       @default(0)
+  currency              String    @default("CNY")
+  valueCents            BigInt?
+  purchasedAt           DateTime?
+  expiresAt             DateTime?
+  note                  String?
+  assignedMembershipId  String?
+  createdByMembershipId String
+  isActive              Boolean   @default(true)
+  archivedAt            DateTime?
+  // Incremented on every mutable change. APIs use this for optimistic locking
+  // so two concurrent lifecycle actions cannot silently overwrite inventory.
+  version               Int       @default(1)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  legalEntity         LegalEntity              @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit        BusinessUnit             @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department          Department?              @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  site                Site?                    @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  category            ResourceCategory         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  status              ResourceStatus           @relation("ResourceAssetStatus", fields: [statusId], references: [id], onDelete: Restrict)
+  assignedMembership  Membership?              @relation("ResourceAssetAssignee", fields: [assignedMembershipId], references: [id], onDelete: SetNull)
+  createdByMembership Membership               @relation("ResourceAssetCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  softwareProfile     SoftwareAssetProfile?
+  lifecycleEvents     ResourceLifecycleEvent[]
+
+  @@unique([businessUnitId, resourceNo])
+  @@index([businessUnitId, isActive, updatedAt, id])
+  @@index([businessUnitId, categoryId, statusId])
+  @@index([businessUnitId, departmentId, siteId])
+  @@index([assignedMembershipId, isActive])
+  @@index([expiresAt])
+}
+
+// A software profile is one optional, safe view of a resource category marked
+// as software. It tracks licences and renewal facts but intentionally stores
+// only an account label/identifier, never an account password or token.
+model SoftwareAssetProfile {
+  id                String   @id @default(uuid())
+  resourceAssetId   String   @unique
+  platform          String?
+  accountIdentifier String?
+  licenseType       String?
+  seatsTotal        Int?
+  seatsUsed         Int      @default(0)
+  autoRenewal       Boolean  @default(false)
+  renewalCostCents  BigInt?
+  renewalCurrency   String   @default("CNY")
+  renewalCycle      String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  resourceAsset ResourceAsset @relation(fields: [resourceAssetId], references: [id], onDelete: Cascade)
+}
+
+// Events are append-only operational history. ResourceAsset keeps the current
+// projection, while this table preserves who performed a transfer, return,
+// repair or archive transition and what changed at that time.
+model ResourceLifecycleEvent {
+  id                       String   @id @default(uuid())
+  resourceAssetId          String
+  legalEntityId            String
+  businessUnitId           String
+  departmentId             String?
+  siteId                   String?
+  lifecycleActionId        String
+  fromStatusId             String?
+  toStatusId               String?
+  fromAssigneeMembershipId String?
+  toAssigneeMembershipId   String?
+  availableQuantityBefore  Int
+  availableQuantityAfter   Int
+  note                     String?
+  performedByMembershipId  String
+  occurredAt               DateTime @default(now())
+  createdAt                DateTime @default(now())
+
+  resourceAsset          ResourceAsset           @relation(fields: [resourceAssetId], references: [id], onDelete: Cascade)
+  legalEntity            LegalEntity             @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit           BusinessUnit            @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department             Department?             @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  site                   Site?                   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  lifecycleAction        ResourceLifecycleAction @relation(fields: [lifecycleActionId], references: [id], onDelete: Restrict)
+  fromStatus             ResourceStatus?         @relation("ResourceLifecycleFromStatus", fields: [fromStatusId], references: [id], onDelete: SetNull)
+  toStatus               ResourceStatus?         @relation("ResourceLifecycleToStatus", fields: [toStatusId], references: [id], onDelete: SetNull)
+  performedByMembership  Membership              @relation("ResourceLifecycleActor", fields: [performedByMembershipId], references: [id], onDelete: Restrict)
+  fromAssigneeMembership Membership?             @relation("ResourceLifecycleFromAssignee", fields: [fromAssigneeMembershipId], references: [id], onDelete: SetNull)
+  toAssigneeMembership   Membership?             @relation("ResourceLifecycleToAssignee", fields: [toAssigneeMembershipId], references: [id], onDelete: SetNull)
+
+  @@index([resourceAssetId, occurredAt, id])
+  @@index([businessUnitId, occurredAt])
+  @@index([toAssigneeMembershipId, occurredAt])
 }
 
 model ChannelConnection {

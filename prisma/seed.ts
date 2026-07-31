@@ -180,6 +180,15 @@ const actionDefs: SeedAction[] = [
   { key: "attachment.read", name: "附件查看", namespace: "attachment", scope: "DEPARTMENT" },
   { key: "attachment.create", name: "附件上传", namespace: "attachment", scope: "DEPARTMENT" },
   { key: "attachment.delete", name: "附件删除", namespace: "attachment", scope: "DEPARTMENT" },
+  { key: "resource.read", name: "查看资源台账", namespace: "resource", scope: "BUSINESS_UNIT" },
+  { key: "resource.create", name: "新建资源台账", namespace: "resource", scope: "BUSINESS_UNIT" },
+  { key: "resource.update", name: "编辑资源台账", namespace: "resource", scope: "BUSINESS_UNIT" },
+  { key: "resource.lifecycle.manage", name: "处理资源流转", namespace: "resource", scope: "BUSINESS_UNIT" },
+  { key: "resource.lifecycle.history.read", name: "查看资源完整流转历史", namespace: "resource", scope: "BUSINESS_UNIT" },
+  { key: "resource.archive", name: "归档资源", namespace: "resource", scope: "BUSINESS_UNIT" },
+  { key: "resource.configure", name: "配置资源分类和流转规则", namespace: "resource", scope: "BUSINESS_UNIT" },
+  { key: "software_asset.account.read", name: "查看软件账号标识", namespace: "resource", scope: "BUSINESS_UNIT" },
+  { key: "software_asset.account.manage", name: "登记或修改软件账号标识", namespace: "resource", scope: "BUSINESS_UNIT" },
 ];
 
 const menuDefs = [
@@ -455,6 +464,22 @@ const menuDefs = [
     sortOrder: 190,
     isActive: true,
   },
+  {
+    key: "resources",
+    label: "资源中心",
+    path: "/admin/resources",
+    requiredActionKey: "resource.read",
+    sortOrder: 195,
+    isActive: true,
+  },
+  {
+    key: "software-assets",
+    label: "软件资产",
+    path: "/admin/software-assets",
+    requiredActionKey: "resource.read",
+    sortOrder: 196,
+    isActive: true,
+  },
 ];
 
 const menuGroupDefs = [
@@ -494,6 +519,8 @@ const menuGroupByKey: Record<string, (typeof menuGroupDefs)[number]["key"]> = {
   "leave-requests": "group-hr",
   announcements: "group-hr",
   documents: "group-hr",
+  resources: "group-hr",
+  "software-assets": "group-hr",
   organizations: "group-organization",
   "business-units": "group-organization",
   departments: "group-organization",
@@ -800,6 +827,15 @@ async function main() {
     "attachment.read",
     "attachment.create",
     "attachment.delete",
+    "resource.read",
+    "resource.create",
+    "resource.update",
+    "resource.lifecycle.manage",
+    "resource.lifecycle.history.read",
+    "resource.archive",
+    "resource.configure",
+    "software_asset.account.read",
+    "software_asset.account.manage",
   ]);
 
   for (const action of actions) {
@@ -846,7 +882,7 @@ async function main() {
     { code: "demo_shipping", name: "演示发货员", username: "demo_shipping", email: "demo.shipping@local.erp", allowed: ["dashboard.view", "product.read", "order.read", "order.ship", "shipment.read", "shipment.create", "shipment.track.update", "logistics_template.read", "logistics_template.export", "logistics.export_batch.read", "logistics.export_batch.create", "logistics.export_batch.dispatch", "logistics.return_import.preview", "logistics.return_import.confirm", "logistics.batch_artifact.read", "attachment.read", "attachment.create"] },
     { code: "demo_after_sales", name: "演示物流售后员", username: "demo_after_sales", email: "demo.after.sales@local.erp", allowed: ["dashboard.view", "customer.read", "order.read", "shipment.read", "shipment.tracking_no.view", "shipment.timeline.view", "shipment.track.update", "inbox.read", "inbox.manage", "inbox.assign", "inbox.customer.link", "attachment.read", "attachment.create"] },
     { code: "demo_finance", name: "演示财务员", username: "demo_finance", email: "demo.finance@local.erp", allowed: ["dashboard.view", "order.read", "expense.read", "expense.create", "approval.read", "approval.review"] },
-    { code: "demo_hr", name: "演示人事员", username: "demo_hr", email: "demo.hr@local.erp", allowed: ["dashboard.view", "daily_goal.read", "daily_goal.manage", "team_goal.read", "user.read", "user.create", "user.import", "user.update", "membership.read", "membership.create", "membership.update", "department.read", "attendance.read", "attendance.create", "attendance.approve", "leave_request.read", "leave_request.approve", "announcement.read", "announcement.create"] },
+    { code: "demo_hr", name: "演示人事员", username: "demo_hr", email: "demo.hr@local.erp", allowed: ["dashboard.view", "daily_goal.read", "daily_goal.manage", "team_goal.read", "user.read", "user.create", "user.import", "user.update", "membership.read", "membership.create", "membership.update", "department.read", "attendance.read", "attendance.create", "attendance.approve", "leave_request.read", "leave_request.approve", "announcement.read", "announcement.create", "resource.read", "resource.create", "resource.update", "resource.lifecycle.manage", "resource.lifecycle.history.read", "resource.archive", "resource.configure", "software_asset.account.read", "software_asset.account.manage"] },
   ];
   const demoRoles = new Map<string, { id: string }>();
   for (const profile of roleProfiles) {
@@ -1089,6 +1125,145 @@ async function main() {
       updatedByMembershipId: founderMembership.id,
     },
   });
+
+  // Initial resource settings are local sample data only. Runtime pages read
+  // categories, statuses and actions from the database and never branch on
+  // these sample codes; future business units configure their own values.
+  const resourceCategorySeeds: Array<[string, string, boolean]> = [
+    ["EQUIPMENT", "设备资产", false], ["SOFTWARE", "软件资产", true], ["CLOUD", "云资源", false],
+    ["DOMAIN", "域名", false], ["SIM_CARD", "手机卡", false], ["ACCESS_CARD", "门禁卡", false],
+    ["KEY", "钥匙", false], ["VEHICLE", "车辆", false], ["OFFICE_SUPPLY", "办公用品", false],
+    ["CONSUMABLE", "消耗品", false], ["WORKPLACE", "办公场所", false], ["OTHER", "其他", false],
+  ];
+  for (const [sortOrder, [code, name, isSoftware]] of resourceCategorySeeds.entries()) {
+    await prisma.resourceCategory.upsert({
+      where: { businessUnitId_code: { businessUnitId: businessUnit.id, code } },
+      update: {},
+      create: { legalEntityId: legalEntity.id, businessUnitId: businessUnit.id, code, name, isSoftware, sortOrder },
+    });
+  }
+  const resourceStatusSeeds: Array<[string, string, string, boolean]> = [
+    ["IN_STOCK", "库存中", "slate", false], ["IN_USE", "使用中", "emerald", false],
+    ["LOANED", "借用中", "amber", false], ["MAINTENANCE", "维修中", "orange", false],
+    ["RETIRED", "报废", "zinc", true], ["LOST", "遗失", "rose", true],
+    ["ARCHIVED", "已归档", "zinc", true],
+  ];
+  for (const [sortOrder, [code, name, color, isTerminal]] of resourceStatusSeeds.entries()) {
+    await prisma.resourceStatus.upsert({
+      where: { businessUnitId_code: { businessUnitId: businessUnit.id, code } },
+      update: {},
+      create: { legalEntityId: legalEntity.id, businessUnitId: businessUnit.id, code, name, color, isTerminal, sortOrder },
+    });
+  }
+  const seededResourceStatuses = new Map((await prisma.resourceStatus.findMany({
+    where: { businessUnitId: businessUnit.id },
+    select: { id: true, code: true },
+  })).map((status) => [status.code, status.id]));
+  if (
+    seededResourceStatuses.has("IN_STOCK")
+    && seededResourceStatuses.has("IN_USE")
+    && seededResourceStatuses.has("LOANED")
+    && seededResourceStatuses.has("MAINTENANCE")
+    && seededResourceStatuses.has("ARCHIVED")
+    && seededResourceStatuses.has("RETIRED")
+    && seededResourceStatuses.has("LOST")
+  ) {
+    const resourceLifecycleSeeds = [
+      { code: "ASSIGN", name: "分配使用", from: "IN_STOCK", to: "IN_USE", delta: -1, requiresAssignee: true, archive: false },
+      { code: "BORROW", name: "借用", from: "IN_STOCK", to: "LOANED", delta: -1, requiresAssignee: true, archive: false },
+      { code: "RETURN", name: "归还", from: "LOANED", to: "IN_STOCK", delta: 1, requiresAssignee: false, archive: false },
+      { code: "RELEASE", name: "解除领用", from: "IN_USE", to: "IN_STOCK", delta: 1, requiresAssignee: false, archive: false },
+      { code: "TRANSFER", name: "转移领用人", from: "IN_USE", to: "IN_USE", delta: 0, requiresAssignee: true, archive: false },
+      { code: "REPAIR_FROM_STOCK", name: "库存送修", from: "IN_STOCK", to: "MAINTENANCE", delta: -1, requiresAssignee: false, archive: false },
+      { code: "REPAIR_FROM_USE", name: "使用中送修", from: "IN_USE", to: "MAINTENANCE", delta: 0, requiresAssignee: false, archive: false },
+      { code: "COMPLETE_REPAIR", name: "维修完成入库", from: "MAINTENANCE", to: "IN_STOCK", delta: 1, requiresAssignee: false, archive: false },
+      { code: "RETIRE", name: "报废", from: null, to: "RETIRED", delta: 0, requiresAssignee: false, archive: true },
+      { code: "MARK_LOST", name: "标记遗失", from: null, to: "LOST", delta: 0, requiresAssignee: false, archive: true },
+      { code: "ARCHIVE", name: "归档", from: null, to: "ARCHIVED", delta: 0, requiresAssignee: false, archive: true },
+    ];
+    for (const [sortOrder, action] of resourceLifecycleSeeds.entries()) {
+      await prisma.resourceLifecycleAction.upsert({
+        where: { businessUnitId_code: { businessUnitId: businessUnit.id, code: action.code } },
+        update: {},
+        create: {
+          legalEntityId: legalEntity.id,
+          businessUnitId: businessUnit.id,
+          code: action.code,
+          name: action.name,
+          fromStatusId: action.from ? seededResourceStatuses.get(action.from) ?? null : null,
+          toStatusId: action.to ? seededResourceStatuses.get(action.to) ?? null : null,
+          availableQuantityDelta: action.delta,
+          requiresAssignee: action.requiresAssignee,
+          archiveAsset: action.archive,
+          sortOrder,
+        },
+      });
+    }
+  }
+  const demoEquipmentCategory = await prisma.resourceCategory.findFirst({ where: { businessUnitId: businessUnit.id, code: "EQUIPMENT" }, select: { id: true } });
+  const demoSoftwareCategory = await prisma.resourceCategory.findFirst({ where: { businessUnitId: businessUnit.id, code: "SOFTWARE" }, select: { id: true } });
+  const demoInStock = await prisma.resourceStatus.findFirst({ where: { businessUnitId: businessUnit.id, code: "IN_STOCK" }, select: { id: true } });
+  if (demoEquipmentCategory && demoInStock) {
+    const exists = await prisma.resourceAsset.findFirst({ where: { businessUnitId: businessUnit.id, resourceNo: "DEMO-RESOURCE-001" }, select: { id: true } });
+    if (!exists) await prisma.resourceAsset.create({
+      data: {
+        legalEntityId: legalEntity.id,
+        businessUnitId: businessUnit.id,
+        departmentId: rootDepartment.id,
+        siteId: site.id,
+        categoryId: demoEquipmentCategory.id,
+        statusId: demoInStock.id,
+        resourceNo: "DEMO-RESOURCE-001",
+        name: "演示办公笔记本",
+        brandModel: "Demo 14",
+        serialNumber: "DEMO-LOCAL-001",
+        ownership: "公司自有",
+        location: "默认站点",
+        quantity: 1,
+        availableQuantity: 1,
+        currency: "CNY",
+        valueCents: BigInt("599900"),
+        createdByMembershipId: founderMembership.id,
+        note: "仅用于本地资源中心验收，不是真实资产。",
+      },
+    });
+  }
+  if (demoSoftwareCategory && demoInStock) {
+    const exists = await prisma.resourceAsset.findFirst({ where: { businessUnitId: businessUnit.id, resourceNo: "DEMO-SOFTWARE-001" }, select: { id: true } });
+    if (!exists) await prisma.resourceAsset.create({
+      data: {
+        legalEntityId: legalEntity.id,
+        businessUnitId: businessUnit.id,
+        departmentId: rootDepartment.id,
+        siteId: site.id,
+        categoryId: demoSoftwareCategory.id,
+        statusId: demoInStock.id,
+        resourceNo: "DEMO-SOFTWARE-001",
+        name: "演示协作软件",
+        ownership: "订阅",
+        quantity: 1,
+        availableQuantity: 1,
+        currency: "CNY",
+        valueCents: BigInt("199900"),
+        expiresAt: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000),
+        createdByMembershipId: founderMembership.id,
+        note: "仅用于本地软件资产验收，不含真实账号或凭据。",
+        softwareProfile: {
+          create: {
+            platform: "Demo Platform",
+            accountIdentifier: "demo-admin@local.erp",
+            licenseType: "团队版",
+            seatsTotal: 10,
+            seatsUsed: 3,
+            autoRenewal: false,
+            renewalCostCents: BigInt("199900"),
+            renewalCurrency: "CNY",
+            renewalCycle: "年付",
+          },
+        },
+      },
+    });
+  }
   const demoConnection = await prisma.channelConnection.upsert({
     where: {
       businessUnitId_providerKey_externalRef: {
