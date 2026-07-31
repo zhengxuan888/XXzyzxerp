@@ -244,3 +244,35 @@ Playwright 覆盖登录后岗位工作台与核心入口、订单模板/客户�
 同时收紧了团队目标的聚合权限。下属范围只能查看下属的个人目标，不能借由部门/全板块汇总看到同部门其他人员；全板块和部门目标分别要求对应的业务板块或部门树范围。订单列表已统一服务端筛选和分页，支持销售、产品、目的地国家、日期及关键词。
 
 验证结果：`pnpm run ts-check`、`pnpm run lint`、`pnpm run test`（41 文件 / 146 项）、`pnpm exec prisma validate`、`pnpm run prisma:generate`、`pnpm run build`（87 条路由）和本地 `/api/health` 200 全部通过。本地迁移 `202607310018_dashboard_workbench_setting` 已应用。没有部署、Push、连接旧生产库或接入真实第三方账号。
+
+## 2026-07-31：文档中心可用闭环与附件安全加固
+
+### 已完成
+
+- 新增 `/admin/documents` 实际可用的文档中心：上传、搜索、状态/分类筛选、服务端稳定分页、每页条数、审核、退回、软归档、图片/PDF/Word 预览和受控原件下载。
+- 上传框支持文件选择、拖拽和从微信等应用粘贴截图；上传失败会在弹窗内显示结构化错误。手机端以卡片提供预览、审核和归档操作，不要求横向滚动表格。
+- 文件类型允许 PNG、JPEG、WebP、PDF、DOCX、MP4。服务端验证真实文件签名、MIME、扩展名与大小；DOCX 增加 ZIP64、条目数、解压总量和压缩比防护。
+- 新资料默认待审核；审核和归档同时要求对应操作权限与 `document.read` 范围。列表为每条资料由服务端计算 `canReview`/`canArchive`，避免前端把自己权限误显示到下属或其他部门资料。
+- 分类为业务板块配置，`document.category.configure` 只接受 `BUSINESS_UNIT` 或 `ALL` Scope；组织、部门、角色、菜单均未写死。
+- 修复通用附件直链读取/删除使用访问者部门回退的风险：已持久化附件现在以其保存的组织边界作为权限目标，并校验目标资源与附件的一致性。文档内容/预览额外校验 `targetType=DOCUMENT`、`targetId`、业务板块和部门。
+- 内容读取与预览写入不含正文的审计；审核审计只记录备注是否提供及长度，不复制原始备注。
+
+### 验证证据
+
+| Gate | 结果 |
+|---|---:|
+| `pnpm run ts-check` | 通过 |
+| `pnpm run lint` | 通过 |
+| `pnpm run prisma:validate` | 通过 |
+| `pnpm run test` | 46 个文件 / 163 项通过 |
+| `pnpm run build` | 通过，92 条页面/API 路由生成 |
+| `pnpm exec prisma migrate status` | 42 个 migration，schema up to date |
+| `pnpm exec playwright test --project=chromium` | 34 / 34 通过 |
+| 文档中心追加定向 Playwright | 上传、审核、受控读取、绑定篡改拒绝、归档和跨人员拒绝 1 / 1 通过 |
+| 本地浏览器验收 | 页面、分类、筛选、分页、空态加载正常；控制台 error 为 0 |
+
+### 未部署边界
+
+- 仅使用本地 PostgreSQL、Local Demo 存储和虚构 Seed 数据；未导入旧 ERP 数据、未连接旧服务器或生产数据库。
+- 未部署、未 Push、未接入真实对象存储、恶意软件扫描、真实第三方账号或真实员工资料。
+- 生产上线前仍需替换为私有对象存储并完成恶意软件扫描、加密、备份/恢复、保留期与 UAT；详见 `docs/DOCUMENT_CENTER_WORKFLOW.md`。

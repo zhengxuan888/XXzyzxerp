@@ -168,6 +168,9 @@ const actionDefs: SeedAction[] = [
   { key: "document.read", name: "Document read", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "document.create", name: "Document create", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "document.delete", name: "Document delete", namespace: "erp", scope: "BUSINESS_UNIT" },
+  { key: "document.review", name: "Document review", namespace: "erp", scope: "BUSINESS_UNIT" },
+  { key: "document.archive", name: "Document archive", namespace: "erp", scope: "BUSINESS_UNIT" },
+  { key: "document.category.configure", name: "Configure document categories", namespace: "erp", scope: "BUSINESS_UNIT" },
 
   { key: "approval.read", name: "查看审批", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "approval.submit", name: "Approval submit", namespace: "erp", scope: "BUSINESS_UNIT" },
@@ -578,6 +581,22 @@ async function main() {
     },
   });
 
+  // These are only replaceable example categories. The application always
+  // reads categories from the database, so new business units never require a
+  // code change to add or retire document classifications.
+  for (const [code, name, sortOrder] of [
+    ["POLICY", "制度与流程", 10],
+    ["TRAINING", "培训资料", 20],
+    ["CONTRACT", "合同与协议", 30],
+    ["OPERATIONS", "运营资料", 40],
+  ] as const) {
+    await prisma.documentCategory.upsert({
+      where: { businessUnitId_code: { businessUnitId: businessUnit.id, code } },
+      update: { name, sortOrder, isActive: true },
+      create: { legalEntityId: legalEntity.id, businessUnitId: businessUnit.id, code, name, sortOrder },
+    });
+  }
+
   const existingRootDepartment = await prisma.department.findFirst({
     where: {
       businessUnitId: businessUnit.id,
@@ -816,6 +835,9 @@ async function main() {
     "document.read",
     "document.create",
     "document.delete",
+    "document.review",
+    "document.archive",
+    "document.category.configure",
     "approval.read",
     "approval.submit",
     "approval.review",
@@ -877,12 +899,12 @@ async function main() {
     allowed: string[];
     scopes?: Partial<Record<string, SeedAction["scope"]>>;
   }> = [
-    { code: "demo_sales", name: "演示销售录单员", username: "demo_sales", email: "demo.sales@local.erp", allowed: ["dashboard.view", "daily_goal.read", "daily_goal.create", "team_goal.read", "customer.read", "customer.create", "product.read", "order.read", "order.create", "order.update", "order.submit", "attachment.read", "attachment.create", "leave_request.read", "leave_request.create"], scopes: { "order.read": "SELF", "order.update": "SELF", "order.submit": "SELF" } },
+    { code: "demo_sales", name: "演示销售录单员", username: "demo_sales", email: "demo.sales@local.erp", allowed: ["dashboard.view", "daily_goal.read", "daily_goal.create", "team_goal.read", "customer.read", "customer.create", "product.read", "order.read", "order.create", "order.update", "order.submit", "document.read", "document.create", "attachment.read", "attachment.create", "leave_request.read", "leave_request.create"], scopes: { "order.read": "SELF", "order.update": "SELF", "order.submit": "SELF", "document.read": "SELF", "document.create": "SELF" } },
     { code: "demo_reviewer", name: "演示核单员", username: "demo_reviewer", email: "demo.reviewer@local.erp", allowed: ["dashboard.view", "customer.read", "product.read", "order.read", "order.review", "order.review.approve", "order.review.reject", "order.review.proof.upload", "order.void", "attachment.read", "attachment.create", "approval.read", "approval.review"] },
     { code: "demo_shipping", name: "演示发货员", username: "demo_shipping", email: "demo.shipping@local.erp", allowed: ["dashboard.view", "product.read", "order.read", "order.ship", "shipment.read", "shipment.create", "shipment.track.update", "logistics_template.read", "logistics_template.export", "logistics.export_batch.read", "logistics.export_batch.create", "logistics.export_batch.dispatch", "logistics.return_import.preview", "logistics.return_import.confirm", "logistics.batch_artifact.read", "attachment.read", "attachment.create"] },
     { code: "demo_after_sales", name: "演示物流售后员", username: "demo_after_sales", email: "demo.after.sales@local.erp", allowed: ["dashboard.view", "customer.read", "order.read", "shipment.read", "shipment.tracking_no.view", "shipment.timeline.view", "shipment.track.update", "inbox.read", "inbox.manage", "inbox.assign", "inbox.customer.link", "attachment.read", "attachment.create"] },
     { code: "demo_finance", name: "演示财务员", username: "demo_finance", email: "demo.finance@local.erp", allowed: ["dashboard.view", "order.read", "expense.read", "expense.create", "approval.read", "approval.review"] },
-    { code: "demo_hr", name: "演示人事员", username: "demo_hr", email: "demo.hr@local.erp", allowed: ["dashboard.view", "daily_goal.read", "daily_goal.manage", "team_goal.read", "user.read", "user.create", "user.import", "user.update", "membership.read", "membership.create", "membership.update", "department.read", "attendance.read", "attendance.create", "attendance.approve", "leave_request.read", "leave_request.approve", "announcement.read", "announcement.create", "resource.read", "resource.create", "resource.update", "resource.lifecycle.manage", "resource.lifecycle.history.read", "resource.archive", "resource.configure", "software_asset.account.read", "software_asset.account.manage"] },
+    { code: "demo_hr", name: "演示人事员", username: "demo_hr", email: "demo.hr@local.erp", allowed: ["dashboard.view", "daily_goal.read", "daily_goal.manage", "team_goal.read", "user.read", "user.create", "user.import", "user.update", "membership.read", "membership.create", "membership.update", "department.read", "attendance.read", "attendance.create", "attendance.approve", "leave_request.read", "leave_request.approve", "announcement.read", "announcement.create", "document.read", "document.create", "document.review", "document.archive", "document.category.configure", "resource.read", "resource.create", "resource.update", "resource.lifecycle.manage", "resource.lifecycle.history.read", "resource.archive", "resource.configure", "software_asset.account.read", "software_asset.account.manage"] },
   ];
   const demoRoles = new Map<string, { id: string }>();
   for (const profile of roleProfiles) {

@@ -4,14 +4,68 @@ import { prisma } from "@/lib/prisma";
 export const attachmentTargets = ["PRODUCT", "ORDER", "ORDER_REVIEW", "CONVERSATION", "SHIPMENT"] as const;
 export type AttachmentTargetType = (typeof attachmentTargets)[number];
 
-export async function resolveAttachmentTarget(auth: AuthContext, targetType: string, targetId: string) {
+export type CanonicalAttachmentTarget = {
+  targetType: AttachmentTargetType;
+  targetId: string;
+  businessUnitId: string;
+  departmentId: string | null;
+  siteId: string | null;
+  ownerUserId: string | null;
+};
+
+type StoredAttachmentScope = {
+  businessUnitId: string;
+  departmentId: string | null;
+  uploadedByUserId: string;
+};
+
+/**
+ * A creation flow may assign an actor department to a legacy target that has
+ * no own department. After persistence, that stored boundary is authoritative:
+ * an accessing actor must never substitute their own department for it.
+ */
+export function isStoredAttachmentTargetConsistent(
+  attachment: StoredAttachmentScope,
+  target: CanonicalAttachmentTarget,
+) {
+  if (attachment.businessUnitId !== target.businessUnitId) return false;
+  return target.departmentId === null || attachment.departmentId === target.departmentId;
+}
+
+export function storedAttachmentPermissionTarget(
+  attachment: StoredAttachmentScope,
+  target: CanonicalAttachmentTarget,
+) {
+  return {
+    businessUnitId: attachment.businessUnitId,
+    departmentId: attachment.departmentId,
+    siteId: target.siteId,
+    ownerUserId: target.ownerUserId ?? attachment.uploadedByUserId,
+  };
+}
+
+async function resolveAttachmentTargetInternal(
+  auth: AuthContext,
+  targetType: string,
+  targetId: string,
+  allowActorDepartmentFallback: boolean,
+): Promise<CanonicalAttachmentTarget | null> {
+  const actorDepartmentId = allowActorDepartmentFallback ? auth.membership.departmentId : null;
+
   if (targetType === "PRODUCT") {
     const product = await prisma.product.findFirst({
       where: { id: targetId, businessUnitId: auth.membership.businessUnitId, isActive: true },
       select: { id: true, businessUnitId: true },
     });
     return product
-      ? { targetType: "PRODUCT" as const, targetId: product.id, businessUnitId: product.businessUnitId, departmentId: auth.membership.departmentId }
+      ? {
+          targetType: "PRODUCT",
+          targetId: product.id,
+          businessUnitId: product.businessUnitId,
+          departmentId: actorDepartmentId,
+          siteId: null,
+          ownerUserId: null,
+        }
       : null;
   }
   if (targetType === "ORDER" || targetType === "ORDER_REVIEW") {
@@ -27,7 +81,7 @@ export async function resolveAttachmentTarget(auth: AuthContext, targetType: str
           targetType: targetType as "ORDER" | "ORDER_REVIEW",
           targetId: order.id,
           businessUnitId: order.businessUnitId,
-          departmentId: order.departmentId ?? auth.membership.departmentId,
+          departmentId: order.departmentId ?? actorDepartmentId,
           siteId: order.siteId,
           ownerUserId: order.creatorUserId,
         }
@@ -42,7 +96,14 @@ export async function resolveAttachmentTarget(auth: AuthContext, targetType: str
       select: { id: true, businessUnitId: true, departmentId: true },
     });
     return conversation
-      ? { targetType: "CONVERSATION" as const, targetId: conversation.id, businessUnitId: conversation.businessUnitId, departmentId: conversation.departmentId }
+      ? {
+          targetType: "CONVERSATION",
+          targetId: conversation.id,
+          businessUnitId: conversation.businessUnitId,
+          departmentId: conversation.departmentId ?? actorDepartmentId,
+          siteId: null,
+          ownerUserId: null,
+        }
       : null;
   }
   if (targetType === "SHIPMENT") {
@@ -65,11 +126,21 @@ export async function resolveAttachmentTarget(auth: AuthContext, targetType: str
           targetType: "SHIPMENT" as const,
           targetId: shipment.id,
           businessUnitId: shipment.businessUnitId,
-          departmentId: shipment.order.departmentId ?? auth.membership.departmentId,
+          departmentId: shipment.order.departmentId ?? actorDepartmentId,
           siteId: shipment.siteId,
           ownerUserId: shipment.order.creatorUserId,
         }
       : null;
   }
   return null;
+}
+
+/** Existing upload/list flows retain their compatible actor fallback. */
+export async function resolveAttachmentTarget(auth: AuthContext, targetType: string, targetId: string) {
+  return resolveAttachmentTargetInternal(auth, targetType, targetId, true);
+}
+
+/** Existing stored files must be resolved without an actor-scope fallback. */
+export async function resolveCanonicalAttachmentTarget(auth: AuthContext, targetType: string, targetId: string) {
+  return resolveAttachmentTargetInternal(auth, targetType, targetId, false);
 }

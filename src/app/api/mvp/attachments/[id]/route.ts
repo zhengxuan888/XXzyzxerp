@@ -5,7 +5,11 @@ import { fail, ok } from "@/lib/api-response";
 import { prisma } from "@/lib/prisma";
 import { localDemoStorage } from "@/lib/storage/local-demo";
 import { writeAuditLog } from "@/lib/audit";
-import { resolveAttachmentTarget } from "@/lib/attachments";
+import {
+  isStoredAttachmentTargetConsistent,
+  resolveCanonicalAttachmentTarget,
+  storedAttachmentPermissionTarget,
+} from "@/lib/attachments";
 
 export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const auth = await requireAuthContext(request);
@@ -15,16 +19,17 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ id
     where: { id, businessUnitId: auth.membership.businessUnitId, status: "ACTIVE" },
   });
   if (!attachment) return fail("NOT_FOUND", "附件不存在。", 404);
-  const target = await resolveAttachmentTarget(auth, attachment.targetType, attachment.targetId);
-  if (!target) return fail("NOT_FOUND", "附件不存在。", 404);
+  const target = await resolveCanonicalAttachmentTarget(auth, attachment.targetType, attachment.targetId);
+  if (!target || !isStoredAttachmentTargetConsistent(attachment, target)) return fail("NOT_FOUND", "附件不存在。", 404);
+  const scope = storedAttachmentPermissionTarget(attachment, target);
   const decision = await checkPermission({
     userId: auth.userId,
     membershipId: auth.membership.id,
     actionKey: "attachment.delete",
-    targetBusinessUnitId: target.businessUnitId,
-    targetDepartmentId: target.departmentId,
-    targetSiteId: target.siteId,
-    targetUserId: target.ownerUserId,
+    targetBusinessUnitId: scope.businessUnitId,
+    targetDepartmentId: scope.departmentId,
+    targetSiteId: scope.siteId,
+    targetUserId: scope.ownerUserId,
   });
   if (!decision.allowed) return fail("NOT_FOUND", "附件不存在。", 404);
   if (attachment.targetType === "ORDER_REVIEW") {

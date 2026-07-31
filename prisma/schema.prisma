@@ -152,6 +152,13 @@ enum AttachmentStatus {
   QUARANTINED
 }
 
+enum DocumentReviewStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  ARCHIVED
+}
+
 // Finance facts are isolated from operational logistics. Amounts are always
 // stored in the smallest currency unit using PostgreSQL BIGINT.
 enum FinanceCounterpartyType {
@@ -260,6 +267,7 @@ model LegalEntity {
   products                            Product[]
   orders                              Order[]
   documents                           Document[]
+  documentCategories                  DocumentCategory[]
   announcements                       Announcement[]
   attendanceRecords                   Attendance[]
   leaveRequests                       LeaveRequest[]
@@ -316,6 +324,7 @@ model BusinessUnit {
   products                            Product[]
   orders                              Order[]
   documents                           Document[]
+  documentCategories                  DocumentCategory[]
   announcements                       Announcement[]
   attendance                          Attendance[]
   leaveRequests                       LeaveRequest[]
@@ -568,6 +577,8 @@ model Membership {
   directReports       Membership[] @relation("MembershipHierarchy")
   orders              Order[]      @relation("OrderOwner")
   claimedOrderReviews Order[]      @relation("OrderReviewClaim")
+  uploadedDocuments   Document[]   @relation("DocumentOwnerMembership")
+  reviewedDocuments   Document[]   @relation("DocumentReviewer")
 
   grantedAccess  AccessGrant[] @relation("GrantedAccess")
   receivedAccess AccessGrant[] @relation("ReceivedAccess")
@@ -1927,29 +1938,66 @@ model Announcement {
 }
 
 model Document {
+  id                     String               @id @default(uuid())
+  legalEntityId          String
+  businessUnitId         String
+  departmentId           String?
+  siteId                 String?
+  ownerUserId            String
+  ownerMembershipId      String?
+  categoryId             String?
+  attachmentId           String?              @unique
+  targetType             String
+  targetId               String?
+  title                  String
+  fileName               String
+  fileType               String
+  storagePath            String
+  fileSizeBytes          Int
+  checksum               String?
+  metadata               Json?
+  reviewStatus           DocumentReviewStatus @default(APPROVED)
+  reviewedAt             DateTime?
+  reviewedByMembershipId String?
+  reviewNote             String?
+  archivedAt             DateTime?
+  version                Int                  @default(1)
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+
+  legalEntity          LegalEntity       @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit         BusinessUnit      @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department           Department?       @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  site                 Site?             @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  ownerUser            User              @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  ownerMembership      Membership?       @relation("DocumentOwnerMembership", fields: [ownerMembershipId], references: [id], onDelete: SetNull)
+  reviewedByMembership Membership?       @relation("DocumentReviewer", fields: [reviewedByMembershipId], references: [id], onDelete: SetNull)
+  category             DocumentCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  attachment           Attachment?       @relation("DocumentAttachment", fields: [attachmentId], references: [id], onDelete: SetNull)
+
+  @@index([businessUnitId, reviewStatus, createdAt, id])
+  @@index([businessUnitId, categoryId, reviewStatus])
+  @@index([ownerMembershipId])
+}
+
+model DocumentCategory {
   id             String   @id @default(uuid())
   legalEntityId  String
   businessUnitId String
-  departmentId   String?
-  siteId         String?
-  ownerUserId    String
-  targetType     String
-  targetId       String?
-  title          String
-  fileName       String
-  fileType       String
-  storagePath    String
-  fileSizeBytes  Int
-  checksum       String?
-  metadata       Json?
+  code           String
+  name           String
+  description    String?
+  sortOrder      Int      @default(0)
+  isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   legalEntity  LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
   businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  department   Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  site         Site?        @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  ownerUser    User         @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  documents    Document[]
+
+  @@unique([businessUnitId, code])
+  @@index([businessUnitId, isActive, sortOrder])
 }
 
 // Resource configuration is stored per business unit. Categories, statuses
@@ -2379,6 +2427,7 @@ model Attachment {
   department           Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   uploadedByUser       User         @relation("AttachmentUploader", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
   uploadedByMembership Membership   @relation("AttachmentUploaderMembership", fields: [uploadedByMembershipId], references: [id], onDelete: Restrict)
+  document             Document?    @relation("DocumentAttachment")
 
   @@index([businessUnitId, departmentId, targetType, targetId, status])
   @@index([sha256])

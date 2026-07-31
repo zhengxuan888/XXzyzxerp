@@ -125,7 +125,11 @@ export async function POST(request: NextRequest) {
     return fail(code, "文件类型、扩展名、签名或大小不符合安全规则。", status);
   }
 
-  await localDemoStorage.put({ storageKey: validated.storageKey, bytes });
+  try {
+    await localDemoStorage.put({ storageKey: validated.storageKey, bytes });
+  } catch {
+    return fail("ATTACHMENT_STORAGE_WRITE_FAILED", "文件暂时无法安全保存，请稍后重试。", 503);
+  }
   try {
     const attachment = await prisma.$transaction(async (tx) => {
       const created = await tx.attachment.create({
