@@ -19,12 +19,13 @@ export default async function ProductsPage() {
     actionKey,
     targetBusinessUnitId: membership.businessUnitId,
   });
-  const [canRead, canCreate, canUpdate, canDelete, canImport] = await Promise.all([
+  const [canRead, canCreate, canUpdate, canDelete, canImport, canExport] = await Promise.all([
     permission("product.read"),
     permission("product.create"),
     permission("product.update"),
     permission("product.delete"),
     permission("product.import"),
+    permission("product.export"),
   ]);
   if (!canRead.allowed) redirect("/admin");
 
@@ -36,7 +37,7 @@ export default async function ProductsPage() {
 
   return (
     <>
-      {canImport.allowed && <ProductImportPanel />}
+      {canImport.allowed && <ProductImportPanel canExport={canExport.allowed} />}
       <CrudPage
         apiBase="/api/mvp"
         resource="products"
