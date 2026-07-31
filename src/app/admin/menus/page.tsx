@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
 import { checkPermission } from "@/lib/permission";
+import { getSystemConfigurationPermission } from "@/lib/system-configuration";
 
 export default async function MenusPage() {
   const session = await getSessionFromCookie();
@@ -12,7 +13,7 @@ export default async function MenusPage() {
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
 
-  const [canRead, canCreate, canUpdate] = await Promise.all([
+  const [canRead, canCreate, canUpdate, canManageGlobalRegistry] = await Promise.all([
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
@@ -31,9 +32,10 @@ export default async function MenusPage() {
       actionKey: "menu.update",
       targetBusinessUnitId: membership.businessUnitId,
     }),
+    getSystemConfigurationPermission({ userId: session.userId, membership }),
   ]);
 
-  if (!canRead.allowed) redirect("/admin");
+  if (!canRead.allowed || !canManageGlobalRegistry.allowed) redirect("/admin");
 
   const [rows, actions] = await Promise.all([
     prisma.menu.findMany({ orderBy: [{ sortOrder: "asc" }, { key: "asc" }], include: { parent: true } }),

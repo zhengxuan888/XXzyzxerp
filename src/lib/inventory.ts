@@ -22,11 +22,15 @@ type Actor = {
   siteId: string;
 };
 
-type OrderStockItem = { skuId: string | null; quantity: number };
+type OrderStockItem = { skuId: string | null; quantity: number; stockControlled?: boolean };
 
 export function consolidateSkuQuantities(items: OrderStockItem[]) {
   const quantities = new Map<string, number>();
   for (const item of items) {
+    // A hand-entered ecommerce item is explicitly marked non-stock-controlled
+    // at creation time. It is not a missing SKU and must never cause a silent
+    // inventory deduction. Existing/catalog items default to stock control.
+    if (item.stockControlled === false) continue;
     if (!item.skuId) throw new InventoryError("SKU_REQUIRED", "Every stock-controlled order item requires a SKU.");
     if (!Number.isSafeInteger(item.quantity) || item.quantity <= 0) {
       throw new InventoryError("SKU_REQUIRED", "Inventory quantity must be a positive safe integer.");

@@ -209,3 +209,11 @@ Playwright 覆盖登录后岗位工作台与核心入口、订单模板/客户�
 - 新增迁移 `20260723224949_secure_attachments`，仅应用于 V2 本地数据库。
 - 最终验证：Vitest 12 个文件、33 项通过；Playwright Chromium 12 项通过；TypeScript、ESLint、Prisma validate、6 个迁移状态和 Next.js production build 全部通过。
 - 当前仍使用本机私有目录的 `LOCAL_DEMO` 存储；生产上线前必须切换经过评审的私有对象存储，并补充恶意软件扫描、加密、生命周期和备份恢复策略。
+
+## 2026-07-31：角色化工作台与组织范围收口
+
+本轮将首页工作台从固定卡片改为业务板块数据库配置：有 `dashboard.configure` 动作的人员可以按角色、部门、具体员工配置卡片的显示、标题、说明、顺序和区域。指标定义保持受审计的稳定代码，避免任意配置直接执行数据库查询；所有可见卡片、数字与跳转页仍分别经过 Membership + Action + Scope + Access Grant 服务端验证。
+
+同时收紧了团队目标的聚合权限。下属范围只能查看下属的个人目标，不能借由部门/全板块汇总看到同部门其他人员；全板块和部门目标分别要求对应的业务板块或部门树范围。订单列表已统一服务端筛选和分页，支持销售、产品、目的地国家、日期及关键词。
+
+验证结果：`pnpm run ts-check`、`pnpm run lint`、`pnpm run test`（41 文件 / 146 项）、`pnpm exec prisma validate`、`pnpm run prisma:generate`、`pnpm run build`（87 条路由）和本地 `/api/health` 200 全部通过。本地迁移 `202607310018_dashboard_workbench_setting` 已应用。没有部署、Push、连接旧生产库或接入真实第三方账号。

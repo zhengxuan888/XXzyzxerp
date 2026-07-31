@@ -13,6 +13,7 @@ export type OrderTemplateConfiguration = {
   defaultCodAmountCents: number;
   requireCodAmount: boolean;
   requireRecipientPhone: boolean;
+  requireShopId: boolean;
   requireRecipientAddress: boolean;
   requireRecipientEmail: boolean;
   requireSku: boolean;
@@ -78,6 +79,7 @@ export function parseOrderTemplateConfiguration(raw: unknown): OrderTemplateConf
     defaultCodAmountCents: cents(value.defaultCodAmountCents),
     requireCodAmount: value.requireCodAmount !== false,
   requireRecipientPhone: value.requireRecipientPhone !== false,
+  requireShopId: bool((value as Record<string, unknown>).requireShopId, false),
   requireRecipientAddress: value.requireRecipientAddress !== false,
   requireRecipientEmail: bool((value as Record<string, unknown>).requireRecipientEmail, false),
   requireSku: value.requireSku !== false,

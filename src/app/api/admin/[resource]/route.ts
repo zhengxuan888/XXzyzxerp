@@ -6,6 +6,7 @@ import { requireAuthContext } from "@/lib/api-auth";
 import { assertGrantRule, type PermissionScope, checkPermission } from "@/lib/permission";
 import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
+import { getSystemConfigurationPermission } from "@/lib/system-configuration";
 
 type RouteParams = {
   params: Promise<{ resource: string }>;
@@ -67,19 +68,27 @@ export async function GET(_request: NextRequest, props: RouteParams) {
     return NextResponse.json({ error: "FORBIDDEN", reasons: canRead.reasons }, { status: 403 });
   }
 
-  const canSeeAllUnits = canRead.reasons.includes("SCOPE_ALL") || canRead.reasons.includes("SCOPE_ALL_OK");
+  // ALL is a record scope inside the currently selected business context. It
+  // must never be reinterpreted as a cross-business-unit list permission.
+  // Shared registries have a separate, explicit system configuration action.
+  const systemConfiguration = await getSystemConfigurationPermission(auth);
 
   if (resource === "legal-entities") {
     const entities = await prisma.legalEntity.findMany({
+      where: systemConfiguration.allowed ? {} : { id: auth.membership.legalEntityId },
       orderBy: { createdAt: "desc" },
-      include: { businessUnits: true },
+      include: {
+        businessUnits: systemConfiguration.allowed
+          ? true
+          : { where: { id: auth.membership.businessUnitId } },
+      },
     });
     return NextResponse.json(entities);
   }
 
   if (resource === "business-units") {
     const rows = await prisma.businessUnit.findMany({
-      where: canSeeAllUnits ? {} : { isActive: true, id: auth.membership.businessUnitId },
+      where: { isActive: true, id: auth.membership.businessUnitId },
       orderBy: { createdAt: "desc" },
       include: { legalEntity: true },
     });
@@ -90,7 +99,7 @@ export async function GET(_request: NextRequest, props: RouteParams) {
     const rows = await prisma.department.findMany({
       where: {
         isActive: true,
-        ...(canSeeAllUnits ? {} : { businessUnitId: auth.membership.businessUnitId }),
+        businessUnitId: auth.membership.businessUnitId,
       },
       include: { businessUnit: true, parent: true },
       orderBy: { createdAt: "desc" },
@@ -102,7 +111,7 @@ export async function GET(_request: NextRequest, props: RouteParams) {
     const rows = await prisma.site.findMany({
       where: {
         isActive: true,
-        ...(canSeeAllUnits ? {} : { businessUnitId: auth.membership.businessUnitId }),
+        businessUnitId: auth.membership.businessUnitId,
       },
       include: { businessUnit: true, department: true },
       orderBy: { createdAt: "desc" },
@@ -114,9 +123,7 @@ export async function GET(_request: NextRequest, props: RouteParams) {
     const rows = await prisma.user.findMany({
       where: {
         isActive: true,
-        ...(canSeeAllUnits
-          ? {}
-          : { memberships: { some: { businessUnitId: auth.membership.businessUnitId, isActive: true } } }),
+        memberships: { some: { businessUnitId: auth.membership.businessUnitId, isActive: true } },
       },
       orderBy: { createdAt: "desc" },
       include: { memberships: { where: { isActive: true }, include: { businessUnit: true, role: true, department: true } } },
@@ -128,7 +135,7 @@ export async function GET(_request: NextRequest, props: RouteParams) {
     const rows = await prisma.membership.findMany({
       where: {
         isActive: true,
-        ...(canSeeAllUnits ? {} : { businessUnitId: auth.membership.businessUnitId }),
+        businessUnitId: auth.membership.businessUnitId,
       },
       orderBy: { createdAt: "desc" },
       include: { user: true, role: true, businessUnit: true, department: true, site: true },
@@ -137,6 +144,9 @@ export async function GET(_request: NextRequest, props: RouteParams) {
   }
 
   if (resource === "roles") {
+    if (!systemConfiguration.allowed) {
+      return NextResponse.json({ error: "FORBIDDEN", reasons: systemConfiguration.reasons }, { status: 403 });
+    }
     const rows = await prisma.role.findMany({
       orderBy: { createdAt: "desc" },
       include: {
@@ -149,6 +159,9 @@ export async function GET(_request: NextRequest, props: RouteParams) {
   }
 
   if (resource === "menus") {
+    if (!systemConfiguration.allowed) {
+      return NextResponse.json({ error: "FORBIDDEN", reasons: systemConfiguration.reasons }, { status: 403 });
+    }
     const rows = await prisma.menu.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: "asc" },
@@ -160,7 +173,7 @@ export async function GET(_request: NextRequest, props: RouteParams) {
   if (resource === "access-grants") {
     const rows = await prisma.accessGrant.findMany({
       where: {
-        ...(canSeeAllUnits ? {} : { businessUnitId: auth.membership.businessUnitId }),
+        businessUnitId: auth.membership.businessUnitId,
       },
       include: {
         granteeMembership: {
@@ -204,6 +217,10 @@ export async function POST(request: NextRequest, props: RouteParams) {
   }
 
   if (resource === "legal-entities") {
+    const systemConfiguration = await getSystemConfigurationPermission(auth);
+    if (!systemConfiguration.allowed) {
+      return NextResponse.json({ error: "FORBIDDEN", reasons: systemConfiguration.reasons }, { status: 403 });
+    }
     if (typeof body.code !== "string" || typeof body.name !== "string") {
       return invalidBody("legal entity code and name are required.");
     }
@@ -225,6 +242,10 @@ export async function POST(request: NextRequest, props: RouteParams) {
   }
 
   if (resource === "business-units") {
+    const systemConfiguration = await getSystemConfigurationPermission(auth);
+    if (!systemConfiguration.allowed) {
+      return NextResponse.json({ error: "FORBIDDEN", reasons: systemConfiguration.reasons }, { status: 403 });
+    }
     if (typeof body.code !== "string" || typeof body.name !== "string" || typeof body.legalEntityId !== "string") {
       return invalidBody("business unit code, name and legalEntityId are required.");
     }
@@ -439,6 +460,10 @@ export async function POST(request: NextRequest, props: RouteParams) {
   }
 
   if (resource === "roles") {
+    const systemConfiguration = await getSystemConfigurationPermission(auth);
+    if (!systemConfiguration.allowed) {
+      return NextResponse.json({ error: "FORBIDDEN", reasons: systemConfiguration.reasons }, { status: 403 });
+    }
     if (typeof body.code !== "string" || typeof body.name !== "string") {
       return invalidBody("code and name are required.");
     }
@@ -515,6 +540,10 @@ export async function POST(request: NextRequest, props: RouteParams) {
   }
 
   if (resource === "menus") {
+    const systemConfiguration = await getSystemConfigurationPermission(auth);
+    if (!systemConfiguration.allowed) {
+      return NextResponse.json({ error: "FORBIDDEN", reasons: systemConfiguration.reasons }, { status: 403 });
+    }
     if (typeof body.key !== "string" || typeof body.label !== "string" || typeof body.path !== "string") {
       return invalidBody("key,label,path are required.");
     }

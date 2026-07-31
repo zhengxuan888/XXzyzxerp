@@ -1,5 +1,7 @@
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+
+import { defaultDashboardWorkbenchConfig } from "../src/lib/dashboard-workbench-config";
 
 const prisma = new PrismaClient();
 
@@ -11,6 +13,7 @@ type SeedAction = {
 };
 
 const actionDefs: SeedAction[] = [
+  { key: "system.configuration.manage", name: "System configuration manage", namespace: "system", scope: "ALL" },
   { key: "legal_entity.read", name: "Legal entity read", namespace: "erp", scope: "ALL" },
   { key: "legal_entity.create", name: "Legal entity create", namespace: "erp", scope: "ALL" },
   { key: "legal_entity.update", name: "Legal entity update", namespace: "erp", scope: "ALL" },
@@ -52,6 +55,7 @@ const actionDefs: SeedAction[] = [
   { key: "delegation.manage", name: "Delegation manage", namespace: "erp", scope: "ALL" },
 
   { key: "dashboard.view", name: "Dashboard view", namespace: "erp", scope: "BUSINESS_UNIT" },
+  { key: "dashboard.configure", name: "Configure dashboard workbench", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "daily_goal.read", name: "查看今日目标", namespace: "workforce", scope: "SELF" },
   { key: "daily_goal.create", name: "设置本人今日目标", namespace: "workforce", scope: "SELF" },
   { key: "daily_goal.manage", name: "管理下属今日目标", namespace: "workforce", scope: "SUBORDINATES" },
@@ -77,6 +81,8 @@ const actionDefs: SeedAction[] = [
   { key: "inventory.adjust", name: "Inventory adjust", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "order_template.read", name: "Order template read", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "order_template.manage", name: "Order template manage", namespace: "erp", scope: "BUSINESS_UNIT" },
+  { key: "order.numbering.read", name: "查看订单编号规则", namespace: "erp", scope: "BUSINESS_UNIT" },
+  { key: "order.numbering.manage", name: "配置订单编号规则", namespace: "erp", scope: "BUSINESS_UNIT" },
 
   { key: "order.read", name: "Order read", namespace: "erp", scope: "BUSINESS_UNIT" },
   { key: "order.create", name: "Order create", namespace: "erp", scope: "BUSINESS_UNIT" },
@@ -237,7 +243,7 @@ const menuDefs = [
     key: "roles",
     label: "角色权限",
     path: "/admin/roles",
-    requiredActionKey: "role.read",
+    requiredActionKey: "system.configuration.manage",
     sortOrder: 70,
     isActive: true,
   },
@@ -245,7 +251,7 @@ const menuDefs = [
     key: "menus",
     label: "菜单管理",
     path: "/admin/menus",
-    requiredActionKey: "menu.read",
+    requiredActionKey: "system.configuration.manage",
     sortOrder: 80,
     isActive: true,
   },
@@ -261,7 +267,7 @@ const menuDefs = [
     key: "delegation-rules",
     label: "权限转授规则",
     path: "/admin/delegation-rules",
-    requiredActionKey: "delegation.manage",
+    requiredActionKey: "system.configuration.manage",
     sortOrder: 92,
     isActive: true,
   },
@@ -327,6 +333,14 @@ const menuDefs = [
     path: "/admin/order-templates",
     requiredActionKey: "order_template.read",
     sortOrder: 118,
+    isActive: true,
+  },
+  {
+    key: "order-numbering",
+    label: "订单编号规则",
+    path: "/admin/order-numbering",
+    requiredActionKey: "order.numbering.read",
+    sortOrder: 119,
     isActive: true,
   },
   {
@@ -460,6 +474,7 @@ const menuGroupByKey: Record<string, (typeof menuGroupDefs)[number]["key"]> = {
   orders: "group-sales",
   "order-review": "group-sales",
   "order-templates": "group-sales",
+  "order-numbering": "group-sales",
   "shipping-workbench": "group-logistics",
   shipments: "group-logistics",
   customers: "group-customer",
@@ -524,6 +539,15 @@ async function main() {
       legalEntityId: legalEntity.id,
       code: "SAMPLE_BU",
       name: "Facebook COD 演示板块",
+    },
+  });
+
+  await prisma.dashboardWorkbenchSetting.upsert({
+    where: { businessUnitId: businessUnit.id },
+    update: {},
+    create: {
+      businessUnitId: businessUnit.id,
+      cards: defaultDashboardWorkbenchConfig.cards as unknown as Prisma.InputJsonValue,
     },
   });
 
@@ -720,6 +744,8 @@ async function main() {
     "inventory.adjust",
     "order_template.read",
     "order_template.manage",
+    "order.numbering.read",
+    "order.numbering.manage",
     "order.read",
     "order.create",
     "order.update",
@@ -1322,6 +1348,33 @@ async function main() {
       isDefault: true,
     },
   });
+
+  // Initial demo data only. Runtime numbering always resolves active rules
+  // from the database; future companies, departments, and templates are
+  // configured through the ERP and never depend on this seed value.
+  const orderNumberRuleCount = await prisma.orderNumberRule.count({
+    where: { businessUnitId: businessUnit.id },
+  });
+  if (orderNumberRuleCount === 0) {
+    await prisma.orderNumberRule.create({
+      data: {
+        legalEntityId: legalEntity.id,
+        businessUnitId: businessUnit.id,
+        code: "DEFAULT_DAILY",
+        name: "默认每日订单编号",
+        prefix: "ZY",
+        dateFormat: "YYYYMDD",
+        timeZone: "Asia/Shanghai",
+        includeDepartmentCode: false,
+        separator: "-",
+        sequencePadding: 1,
+        resetPeriod: "DAILY",
+        priority: 0,
+        isDefault: true,
+        isActive: true,
+      },
+    });
+  }
 
   await prisma.inventoryBalance.upsert({
     where: {

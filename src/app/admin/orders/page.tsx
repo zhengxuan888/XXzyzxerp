@@ -6,7 +6,7 @@ import OrderBatchImport from "@/components/admin/OrderBatchImport";
 import OrderEntryForm from "@/components/admin/OrderEntryForm";
 import { parseOrderTemplateConfiguration } from "@/lib/order-template";
 import { formatMoneyCents } from "@/lib/money";
-import { resolveOrderReadScope, withOrderReadScope } from "@/lib/order-access";
+import { createOrderAccessPlan } from "@/lib/order-access";
 import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
 import { checkPermission, getEffectiveActions } from "@/lib/permission";
@@ -51,27 +51,48 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const requestedPage = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
   const pageSize = [10, 20, 50, 100].includes(Number(params.pageSize)) ? Number(params.pageSize) : 20;
 
-  const [canRead, canCreate, effectiveActions] = await Promise.all([
-    checkPermission({
-      userId: session.userId,
-      membershipId: membership.id,
-      actionKey: "order.read",
-      targetBusinessUnitId: membership.businessUnitId,
-      targetUserId: session.userId,
-    }),
+  const [canCreate, canUploadOrderProof, canDeleteOrderProof, canSubmitForReview, effectiveActions, orderReadAccess] = await Promise.all([
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
       actionKey: "order.create",
       targetBusinessUnitId: membership.businessUnitId,
     }),
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "order.update",
+      targetBusinessUnitId: membership.businessUnitId,
+      targetDepartmentId: membership.departmentId,
+      targetSiteId: membership.siteId,
+      targetUserId: session.userId,
+      targetMembershipId: membership.id,
+    }),
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "attachment.delete",
+      targetBusinessUnitId: membership.businessUnitId,
+      targetDepartmentId: membership.departmentId,
+      targetSiteId: membership.siteId,
+      targetUserId: session.userId,
+      targetMembershipId: membership.id,
+    }),
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "order.submit",
+      targetBusinessUnitId: membership.businessUnitId,
+      targetDepartmentId: membership.departmentId,
+      targetSiteId: membership.siteId,
+      targetUserId: session.userId,
+      targetMembershipId: membership.id,
+    }),
     getEffectiveActions(membership.id),
+    createOrderAccessPlan({ membership, actionKey: "order.read" }),
   ]);
   const canDelete = effectiveActions.has("order.delete");
-  if (!canRead.allowed) redirect("/admin");
-
-  const orderReadScope = await resolveOrderReadScope(membership, session.userId);
-  if (orderReadScope === "NONE") redirect("/admin");
+  if (!orderReadAccess.allowed) redirect("/admin");
 
   const products = await prisma.product.findMany({
     where: { isActive: true, businessUnitId: membership.businessUnitId },
@@ -95,20 +116,12 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     ...((start || end) ? { createdAt: { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) } } : {}),
   };
   const baseWhere = { businessUnitId: membership.businessUnitId, ...(status ? { status } : {}), ...sharedFilters };
-  const scopedWhere = withOrderReadScope(baseWhere, orderReadScope, membership);
-  const statusScopeWhere = withOrderReadScope({ businessUnitId: membership.businessUnitId, ...sharedFilters }, orderReadScope, membership);
-  const employeeWhere =
-    orderReadScope === "SELF"
-      ? { id: session.userId }
-      : orderReadScope === "DEPARTMENT"
-        ? { memberships: { some: { businessUnitId: membership.businessUnitId, departmentId: membership.departmentId, isActive: true } } }
-        : orderReadScope === "SITE"
-          ? { memberships: { some: { businessUnitId: membership.businessUnitId, siteId: membership.siteId, isActive: true } } }
-          : { memberships: { some: { businessUnitId: membership.businessUnitId, isActive: true } } };
+  const scopedWhere = { AND: [orderReadAccess.where, baseWhere] };
+  const statusScopeWhere = { AND: [orderReadAccess.where, { businessUnitId: membership.businessUnitId, ...sharedFilters }] };
   const totalCount = await prisma.order.count({ where: scopedWhere as Record<string, unknown> });
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const page = Math.min(requestedPage, totalPages);
-  const [rows, statusGroups, templates, employees, countries] = await Promise.all([
+  const [rows, statusGroups, templates, employeeOrderRows, countries] = await Promise.all([
     prisma.order.findMany({
       where: scopedWhere as Record<string, unknown>,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -126,9 +139,17 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
       select: { id: true, code: true, name: true, configuration: true, isDefault: true },
     }),
-    prisma.user.findMany({ where: employeeWhere, orderBy: { username: "asc" }, select: { id: true, username: true, fullName: true } }),
+    prisma.order.findMany({
+      where: statusScopeWhere,
+      distinct: ["creatorUserId"],
+      orderBy: [{ creatorUserId: "asc" }, { id: "asc" }],
+      select: { creatorUserId: true, creatorUser: { select: { username: true, fullName: true } } },
+    }),
     prisma.country.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { code: true, name: true } }),
   ]);
+  const employees = employeeOrderRows
+    .map((row) => ({ id: row.creatorUserId, username: row.creatorUser.username, fullName: row.creatorUser.fullName }))
+    .sort((a, b) => a.username.localeCompare(b.username));
 
   const myOrderStats = statusGroups.reduce((stats, group) => {
     stats.total += group._count._all;
@@ -167,6 +188,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           configuration: parseOrderTemplateConfiguration(template.configuration),
         }))}
         countries={countries}
+        canUploadOrderProof={canUploadOrderProof.allowed}
+        canDeleteOrderProof={canDeleteOrderProof.allowed}
+        canSubmitForReview={canSubmitForReview.allowed}
         myOrderStats={myOrderStats}
       />
       <OrderBatchImport canCreate={canCreate.allowed} />
@@ -189,6 +213,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         showCreate={false}
         canCreate={canCreate.allowed}
         canDelete={canDelete}
+        serverPagination={{ page, pageSize, total: totalCount, pageCount: totalPages }}
         rows={rows}
         rowId="id"
         createFields={[

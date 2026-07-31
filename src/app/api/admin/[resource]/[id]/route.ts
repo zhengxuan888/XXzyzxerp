@@ -5,6 +5,7 @@ import { requireAuthContext } from "@/lib/api-auth";
 import { assertGrantRule, normalizeScope, checkPermission, type PermissionScope } from "@/lib/permission";
 import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
+import { getSystemConfigurationPermission } from "@/lib/system-configuration";
 
 function isSupportedResource(resource: string): resource is AdminResource {
   return (Object.keys(ADMIN_RESOURCE_MAP) as string[]).includes(resource);
@@ -56,6 +57,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ res
     if (!code || !name) return invalidBody("编码和名称不能为空。");
 
     if (params.resource === "legal-entities") {
+      const systemConfiguration = await getSystemConfigurationPermission(auth);
+      if (!systemConfiguration.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: systemConfiguration.reasons }, { status: 403 });
       const current = await prisma.legalEntity.findUnique({ where: { id: params.id } });
       if (!current) return buildResponseNotFound();
       const decision = await checkPermission({ userId: auth.userId, membershipId: auth.membership.id, actionKey: "legal_entity.update", targetBusinessUnitId: auth.membership.businessUnitId });
@@ -67,6 +70,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ res
     }
 
     if (params.resource === "business-units") {
+      const systemConfiguration = await getSystemConfigurationPermission(auth);
+      if (!systemConfiguration.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: systemConfiguration.reasons }, { status: 403 });
       const current = await prisma.businessUnit.findUnique({ where: { id: params.id } });
       if (!current) return buildResponseNotFound();
       const decision = await checkPermission({ userId: auth.userId, membershipId: auth.membership.id, actionKey: "business_unit.update", targetBusinessUnitId: current.id });
@@ -257,6 +262,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ res
   }
 
   if (params.resource === "roles") {
+    const systemConfiguration = await getSystemConfigurationPermission(auth);
+    if (!systemConfiguration.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: systemConfiguration.reasons }, { status: 403 });
     const canUpdateRole = await checkPermission({
       userId: auth.userId,
       membershipId: auth.membership.id,
@@ -322,6 +329,9 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ res
   }
 
   if (params.resource !== "menus") return buildResponseNotFound();
+
+  const systemConfiguration = await getSystemConfigurationPermission(auth);
+  if (!systemConfiguration.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: systemConfiguration.reasons }, { status: 403 });
 
   const canUpdate = await checkPermission({
     userId: auth.userId,
@@ -398,6 +408,8 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ re
   }
 
   if (params.resource === "legal-entities") {
+    const systemConfiguration = await getSystemConfigurationPermission(auth);
+    if (!systemConfiguration.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: systemConfiguration.reasons }, { status: 403 });
     const row = await prisma.legalEntity.update({ where: { id: params.id }, data: { isActive: false } });
     await writeAuditLog({
       actorUserId: auth.userId,
@@ -412,6 +424,8 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ re
   }
 
   if (params.resource === "business-units") {
+    const systemConfiguration = await getSystemConfigurationPermission(auth);
+    if (!systemConfiguration.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: systemConfiguration.reasons }, { status: 403 });
     const row = await prisma.businessUnit.update({ where: { id: params.id }, data: { isActive: false } });
     await writeAuditLog({
       actorUserId: auth.userId,
@@ -503,6 +517,8 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ re
   }
 
   if (params.resource === "roles") {
+    const systemConfiguration = await getSystemConfigurationPermission(auth);
+    if (!systemConfiguration.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: systemConfiguration.reasons }, { status: 403 });
     const row = await prisma.role.delete({ where: { id: params.id } });
     await writeAuditLog({
       actorUserId: auth.userId,
@@ -517,6 +533,8 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ re
   }
 
   if (params.resource === "menus") {
+    const systemConfiguration = await getSystemConfigurationPermission(auth);
+    if (!systemConfiguration.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: systemConfiguration.reasons }, { status: 403 });
     const row = await prisma.menu.delete({ where: { id: params.id } });
     return NextResponse.json({ ok: true, deleted: row.id });
   }

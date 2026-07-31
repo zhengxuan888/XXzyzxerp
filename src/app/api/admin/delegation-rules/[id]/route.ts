@@ -4,6 +4,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { requireAuthContext } from "@/lib/api-auth";
 import { checkPermission, normalizeScope } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
+import { getSystemConfigurationPermission } from "@/lib/system-configuration";
 
 const levels = { NONE: 0, SELF: 1, SITE: 2, DEPARTMENT: 2, DEPARTMENT_TREE: 2, SUBORDINATES: 2, BUSINESS_UNIT: 3, ALL: 4 } as const;
 type Props = { params: Promise<{ id: string }> };
@@ -11,10 +12,12 @@ type Props = { params: Promise<{ id: string }> };
 async function context(request: NextRequest, id: string) {
   const auth = await requireAuthContext(request);
   if (!auth) return { response: NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 }) };
+  const systemConfiguration = await getSystemConfigurationPermission(auth);
+  if (!systemConfiguration.allowed) return { response: NextResponse.json({ error: "FORBIDDEN", reasons: systemConfiguration.reasons }, { status: 403 }) };
   const rule = await prisma.delegationRule.findUnique({ where: { id }, include: { role: true } });
   if (!rule) return { response: NextResponse.json({ error: "NOT_FOUND" }, { status: 404 }) };
   const permission = await checkPermission({ userId: auth.userId, membershipId: auth.membership.id, actionKey: "delegation.manage", targetBusinessUnitId: auth.membership.businessUnitId, targetDepartmentId: auth.membership.departmentId });
-  if (!permission.allowed || (!permission.reasons.includes("SCOPE_ALL") && rule.roleId !== auth.membership.roleId)) return { response: NextResponse.json({ error: "FORBIDDEN" }, { status: 403 }) };
+  if (!permission.allowed) return { response: NextResponse.json({ error: "FORBIDDEN" }, { status: 403 }) };
   return { auth, rule };
 }
 

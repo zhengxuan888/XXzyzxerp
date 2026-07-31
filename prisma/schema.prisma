@@ -254,40 +254,41 @@ model LegalEntity {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  businessUnits                 BusinessUnit[]
-  memberships                   Membership[]
-  customers                     Customer[]
-  products                      Product[]
-  orders                        Order[]
-  documents                     Document[]
-  announcements                 Announcement[]
-  attendanceRecords             Attendance[]
-  leaveRequests                 LeaveRequest[]
-  expenses                      Expense[]
-  auditLogs                     AuditLog[]
-  shipments                     Shipment[]
-  approvalRecords               ApprovalRecord[]
-  orderTemplates                OrderTemplate[]
-  logisticsTemplates            LogisticsProviderTemplate[]
-  channelConnections            ChannelConnection[]
-  conversations                 Conversation[]
-  inboxAuditEvents              InboxAuditEvent[]
-  attachments                   Attachment[]
-  dailyGoals                    DailyGoal[]
-  teamGoals                     TeamGoal[]
-  logisticsExportBatches        LogisticsExportBatch[]
-  logisticsReturnImportBatches  LogisticsReturnImportBatch[]
-  logisticsBatchArtifacts       LogisticsBatchArtifact[]
-  financeCounterparties         FinanceCounterparty[]
-  financeStatements             FinanceStatement[]
-  financeReconciliations        FinanceReconciliation[]
-  financePayments               FinancePayment[]
-  financePaymentAllocations     FinancePaymentAllocation[]
+  businessUnits                       BusinessUnit[]
+  memberships                         Membership[]
+  customers                           Customer[]
+  products                            Product[]
+  orders                              Order[]
+  documents                           Document[]
+  announcements                       Announcement[]
+  attendanceRecords                   Attendance[]
+  leaveRequests                       LeaveRequest[]
+  expenses                            Expense[]
+  auditLogs                           AuditLog[]
+  shipments                           Shipment[]
+  approvalRecords                     ApprovalRecord[]
+  orderTemplates                      OrderTemplate[]
+  orderNumberRules                    OrderNumberRule[]
+  logisticsTemplates                  LogisticsProviderTemplate[]
+  channelConnections                  ChannelConnection[]
+  conversations                       Conversation[]
+  inboxAuditEvents                    InboxAuditEvent[]
+  attachments                         Attachment[]
+  dailyGoals                          DailyGoal[]
+  teamGoals                           TeamGoal[]
+  logisticsExportBatches              LogisticsExportBatch[]
+  logisticsReturnImportBatches        LogisticsReturnImportBatch[]
+  logisticsBatchArtifacts             LogisticsBatchArtifact[]
+  financeCounterparties               FinanceCounterparty[]
+  financeStatements                   FinanceStatement[]
+  financeReconciliations              FinanceReconciliation[]
+  financePayments                     FinancePayment[]
+  financePaymentAllocations           FinancePaymentAllocation[]
   financePaymentAllocationAdjustments FinancePaymentAllocationAdjustment[]
-  financePaymentAllocationEffects FinancePaymentAllocationEffect[]
-  financeStatementTemplates     FinanceStatementTemplate[]
-  financeStatementImportBatches FinanceStatementImportBatch[]
-  financeControlPolicies        FinanceControlPolicy[]
+  financePaymentAllocationEffects     FinancePaymentAllocationEffect[]
+  financeStatementTemplates           FinanceStatementTemplate[]
+  financeStatementImportBatches       FinanceStatementImportBatch[]
+  financeControlPolicies              FinanceControlPolicy[]
 }
 
 model BusinessUnit {
@@ -300,52 +301,54 @@ model BusinessUnit {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  legalEntity                   LegalEntity                   @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  departments                   Department[]
-  sites                         Site[]
-  memberships                   Membership[]
-  auditLogs                     AuditLog[]
-  accessGrants                  AccessGrant[]
-  customers                     Customer[]
-  products                      Product[]
-  orders                        Order[]
-  documents                     Document[]
-  announcements                 Announcement[]
-  attendance                    Attendance[]
-  leaveRequests                 LeaveRequest[]
-  expenses                      Expense[]
-  shipments                     Shipment[]
-  approvalRecords               ApprovalRecord[]
-  inventoryBalances             InventoryBalance[]
-  inventoryTransactions         InventoryTransaction[]
-  inventoryReservations         InventoryReservation[]
-  orderTemplates                OrderTemplate[]
-  logisticsTemplates            LogisticsProviderTemplate[]
-  logisticsFollowUps            LogisticsFollowUp[]
-  logisticsEventAnnotations     LogisticsEventAnnotation[]
-  logisticsWorkbenchSetting     LogisticsWorkbenchSetting?
-  channelConnections            ChannelConnection[]
-  contactIdentities             ContactIdentity[]
-  conversations                 Conversation[]
-  inboxTags                     InboxTag[]
-  inboxAuditEvents              InboxAuditEvent[]
-  attachments                   Attachment[]
-  dailyGoals                    DailyGoal[]
-  teamGoals                     TeamGoal[]
-  notificationDeliveries        NotificationDelivery[]
-  logisticsExportBatches        LogisticsExportBatch[]
-  logisticsReturnImportBatches  LogisticsReturnImportBatch[]
-  logisticsBatchArtifacts       LogisticsBatchArtifact[]
-  financeCounterparties         FinanceCounterparty[]
-  financeStatements             FinanceStatement[]
-  financeReconciliations        FinanceReconciliation[]
-  financePayments               FinancePayment[]
-  financePaymentAllocations     FinancePaymentAllocation[]
+  legalEntity                         LegalEntity                          @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  departments                         Department[]
+  sites                               Site[]
+  memberships                         Membership[]
+  auditLogs                           AuditLog[]
+  accessGrants                        AccessGrant[]
+  customers                           Customer[]
+  products                            Product[]
+  orders                              Order[]
+  documents                           Document[]
+  announcements                       Announcement[]
+  attendance                          Attendance[]
+  leaveRequests                       LeaveRequest[]
+  expenses                            Expense[]
+  shipments                           Shipment[]
+  approvalRecords                     ApprovalRecord[]
+  inventoryBalances                   InventoryBalance[]
+  inventoryTransactions               InventoryTransaction[]
+  inventoryReservations               InventoryReservation[]
+  orderTemplates                      OrderTemplate[]
+  orderNumberRules                    OrderNumberRule[]
+  logisticsTemplates                  LogisticsProviderTemplate[]
+  logisticsFollowUps                  LogisticsFollowUp[]
+  logisticsEventAnnotations           LogisticsEventAnnotation[]
+  logisticsWorkbenchSetting           LogisticsWorkbenchSetting?
+  dashboardWorkbenchSetting           DashboardWorkbenchSetting?
+  channelConnections                  ChannelConnection[]
+  contactIdentities                   ContactIdentity[]
+  conversations                       Conversation[]
+  inboxTags                           InboxTag[]
+  inboxAuditEvents                    InboxAuditEvent[]
+  attachments                         Attachment[]
+  dailyGoals                          DailyGoal[]
+  teamGoals                           TeamGoal[]
+  notificationDeliveries              NotificationDelivery[]
+  logisticsExportBatches              LogisticsExportBatch[]
+  logisticsReturnImportBatches        LogisticsReturnImportBatch[]
+  logisticsBatchArtifacts             LogisticsBatchArtifact[]
+  financeCounterparties               FinanceCounterparty[]
+  financeStatements                   FinanceStatement[]
+  financeReconciliations              FinanceReconciliation[]
+  financePayments                     FinancePayment[]
+  financePaymentAllocations           FinancePaymentAllocation[]
   financePaymentAllocationAdjustments FinancePaymentAllocationAdjustment[]
-  financePaymentAllocationEffects FinancePaymentAllocationEffect[]
-  financeStatementTemplates     FinanceStatementTemplate[]
-  financeStatementImportBatches FinanceStatementImportBatch[]
-  financeControlPolicy          FinanceControlPolicy?
+  financePaymentAllocationEffects     FinancePaymentAllocationEffect[]
+  financeStatementTemplates           FinanceStatementTemplate[]
+  financeStatementImportBatches       FinanceStatementImportBatch[]
+  financeControlPolicy                FinanceControlPolicy?
 
   @@unique([legalEntityId, code])
   @@index([legalEntityId])
@@ -372,6 +375,7 @@ model Department {
   accessGrants                  AccessGrant[]
   customers                     Customer[]
   orders                        Order[]
+  orderNumberRules              OrderNumberRule[]
   expenses                      Expense[]
   documents                     Document[]
   channelConnections            ChannelConnection[]
@@ -554,51 +558,51 @@ model Membership {
   grantedAccess  AccessGrant[] @relation("GrantedAccess")
   receivedAccess AccessGrant[] @relation("ReceivedAccess")
 
-  actionAudits                           AuditLog[]                    @relation("ActorMembership")
-  submittedApprovals                     ApprovalRecord[]              @relation("SubmittedApprovals")
-  approvedApprovals                      ApprovalRecord[]              @relation("ApprovedApprovals")
-  attendanceRecords                      Attendance[]                  @relation("MembershipAttendance")
-  leaveRequests                          LeaveRequest[]                @relation("LeaveRequester")
-  leaveApprovals                         LeaveRequest[]                @relation("LeaveApprover")
-  shipmentEvents                         ShipmentEvent[]               @relation("MembershipShipmentEvents")
-  ownedShipments                         Shipment[]                    @relation("ShipmentAftersalesOwner")
-  logisticsFollowUps                     LogisticsFollowUp[]
-  handledLogisticsAnnotations            LogisticsEventAnnotation[]    @relation("LogisticsAnnotationHandler")
-  inventoryTransactions                  InventoryTransaction[]
-  assignedConversations                  ConversationAssignment[]      @relation("ConversationAssignee")
-  conversationAssignmentsMade            ConversationAssignment[]      @relation("ConversationAssigner")
-  inboxAuditEvents                       InboxAuditEvent[]             @relation("InboxAuditMembership")
-  uploadedAttachments                    Attachment[]                  @relation("AttachmentUploaderMembership")
-  dailyGoals                             DailyGoal[]                   @relation("DailyGoalOwner")
-  goalsSetForOthers                      DailyGoal[]                   @relation("DailyGoalSetter")
-  teamGoalsSet                           TeamGoal[]                    @relation("TeamGoalSetter")
-  logisticsExportBatches                 LogisticsExportBatch[]        @relation("LogisticsExportBatchCreator")
-  logisticsReturnImportBatches           LogisticsReturnImportBatch[]  @relation("LogisticsReturnImportBatchPreviewer")
-  logisticsBatchArtifacts                LogisticsBatchArtifact[]      @relation("LogisticsBatchArtifactCreator")
-  createdFinanceCounterparties           FinanceCounterparty[]         @relation("FinanceCounterpartyCreator")
-  createdFinanceStatements               FinanceStatement[]            @relation("FinanceStatementCreator")
-  approvedFinanceStatements              FinanceStatement[]            @relation("FinanceStatementApprover")
-  postedFinanceStatements                FinanceStatement[]            @relation("FinanceStatementPoster")
-  voidedFinanceStatements                FinanceStatement[]            @relation("FinanceStatementVoider")
-  createdFinanceReconciliations          FinanceReconciliation[]       @relation("FinanceReconciliationCreator")
-  confirmedFinanceReconciliations        FinanceReconciliation[]       @relation("FinanceReconciliationConfirmer")
-  voidedFinanceReconciliations           FinanceReconciliation[]       @relation("FinanceReconciliationVoider")
-  createdFinancePayments                 FinancePayment[]              @relation("FinancePaymentCreator")
-  approvedFinancePayments                FinancePayment[]              @relation("FinancePaymentApprover")
-  postedFinancePayments                  FinancePayment[]              @relation("FinancePaymentPoster")
-  voidedFinancePayments                  FinancePayment[]              @relation("FinancePaymentVoider")
-  createdFinancePaymentAllocations       FinancePaymentAllocation[]    @relation("FinancePaymentAllocationCreator")
+  actionAudits                                 AuditLog[]                           @relation("ActorMembership")
+  submittedApprovals                           ApprovalRecord[]                     @relation("SubmittedApprovals")
+  approvedApprovals                            ApprovalRecord[]                     @relation("ApprovedApprovals")
+  attendanceRecords                            Attendance[]                         @relation("MembershipAttendance")
+  leaveRequests                                LeaveRequest[]                       @relation("LeaveRequester")
+  leaveApprovals                               LeaveRequest[]                       @relation("LeaveApprover")
+  shipmentEvents                               ShipmentEvent[]                      @relation("MembershipShipmentEvents")
+  ownedShipments                               Shipment[]                           @relation("ShipmentAftersalesOwner")
+  logisticsFollowUps                           LogisticsFollowUp[]
+  handledLogisticsAnnotations                  LogisticsEventAnnotation[]           @relation("LogisticsAnnotationHandler")
+  inventoryTransactions                        InventoryTransaction[]
+  assignedConversations                        ConversationAssignment[]             @relation("ConversationAssignee")
+  conversationAssignmentsMade                  ConversationAssignment[]             @relation("ConversationAssigner")
+  inboxAuditEvents                             InboxAuditEvent[]                    @relation("InboxAuditMembership")
+  uploadedAttachments                          Attachment[]                         @relation("AttachmentUploaderMembership")
+  dailyGoals                                   DailyGoal[]                          @relation("DailyGoalOwner")
+  goalsSetForOthers                            DailyGoal[]                          @relation("DailyGoalSetter")
+  teamGoalsSet                                 TeamGoal[]                           @relation("TeamGoalSetter")
+  logisticsExportBatches                       LogisticsExportBatch[]               @relation("LogisticsExportBatchCreator")
+  logisticsReturnImportBatches                 LogisticsReturnImportBatch[]         @relation("LogisticsReturnImportBatchPreviewer")
+  logisticsBatchArtifacts                      LogisticsBatchArtifact[]             @relation("LogisticsBatchArtifactCreator")
+  createdFinanceCounterparties                 FinanceCounterparty[]                @relation("FinanceCounterpartyCreator")
+  createdFinanceStatements                     FinanceStatement[]                   @relation("FinanceStatementCreator")
+  approvedFinanceStatements                    FinanceStatement[]                   @relation("FinanceStatementApprover")
+  postedFinanceStatements                      FinanceStatement[]                   @relation("FinanceStatementPoster")
+  voidedFinanceStatements                      FinanceStatement[]                   @relation("FinanceStatementVoider")
+  createdFinanceReconciliations                FinanceReconciliation[]              @relation("FinanceReconciliationCreator")
+  confirmedFinanceReconciliations              FinanceReconciliation[]              @relation("FinanceReconciliationConfirmer")
+  voidedFinanceReconciliations                 FinanceReconciliation[]              @relation("FinanceReconciliationVoider")
+  createdFinancePayments                       FinancePayment[]                     @relation("FinancePaymentCreator")
+  approvedFinancePayments                      FinancePayment[]                     @relation("FinancePaymentApprover")
+  postedFinancePayments                        FinancePayment[]                     @relation("FinancePaymentPoster")
+  voidedFinancePayments                        FinancePayment[]                     @relation("FinancePaymentVoider")
+  createdFinancePaymentAllocations             FinancePaymentAllocation[]           @relation("FinancePaymentAllocationCreator")
   requestedFinancePaymentAllocationAdjustments FinancePaymentAllocationAdjustment[] @relation("FinanceAllocationAdjustmentRequester")
   approvedFinancePaymentAllocationAdjustments  FinancePaymentAllocationAdjustment[] @relation("FinanceAllocationAdjustmentApprover")
   rejectedFinancePaymentAllocationAdjustments  FinancePaymentAllocationAdjustment[] @relation("FinanceAllocationAdjustmentRejecter")
   cancelledFinancePaymentAllocationAdjustments FinancePaymentAllocationAdjustment[] @relation("FinanceAllocationAdjustmentCanceller")
   appliedFinancePaymentAllocationAdjustments   FinancePaymentAllocationAdjustment[] @relation("FinanceAllocationAdjustmentApplier")
   appliedFinancePaymentAllocationEffects       FinancePaymentAllocationEffect[]     @relation("FinanceAllocationEffectApplier")
-  createdFinanceStatementTemplates       FinanceStatementTemplate[]    @relation("FinanceStatementTemplateCreator")
-  previewedFinanceStatementImportBatches FinanceStatementImportBatch[] @relation("FinanceStatementImportBatchPreviewer")
-  confirmedFinanceStatementImportBatches FinanceStatementImportBatch[] @relation("FinanceStatementImportBatchConfirmer")
-  cancelledFinanceStatementImportBatches FinanceStatementImportBatch[] @relation("FinanceStatementImportBatchCanceller")
-  updatedFinanceControlPolicies          FinanceControlPolicy[]        @relation("FinanceControlPolicyUpdater")
+  createdFinanceStatementTemplates             FinanceStatementTemplate[]           @relation("FinanceStatementTemplateCreator")
+  previewedFinanceStatementImportBatches       FinanceStatementImportBatch[]        @relation("FinanceStatementImportBatchPreviewer")
+  confirmedFinanceStatementImportBatches       FinanceStatementImportBatch[]        @relation("FinanceStatementImportBatchConfirmer")
+  cancelledFinanceStatementImportBatches       FinanceStatementImportBatch[]        @relation("FinanceStatementImportBatchCanceller")
+  updatedFinanceControlPolicies                FinanceControlPolicy[]               @relation("FinanceControlPolicyUpdater")
 
   @@index([userId, isActive])
   @@index([businessUnitId, isActive])
@@ -750,6 +754,7 @@ model Order {
   ownedByMembershipId         String
   shopId                      String?
   orderTemplateId             String?
+  orderNumberRuleId           String?
   status                      OrderStatus @default(DRAFT)
   currency                    String      @default("CNY")
   productValueCents           Int         @default(0)
@@ -791,6 +796,7 @@ model Order {
   ownerMembership           Membership                 @relation("OrderOwner", fields: [ownedByMembershipId], references: [id], onDelete: Restrict)
   reviewClaimedBy           Membership?                @relation("OrderReviewClaim", fields: [reviewClaimedByMembershipId], references: [id], onDelete: SetNull)
   orderTemplate             OrderTemplate?             @relation(fields: [orderTemplateId], references: [id], onDelete: SetNull)
+  orderNumberRule           OrderNumberRule?           @relation(fields: [orderNumberRuleId], references: [id], onDelete: SetNull)
   items                     OrderItem[]
   shipments                 Shipment[]
   expenses                  Expense[]
@@ -805,6 +811,7 @@ model Order {
   @@index([businessUnitId, shopId])
   @@index([customerId, status])
   @@index([orderTemplateId])
+  @@index([orderNumberRuleId])
   @@index([businessUnitId, recipientEmail])
   @@index([businessUnitId, status, reviewClaimedByMembershipId])
   @@index([businessUnitId, departmentId, creatorUserId, createdAt])
@@ -825,12 +832,67 @@ model OrderTemplate {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  legalEntity  LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  orders       Order[]
+  legalEntity      LegalEntity       @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit     BusinessUnit      @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  orders           Order[]
+  orderNumberRules OrderNumberRule[]
 
   @@unique([businessUnitId, code])
   @@index([businessUnitId, isActive])
+}
+
+// Order number formatting is a business configuration, never a role, business-unit,
+// or department name hard-coded into application logic. A rule can optionally target
+// one department or one order template. Matching chooses the most specific active rule.
+model OrderNumberRule {
+  id                    String   @id @default(uuid())
+  legalEntityId         String
+  businessUnitId        String
+  departmentId          String?
+  orderTemplateId       String?
+  code                  String
+  name                  String
+  prefix                String   @default("")
+  dateFormat            String   @default("YYYYMMDD")
+  timeZone              String   @default("UTC")
+  includeDepartmentCode Boolean  @default(false)
+  separator             String   @default("-")
+  sequencePadding       Int      @default(1)
+  resetPeriod           String   @default("DAILY")
+  priority              Int      @default(0)
+  isDefault             Boolean  @default(false)
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  legalEntity   LegalEntity          @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit  BusinessUnit         @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department    Department?          @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  orderTemplate OrderTemplate?       @relation(fields: [orderTemplateId], references: [id], onDelete: SetNull)
+  counters      OrderNumberCounter[]
+  orders        Order[]
+
+  @@unique([businessUnitId, code])
+  @@index([businessUnitId, isActive, priority])
+  @@index([businessUnitId, departmentId, orderTemplateId])
+}
+
+// The counter is isolated by rule, reset period, and optional department scope.
+// PostgreSQL upsert increments this row atomically, so concurrent order creation
+// cannot produce duplicate sequence values.
+model OrderNumberCounter {
+  id        String   @id @default(uuid())
+  ruleId    String
+  periodKey String
+  scopeKey  String   @default("GLOBAL")
+  lastValue Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rule OrderNumberRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleId, periodKey, scopeKey])
+  @@index([ruleId, updatedAt])
 }
 
 model LogisticsProviderTemplate {
@@ -1062,17 +1124,18 @@ model InventoryReservation {
 }
 
 model OrderItem {
-  id             String  @id @default(uuid())
-  orderId        String
-  productId      String
-  skuId          String?
-  productName    String
-  quantity       Int
-  unitPriceCents Int
-  subtotalCents  Int
+  id              String  @id @default(uuid())
+  orderId         String
+  productId       String?
+  skuId           String?
+  stockControlled Boolean @default(true)
+  productName     String
+  quantity        Int
+  unitPriceCents  Int
+  subtotalCents   Int
 
   order   Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  product Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
   sku     ProductSku? @relation(fields: [skuId], references: [id], onDelete: SetNull)
 
   @@index([orderId])
@@ -1207,6 +1270,20 @@ model LogisticsWorkbenchSetting {
   businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
 }
 
+// Dashboard cards are business-unit configuration, not a hard-coded role
+// dashboard. Card audience, placement, labels and visibility are all stored
+// as validated JSON so the same engine can serve new departments and roles.
+model DashboardWorkbenchSetting {
+  id              String   @id @default(uuid())
+  businessUnitId  String   @unique
+  cards           Json
+  updatedByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+}
+
 model NotificationDelivery {
   id                String                     @id @default(uuid())
   businessUnitId    String
@@ -1294,19 +1371,19 @@ model FinanceStatement {
   createdAt              DateTime               @default(now())
   updatedAt              DateTime               @updatedAt
 
-  legalEntity          LegalEntity                  @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
-  businessUnit         BusinessUnit                 @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
-  department           Department?                  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  site                 Site?                        @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  counterparty         FinanceCounterparty          @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
-  createdByMembership  Membership                   @relation("FinanceStatementCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
-  approvedByMembership Membership?                  @relation("FinanceStatementApprover", fields: [approvedByMembershipId], references: [id], onDelete: SetNull)
-  postedByMembership   Membership?                  @relation("FinanceStatementPoster", fields: [postedByMembershipId], references: [id], onDelete: SetNull)
-  voidedByMembership   Membership?                  @relation("FinanceStatementVoider", fields: [voidedByMembershipId], references: [id], onDelete: SetNull)
-  lines                FinanceStatementLine[]
-  paymentAllocations   FinancePaymentAllocation[]
+  legalEntity                      LegalEntity                          @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  businessUnit                     BusinessUnit                         @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  department                       Department?                          @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  site                             Site?                                @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  counterparty                     FinanceCounterparty                  @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  createdByMembership              Membership                           @relation("FinanceStatementCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  approvedByMembership             Membership?                          @relation("FinanceStatementApprover", fields: [approvedByMembershipId], references: [id], onDelete: SetNull)
+  postedByMembership               Membership?                          @relation("FinanceStatementPoster", fields: [postedByMembershipId], references: [id], onDelete: SetNull)
+  voidedByMembership               Membership?                          @relation("FinanceStatementVoider", fields: [voidedByMembershipId], references: [id], onDelete: SetNull)
+  lines                            FinanceStatementLine[]
+  paymentAllocations               FinancePaymentAllocation[]
   replacementAllocationAdjustments FinancePaymentAllocationAdjustment[] @relation("FinanceAllocationAdjustmentReplacementStatement")
-  importSheet          FinanceStatementImportSheet? @relation("FinanceImportSheetStatement")
+  importSheet                      FinanceStatementImportSheet?         @relation("FinanceImportSheetStatement")
 
   @@unique([businessUnitId, counterpartyId, statementNo])
   @@index([businessUnitId, status, createdAt, id])
@@ -1587,13 +1664,13 @@ model FinancePaymentAllocation {
   createdByMembershipId String
   createdAt             DateTime @default(now())
 
-  legalEntity         LegalEntity      @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
-  businessUnit        BusinessUnit     @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
-  payment             FinancePayment   @relation(fields: [paymentId], references: [id], onDelete: Restrict)
-  statement           FinanceStatement @relation(fields: [statementId], references: [id], onDelete: Restrict)
-  createdByMembership Membership       @relation("FinancePaymentAllocationCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
-  effects             FinancePaymentAllocationEffect[] @relation("FinancePaymentAllocationEffects")
-  sourceAdjustments   FinancePaymentAllocationAdjustment[] @relation("FinanceAllocationAdjustmentSource")
+  legalEntity               LegalEntity                          @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  businessUnit              BusinessUnit                         @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  payment                   FinancePayment                       @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  statement                 FinanceStatement                     @relation(fields: [statementId], references: [id], onDelete: Restrict)
+  createdByMembership       Membership                           @relation("FinancePaymentAllocationCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  effects                   FinancePaymentAllocationEffect[]     @relation("FinancePaymentAllocationEffects")
+  sourceAdjustments         FinancePaymentAllocationAdjustment[] @relation("FinanceAllocationAdjustmentSource")
   replacementForAdjustments FinancePaymentAllocationAdjustment[] @relation("FinanceAllocationAdjustmentReplacement")
 
   @@unique([paymentId, idempotencyKey])
@@ -1607,42 +1684,42 @@ model FinancePaymentAllocation {
 // APPROVED statement. The source allocation remains immutable; APPLIED adds a
 // reversal effect and a new replacement allocation in the same transaction.
 model FinancePaymentAllocationAdjustment {
-  id                       String                                  @id @default(uuid())
-  legalEntityId            String
-  businessUnitId           String
-  sourceAllocationId       String
-  replacementStatementId   String
-  replacementAllocationId  String?                                 @unique
-  amountCents              BigInt
-  status                   FinancePaymentAllocationAdjustmentStatus @default(PENDING)
-  reason                   String
-  idempotencyKey           String
-  requestedByMembershipId  String
-  requestedAt              DateTime                                @default(now())
-  approvedByMembershipId   String?
-  approvedAt               DateTime?
-  approvalReason           String?
-  rejectedByMembershipId   String?
-  rejectedAt               DateTime?
-  rejectionReason          String?
-  cancelledByMembershipId  String?
-  cancelledAt              DateTime?
-  cancellationReason       String?
-  appliedByMembershipId    String?
-  appliedAt                DateTime?
-  createdAt                DateTime                                @default(now())
-  updatedAt                DateTime                                @updatedAt
+  id                      String                                   @id @default(uuid())
+  legalEntityId           String
+  businessUnitId          String
+  sourceAllocationId      String
+  replacementStatementId  String
+  replacementAllocationId String?                                  @unique
+  amountCents             BigInt
+  status                  FinancePaymentAllocationAdjustmentStatus @default(PENDING)
+  reason                  String
+  idempotencyKey          String
+  requestedByMembershipId String
+  requestedAt             DateTime                                 @default(now())
+  approvedByMembershipId  String?
+  approvedAt              DateTime?
+  approvalReason          String?
+  rejectedByMembershipId  String?
+  rejectedAt              DateTime?
+  rejectionReason         String?
+  cancelledByMembershipId String?
+  cancelledAt             DateTime?
+  cancellationReason      String?
+  appliedByMembershipId   String?
+  appliedAt               DateTime?
+  createdAt               DateTime                                 @default(now())
+  updatedAt               DateTime                                 @updatedAt
 
-  legalEntity           LegalEntity               @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
-  businessUnit          BusinessUnit              @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
-  sourceAllocation      FinancePaymentAllocation  @relation("FinanceAllocationAdjustmentSource", fields: [sourceAllocationId], references: [id], onDelete: Restrict)
-  replacementStatement  FinanceStatement          @relation("FinanceAllocationAdjustmentReplacementStatement", fields: [replacementStatementId], references: [id], onDelete: Restrict)
-  replacementAllocation FinancePaymentAllocation? @relation("FinanceAllocationAdjustmentReplacement", fields: [replacementAllocationId], references: [id], onDelete: Restrict)
-  requestedByMembership Membership                 @relation("FinanceAllocationAdjustmentRequester", fields: [requestedByMembershipId], references: [id], onDelete: Restrict)
-  approvedByMembership  Membership?                @relation("FinanceAllocationAdjustmentApprover", fields: [approvedByMembershipId], references: [id], onDelete: SetNull)
-  rejectedByMembership  Membership?                @relation("FinanceAllocationAdjustmentRejecter", fields: [rejectedByMembershipId], references: [id], onDelete: SetNull)
-  cancelledByMembership Membership?                @relation("FinanceAllocationAdjustmentCanceller", fields: [cancelledByMembershipId], references: [id], onDelete: SetNull)
-  appliedByMembership   Membership?                @relation("FinanceAllocationAdjustmentApplier", fields: [appliedByMembershipId], references: [id], onDelete: SetNull)
+  legalEntity           LegalEntity                     @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  businessUnit          BusinessUnit                    @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  sourceAllocation      FinancePaymentAllocation        @relation("FinanceAllocationAdjustmentSource", fields: [sourceAllocationId], references: [id], onDelete: Restrict)
+  replacementStatement  FinanceStatement                @relation("FinanceAllocationAdjustmentReplacementStatement", fields: [replacementStatementId], references: [id], onDelete: Restrict)
+  replacementAllocation FinancePaymentAllocation?       @relation("FinanceAllocationAdjustmentReplacement", fields: [replacementAllocationId], references: [id], onDelete: Restrict)
+  requestedByMembership Membership                      @relation("FinanceAllocationAdjustmentRequester", fields: [requestedByMembershipId], references: [id], onDelete: Restrict)
+  approvedByMembership  Membership?                     @relation("FinanceAllocationAdjustmentApprover", fields: [approvedByMembershipId], references: [id], onDelete: SetNull)
+  rejectedByMembership  Membership?                     @relation("FinanceAllocationAdjustmentRejecter", fields: [rejectedByMembershipId], references: [id], onDelete: SetNull)
+  cancelledByMembership Membership?                     @relation("FinanceAllocationAdjustmentCanceller", fields: [cancelledByMembershipId], references: [id], onDelete: SetNull)
+  appliedByMembership   Membership?                     @relation("FinanceAllocationAdjustmentApplier", fields: [appliedByMembershipId], references: [id], onDelete: SetNull)
   reversalEffect        FinancePaymentAllocationEffect?
 
   @@unique([sourceAllocationId, idempotencyKey])
@@ -1654,22 +1731,22 @@ model FinancePaymentAllocationAdjustment {
 // Positive values keep money semantics clear: the effective allocation is the
 // original amount minus all applied effects. Effects are append-only evidence.
 model FinancePaymentAllocationEffect {
-  id                    String                            @id @default(uuid())
+  id                    String                             @id @default(uuid())
   legalEntityId         String
   businessUnitId        String
   allocationId          String
-  adjustmentId          String                            @unique
+  adjustmentId          String                             @unique
   type                  FinancePaymentAllocationEffectType @default(REVERSAL)
   amountCents           BigInt
   appliedByMembershipId String
-  appliedAt             DateTime                          @default(now())
-  createdAt             DateTime                          @default(now())
+  appliedAt             DateTime                           @default(now())
+  createdAt             DateTime                           @default(now())
 
   legalEntity         LegalEntity                        @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
   businessUnit        BusinessUnit                       @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
   allocation          FinancePaymentAllocation           @relation("FinancePaymentAllocationEffects", fields: [allocationId], references: [id], onDelete: Restrict)
   adjustment          FinancePaymentAllocationAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Restrict)
-  appliedByMembership Membership                          @relation("FinanceAllocationEffectApplier", fields: [appliedByMembershipId], references: [id], onDelete: Restrict)
+  appliedByMembership Membership                         @relation("FinanceAllocationEffectApplier", fields: [appliedByMembershipId], references: [id], onDelete: Restrict)
 
   @@unique([allocationId, type])
   @@index([legalEntityId, businessUnitId])
@@ -1683,27 +1760,27 @@ model FinancePaymentAllocationEffect {
 // default by the finance service so a newly created business unit never loses
 // maker/checker protection during setup.
 model FinanceControlPolicy {
-  id                                           String   @id @default(uuid())
-  legalEntityId                                String
-  businessUnitId                               String   @unique
+  id                                                        String   @id @default(uuid())
+  legalEntityId                                             String
+  businessUnitId                                            String   @unique
   // Optimistic concurrency token. A stale administrator must not overwrite
   // a newer finance-control change without reviewing it again.
-  version                                      Int      @default(1)
-  requireStatementApproverDifferentFromCreator Boolean  @default(true)
-  requireStatementPosterDifferentFromCreator   Boolean  @default(true)
-  requireStatementPosterDifferentFromApprover  Boolean  @default(true)
-  requirePaymentApproverDifferentFromCreator   Boolean  @default(true)
-  requirePaymentPosterDifferentFromCreator     Boolean  @default(true)
-  requirePaymentPosterDifferentFromApprover    Boolean  @default(true)
-  requireReconciliationResolverDifferentFromCreator Boolean @default(true)
-  requirePaymentAllocatorDifferentFromCreator  Boolean  @default(true)
-  requirePaymentAllocatorDifferentFromApprover Boolean  @default(true)
-  requireAllocationAdjustmentApproverDifferentFromRequester Boolean @default(true)
-  requireAllocationAdjustmentApplierDifferentFromRequester  Boolean @default(true)
-  requireAllocationAdjustmentApplierDifferentFromApprover   Boolean @default(true)
-  updatedByMembershipId                        String?
-  createdAt                                    DateTime @default(now())
-  updatedAt                                    DateTime @updatedAt
+  version                                                   Int      @default(1)
+  requireStatementApproverDifferentFromCreator              Boolean  @default(true)
+  requireStatementPosterDifferentFromCreator                Boolean  @default(true)
+  requireStatementPosterDifferentFromApprover               Boolean  @default(true)
+  requirePaymentApproverDifferentFromCreator                Boolean  @default(true)
+  requirePaymentPosterDifferentFromCreator                  Boolean  @default(true)
+  requirePaymentPosterDifferentFromApprover                 Boolean  @default(true)
+  requireReconciliationResolverDifferentFromCreator         Boolean  @default(true)
+  requirePaymentAllocatorDifferentFromCreator               Boolean  @default(true)
+  requirePaymentAllocatorDifferentFromApprover              Boolean  @default(true)
+  requireAllocationAdjustmentApproverDifferentFromRequester Boolean  @default(true)
+  requireAllocationAdjustmentApplierDifferentFromRequester  Boolean  @default(true)
+  requireAllocationAdjustmentApplierDifferentFromApprover   Boolean  @default(true)
+  updatedByMembershipId                                     String?
+  createdAt                                                 DateTime @default(now())
+  updatedAt                                                 DateTime @updatedAt
 
   legalEntity         LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
   businessUnit        BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)

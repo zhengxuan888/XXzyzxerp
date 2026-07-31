@@ -44,7 +44,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
 
   const order = await prisma.order.findFirst({
     where: { id, businessUnitId: auth.membership.businessUnitId },
-    include: { items: { select: { skuId: true, quantity: true } } },
+    include: { items: { select: { skuId: true, quantity: true, stockControlled: true } } },
   });
   if (!order) return fail("ORDER_NOT_FOUND", "订单不存在或无权限", 404);
 
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     const result = await prisma.$transaction<WorkflowResult>(async (tx) => {
       const current = await tx.order.findFirst({
         where: { id: order.id, businessUnitId: auth.membership.businessUnitId },
-        include: { items: { select: { skuId: true, quantity: true } } },
+        include: { items: { select: { skuId: true, quantity: true, stockControlled: true } } },
       });
       if (!current || current.status !== order.status) {
         throw new Error("ORDER_CONCURRENTLY_CHANGED");
@@ -108,6 +108,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         throw new Error("ORDER_REVIEW_CLAIM_REQUIRED");
       }
 
+      const hasStockControlledItems = current.items.some((item) => item.stockControlled);
       if (action === "submit") {
         const communicationProofCount = await tx.attachment.count({
           where: {
@@ -145,7 +146,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         if (reviewProofCount < 1) throw new Error("ORDER_REVIEW_PROOF_REQUIRED");
       }
 
-      if (action === "reject" || action === "void") {
+      if ((action === "reject" || action === "void") && hasStockControlledItems) {
         await finalizeOrderInventory(
           tx,
           {
@@ -218,17 +219,19 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         });
         shipmentId = shipment.id;
 
-        await finalizeOrderInventory(
-          tx,
-          {
-            userId: auth.userId,
-            membershipId: auth.membership.id,
-            businessUnitId: auth.membership.businessUnitId,
-            siteId: auth.membership.siteId!,
-          },
-          current.id,
-          "SHIP",
-        );
+        if (hasStockControlledItems) {
+          await finalizeOrderInventory(
+            tx,
+            {
+              userId: auth.userId,
+              membershipId: auth.membership.id,
+              businessUnitId: auth.membership.businessUnitId,
+              siteId: auth.membership.siteId!,
+            },
+            current.id,
+            "SHIP",
+          );
+        }
 
         await tx.shipmentEvent.create({
           data: {

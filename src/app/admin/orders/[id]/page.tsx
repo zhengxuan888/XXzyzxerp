@@ -42,7 +42,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   });
   if (!order) notFound();
 
-  const allowed = await assertOrderReadScope({ membership, userId: session.userId, orderId: order.id });
+  const allowed = await assertOrderReadScope({ membership, orderId: order.id });
   if (!allowed) redirect("/admin");
 
   const permissionTarget = {

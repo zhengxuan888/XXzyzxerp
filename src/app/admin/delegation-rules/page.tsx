@@ -5,6 +5,7 @@ import { getActiveMembershipById } from "@/lib/auth";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookie } from "@/lib/session";
+import { getSystemConfigurationPermission } from "@/lib/system-configuration";
 
 const scopes = [
   { value: "SELF", label: "本人" },
@@ -21,22 +22,23 @@ export default async function DelegationRulesPage() {
   if (!session?.activeMembershipId) redirect("/login");
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
-  const permission = await checkPermission({
-    userId: session.userId,
-    membershipId: membership.id,
-    actionKey: "delegation.manage",
-    targetBusinessUnitId: membership.businessUnitId,
-    targetDepartmentId: membership.departmentId,
-  });
-  if (!permission.allowed) redirect("/admin");
-  const canManageAll = permission.reasons.includes("SCOPE_ALL");
+  const [permission, systemConfiguration] = await Promise.all([
+    checkPermission({
+      userId: session.userId,
+      membershipId: membership.id,
+      actionKey: "delegation.manage",
+      targetBusinessUnitId: membership.businessUnitId,
+      targetDepartmentId: membership.departmentId,
+    }),
+    getSystemConfigurationPermission({ userId: session.userId, membership }),
+  ]);
+  if (!permission.allowed || !systemConfiguration.allowed) redirect("/admin");
   const [rows, roles, actions] = await Promise.all([
     prisma.delegationRule.findMany({
-      where: canManageAll ? {} : { roleId: membership.roleId },
       include: { role: true, action: true },
       orderBy: [{ role: { name: "asc" } }, { actionKey: "asc" }],
     }),
-    prisma.role.findMany({ where: canManageAll ? {} : { id: membership.roleId }, orderBy: { name: "asc" } }),
+    prisma.role.findMany({ orderBy: { name: "asc" } }),
     prisma.action.findMany({ orderBy: [{ namespace: "asc" }, { key: "asc" }] }),
   ]);
 

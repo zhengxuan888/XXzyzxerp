@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, CalendarClock, MapPin, PackageCheck, Route, Truck } from "lucide-react";
+import { ArrowLeft, CalendarClock, Mail, MapPin, MessageCircle, Package, PackageCheck, Route, Truck, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 
 import ShipmentEventForm from "@/components/admin/ShipmentEventForm";
@@ -12,6 +12,7 @@ import { getActiveMembershipById } from "@/lib/auth";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { zh } from "@/lib/i18n";
+import { formatMoneyCents } from "@/lib/money";
 
 export default async function ShipmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -57,10 +58,33 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
       businessUnitId: membership.businessUnitId,
     },
     include: {
-      order: { select: { orderNo: true } },
+      order: {
+        select: {
+          orderNo: true,
+          recipientName: true,
+          recipientPhone: true,
+          recipientEmail: true,
+          customerWhatsapp: true,
+          recipientCountryCode: true,
+          recipientRegion: true,
+          recipientCity: true,
+          recipientPostalCode: true,
+          recipientAddress: true,
+          codAmountCents: true,
+          currency: true,
+          customer: { select: { code: true, name: true } },
+          creatorUser: { select: { username: true, fullName: true } },
+          items: { select: { productName: true, quantity: true }, orderBy: { id: "asc" } },
+        },
+      },
       events: {
         where: canViewTimeline.allowed ? {} : { id: "__permission_denied__" },
         orderBy: { occurredAt: "desc" },
+        include: {
+          annotation: {
+            include: { handledByMembership: { include: { user: { select: { fullName: true, username: true } } } } },
+          },
+        },
       },
       followUps: {
         where: canViewTimeline.allowed ? {} : { id: "__permission_denied__" },
@@ -101,6 +125,18 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
         </div>
       </header>
 
+      <section className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-2 xl:grid-cols-4">
+        <Info icon={<UserRound size={16} />} label="客户 / 收件人" value={[shipment.order.customer.name, shipment.order.recipientName].filter(Boolean).join(" / ") || "-"} />
+        <Info icon={<Mail size={16} />} label="邮箱 / 电话" value={[shipment.order.recipientEmail, shipment.order.recipientPhone].filter(Boolean).join(" / ") || "-"} />
+        <Info icon={<MessageCircle size={16} />} label="WhatsApp" value={shipment.order.customerWhatsapp || "-"} />
+        <Info icon={<UserRound size={16} />} label="销售" value={shipment.order.creatorUser.fullName || shipment.order.creatorUser.username} />
+        <Info icon={<Package size={16} />} label="商品" value={shipment.order.items.map((item) => `${item.productName} × ${item.quantity}`).join("；") || "-"} />
+        <Info icon={<PackageCheck size={16} />} label="COD 金额" value={formatMoneyCents(shipment.order.codAmountCents, shipment.order.currency)} />
+        <Info icon={<MapPin size={16} />} label="目的地" value={[shipment.order.recipientCountryCode, shipment.order.recipientRegion, shipment.order.recipientCity].filter(Boolean).join(" / ") || "-"} />
+        <Info icon={<Route size={16} />} label="订单 / 客户编号" value={`${shipment.order.orderNo}${shipment.order.customer.code ? ` / ${shipment.order.customer.code}` : ""}`} />
+        {shipment.order.recipientAddress && <div className="md:col-span-2 xl:col-span-4 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700"><span className="font-medium text-slate-500">收件地址：</span>{[shipment.order.recipientAddress, shipment.order.recipientPostalCode].filter(Boolean).join(" / ")}</div>}
+      </section>
+
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="font-bold text-slate-900">物流轨迹</h2>
@@ -121,6 +157,13 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
                     </div>
                     <p className="mt-1 text-slate-600">{item.memo || "无说明"}</p>
                     {item.location && <p className="mt-1 flex items-center gap-1 text-xs text-slate-400"><MapPin size={12} />{item.location}</p>}
+                    {item.annotation && (
+                      <div className={`mt-3 rounded-lg border px-3 py-2 text-xs ${item.annotation.isHandled ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
+                        <p><span className="font-semibold">处理备注：</span>{item.annotation.note || "未填写"}</p>
+                        {item.annotation.tags.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{item.annotation.tags.map((tag) => <span key={tag} className="rounded-full bg-white/80 px-2 py-0.5 font-medium">{tag}</span>)}</div>}
+                        {item.annotation.handledByMembership?.user && <p className="mt-2 text-slate-500">处理人：{item.annotation.handledByMembership.user.fullName || item.annotation.handledByMembership.user.username}</p>}
+                      </div>
+                    )}
                   </div>
                 </li>
               ))
@@ -128,7 +171,12 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
           </ul>
         </div>
         {canTrack.allowed && canViewTimeline.allowed ? (
-          <ShipmentEventForm shipmentId={shipment.id} />
+          <div className="space-y-3">
+            <ShipmentEventForm shipmentId={shipment.id} />
+            <Link href={`/admin/shipments?q=${encodeURIComponent(shipment.order.orderNo)}`} className="flex rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-semibold text-violet-800 hover:bg-violet-100">
+              在物流工作台逐条添加备注、标签和处理状态
+            </Link>
+          </div>
         ) : (
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
             当前岗位未配置物流轨迹维护权限。

@@ -6,8 +6,7 @@ import type { Prisma } from "@prisma/client";
 import { getActiveMembershipById } from "@/lib/auth";
 import { zh } from "@/lib/i18n";
 import { formatMoneyCents } from "@/lib/money";
-import { resolveOrderReadScope, withOrderReadScope } from "@/lib/order-access";
-import { checkPermission } from "@/lib/permission";
+import { createOrderAccessPlan } from "@/lib/order-access";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookie } from "@/lib/session";
 
@@ -20,15 +19,8 @@ export default async function CustomerHistoryPage({
   if (!session?.activeMembershipId) redirect("/login");
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
-  const permission = await checkPermission({
-    userId: session.userId,
-    membershipId: membership.id,
-    actionKey: "order.read",
-    targetBusinessUnitId: membership.businessUnitId,
-  });
-  if (!permission.allowed) redirect("/admin");
-  const orderReadScope = await resolveOrderReadScope(membership, session.userId);
-  if (orderReadScope === "NONE") redirect("/admin");
+  const orderReadAccess = await createOrderAccessPlan({ membership, actionKey: "order.read" });
+  if (!orderReadAccess.allowed) redirect("/admin");
 
   const q = (await searchParams).q?.trim().slice(0, 100) ?? "";
   const baseWhere: Prisma.OrderWhereInput = {
@@ -48,15 +40,11 @@ export default async function CustomerHistoryPage({
         }
       : {}),
   };
-  const scopedWhere = withOrderReadScope(baseWhere as Record<string, unknown>, orderReadScope, membership);
-  const allVisibleWhere = withOrderReadScope(
-    { businessUnitId: membership.businessUnitId },
-    orderReadScope,
-    membership,
-  );
+  const scopedWhere: Prisma.OrderWhereInput = { AND: [orderReadAccess.where, baseWhere] };
+  const allVisibleWhere: Prisma.OrderWhereInput = { AND: [orderReadAccess.where, { businessUnitId: membership.businessUnitId }] };
   const [orders, historyCounts] = await Promise.all([
     prisma.order.findMany({
-      where: scopedWhere as Prisma.OrderWhereInput,
+      where: scopedWhere,
       include: {
         customer: { select: { code: true, name: true, contactPhone: true, contactEmail: true } },
         creatorUser: { select: { username: true } },
@@ -66,7 +54,7 @@ export default async function CustomerHistoryPage({
     }),
     prisma.order.groupBy({
       by: ["customerId"],
-      where: allVisibleWhere as Prisma.OrderWhereInput,
+      where: allVisibleWhere,
       _count: { _all: true },
       _max: { orderedAt: true },
     }),

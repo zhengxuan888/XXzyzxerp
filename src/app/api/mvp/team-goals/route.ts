@@ -3,8 +3,8 @@ import { z } from "zod";
 
 import { writeAuditLog } from "@/lib/audit";
 import { requireAuthContext } from "@/lib/api-auth";
-import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
+import { getTeamGoalAccess } from "@/lib/team-goal-access";
 
 const inputSchema = z.object({
   goalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -26,60 +26,87 @@ function parseDate(value: string | null) {
 export async function GET(request: NextRequest) {
   const auth = await requireAuthContext(request);
   if (!auth) return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 });
-  const read = await checkPermission({
-    userId: auth.userId,
-    membershipId: auth.membership.id,
-    actionKey: "team_goal.read",
-    targetBusinessUnitId: auth.membership.businessUnitId,
-  });
-  if (!read.allowed) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
 
   const { normalized: dateText, date } = parseDate(request.nextUrl.searchParams.get("date"));
   const nextDate = new Date(date);
   nextDate.setUTCDate(nextDate.getUTCDate() + 1);
-  const manage = await checkPermission({
+  const access = await getTeamGoalAccess({
+    id: auth.membership.id,
     userId: auth.userId,
-    membershipId: auth.membership.id,
-    actionKey: "team_goal.manage",
-    targetBusinessUnitId: auth.membership.businessUnitId,
+    businessUnitId: auth.membership.businessUnitId,
   });
+  const canRead = access.canReadBusinessUnit
+    || access.readableDepartmentIds.size > 0
+    || access.readableMembershipIds.size > 0;
+  if (!canRead) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
 
-  const [goals, departments, dailyGoals, orders] = await Promise.all([
-    prisma.teamGoal.findMany({
-      where: { businessUnitId: auth.membership.businessUnitId, goalDate: date },
-      include: { department: { select: { name: true } } },
-      orderBy: [{ scopeType: "asc" }, { department: { sortOrder: "asc" } }],
-    }),
-    prisma.department.findMany({
-      where: { businessUnitId: auth.membership.businessUnitId, isActive: true },
-      select: { id: true, name: true },
-      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-    }),
-    prisma.dailyGoal.findMany({
-      where: { businessUnitId: auth.membership.businessUnitId, goalDate: date },
-      select: {
-        targetOrderCount: true,
-        targetAmountCents: true,
-        membership: { select: { departmentId: true } },
-      },
-    }),
-    prisma.order.findMany({
+  const readableDepartmentIds = [...access.readableDepartmentIds];
+  const visibleGoalScopes = [
+    ...(access.canReadBusinessUnit ? [{ scopeType: "BUSINESS_UNIT" as const }] : []),
+    ...(readableDepartmentIds.length
+      ? [{ scopeType: "DEPARTMENT" as const, departmentId: { in: readableDepartmentIds } }]
+      : []),
+  ];
+  const goals = visibleGoalScopes.length
+    ? await prisma.teamGoal.findMany({
       where: {
         businessUnitId: auth.membership.businessUnitId,
-        orderedAt: { gte: date, lt: nextDate },
-        status: { notIn: ["DRAFT", "CANCELLED"] },
+        goalDate: date,
+        OR: visibleGoalScopes,
       },
-      select: { departmentId: true, codAmountCents: true, currency: true },
-    }),
+      include: { department: { select: { name: true } } },
+      orderBy: [{ scopeType: "asc" }, { department: { sortOrder: "asc" } }],
+    })
+    : [];
+
+  const memberIdsByDepartment = new Map<string, string[]>();
+  for (const membership of access.memberships) {
+    if (!membership.departmentId) continue;
+    memberIdsByDepartment.set(membership.departmentId, [
+      ...(memberIdsByDepartment.get(membership.departmentId) ?? []),
+      membership.id,
+    ]);
+  }
+  const activeMembershipIds = access.memberships.map((membership) => membership.id);
+  const relevantMembershipIds = new Set<string>();
+  for (const goal of goals) {
+    const memberIds = goal.scopeType === "BUSINESS_UNIT"
+      ? activeMembershipIds
+      : (goal.departmentId ? memberIdsByDepartment.get(goal.departmentId) ?? [] : []);
+    memberIds.forEach((id) => relevantMembershipIds.add(id));
+  }
+  const membershipIdList = [...relevantMembershipIds];
+
+  const [dailyGoals, orders] = await Promise.all([
+    membershipIdList.length
+      ? prisma.dailyGoal.findMany({
+        where: {
+          businessUnitId: auth.membership.businessUnitId,
+          membershipId: { in: membershipIdList },
+          goalDate: date,
+        },
+        select: { membershipId: true, targetOrderCount: true, targetAmountCents: true },
+      })
+      : Promise.resolve([]),
+    membershipIdList.length
+      ? prisma.order.findMany({
+        where: {
+          businessUnitId: auth.membership.businessUnitId,
+          ownedByMembershipId: { in: membershipIdList },
+          orderedAt: { gte: date, lt: nextDate },
+          status: { notIn: ["DRAFT", "CANCELLED"] },
+        },
+        select: { ownedByMembershipId: true, codAmountCents: true, currency: true },
+      })
+      : Promise.resolve([]),
   ]);
 
-  function totals(departmentId: string | null) {
-    const assignedRows = departmentId
-      ? dailyGoals.filter((row) => row.membership.departmentId === departmentId)
-      : dailyGoals;
-    const actualRows = departmentId
-      ? orders.filter((row) => row.departmentId === departmentId)
-      : orders;
+  function totals(goal: (typeof goals)[number]) {
+    const scopeMembershipIds = new Set(goal.scopeType === "BUSINESS_UNIT"
+      ? activeMembershipIds
+      : (goal.departmentId ? memberIdsByDepartment.get(goal.departmentId) ?? [] : []));
+    const assignedRows = dailyGoals.filter((row) => scopeMembershipIds.has(row.membershipId));
+    const actualRows = orders.filter((row) => scopeMembershipIds.has(row.ownedByMembershipId));
     return {
       assignedOrderCount: assignedRows.reduce((sum, row) => sum + row.targetOrderCount, 0),
       assignedAmountCents: assignedRows.reduce((sum, row) => sum + row.targetAmountCents, 0),
@@ -90,8 +117,9 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     date: dateText,
-    canManage: manage.allowed,
-    departments,
+    canManage: access.canManageBusinessUnit || access.manageableDepartmentIds.size > 0,
+    canManageBusinessUnit: access.canManageBusinessUnit,
+    departments: access.departments.filter((department) => access.manageableDepartmentIds.has(department.id)),
     rows: goals.map((goal) => ({
       id: goal.id,
       scopeType: goal.scopeType,
@@ -101,7 +129,7 @@ export async function GET(request: NextRequest) {
       targetAmountCents: goal.targetAmountCents,
       currency: goal.currency,
       note: goal.note,
-      ...totals(goal.departmentId),
+      ...totals(goal),
     })),
   });
 }
@@ -112,28 +140,22 @@ export async function POST(request: NextRequest) {
   const parsed = inputSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "INVALID_INPUT", issues: parsed.error.issues }, { status: 400 });
 
+  const access = await getTeamGoalAccess({
+    id: auth.membership.id,
+    userId: auth.userId,
+    businessUnitId: auth.membership.businessUnitId,
+  });
   const department = parsed.data.scopeType === "DEPARTMENT"
-    ? await prisma.department.findFirst({
-        where: {
-          id: parsed.data.departmentId ?? "",
-          businessUnitId: auth.membership.businessUnitId,
-          isActive: true,
-        },
-        select: { id: true },
-      })
+    ? access.departments.find((row) => row.id === parsed.data.departmentId) ?? null
     : null;
   if (parsed.data.scopeType === "DEPARTMENT" && !department) {
     return NextResponse.json({ error: "DEPARTMENT_NOT_FOUND" }, { status: 404 });
   }
 
-  const allowed = await checkPermission({
-    userId: auth.userId,
-    membershipId: auth.membership.id,
-    actionKey: "team_goal.manage",
-    targetBusinessUnitId: auth.membership.businessUnitId,
-    targetDepartmentId: department?.id ?? null,
-  });
-  if (!allowed.allowed) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  const allowed = department
+    ? access.manageableDepartmentIds.has(department.id)
+    : access.canManageBusinessUnit;
+  if (!allowed) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
 
   const goalDate = new Date(`${parsed.data.goalDate}T00:00:00.000Z`);
   const scopeKey = department ? `DEPARTMENT:${department.id}` : "BUSINESS_UNIT";

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 
 import { formatMoneyCents } from "@/lib/money";
 import { getActiveMembershipById } from "@/lib/auth";
-import { checkPermission } from "@/lib/permission";
+import { createOrderAccessPlan } from "@/lib/order-access";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookie } from "@/lib/session";
 
@@ -42,13 +42,8 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
   if (!session?.activeMembershipId) redirect("/login");
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
-  const permission = await checkPermission({
-    userId: session.userId,
-    membershipId: membership.id,
-    actionKey: "order.review",
-    targetBusinessUnitId: membership.businessUnitId,
-  });
-  if (!permission.allowed) redirect("/admin");
+  const reviewAccess = await createOrderAccessPlan({ membership, actionKey: "order.review" });
+  if (!reviewAccess.allowed) redirect("/admin");
 
   const params = await searchParams;
   const tab = (tabs.some((item) => item.key === params.tab) ? params.tab : "PENDING") as TabKey;
@@ -78,9 +73,9 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
     ...((start || endExclusive) ? { createdAt: { ...(start ? { gte: start } : {}), ...(endExclusive ? { lt: endExclusive } : {}) } } : {}),
   };
 
-  const [rawCandidateIndex, rawCustomerHistory, countries] = await Promise.all([
+  const [candidateIndex, rawCustomerHistory, countries] = await Promise.all([
     prisma.order.findMany({
-      where,
+      where: { AND: [reviewAccess.where, where] },
       select: {
         id: true,
         customerId: true,
@@ -97,7 +92,7 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     }),
     prisma.order.findMany({
-      where: { businessUnitId: membership.businessUnitId, status: { notIn: ["DRAFT", "CANCELLED"] } },
+      where: { AND: [reviewAccess.where, { businessUnitId: membership.businessUnitId, status: { notIn: ["DRAFT", "CANCELLED"] } }] },
       select: {
         id: true,
         customerId: true,
@@ -110,24 +105,9 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
     prisma.country.findMany({ where: { isActive: true }, select: { code: true, name: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
   ]);
 
-  const canReviewOrder = async (order: { departmentId: string | null; siteId: string | null; creatorUserId: string; ownedByMembershipId: string }) => (await checkPermission({
-    userId: session.userId,
-    membershipId: membership.id,
-    actionKey: "order.review",
-    targetBusinessUnitId: membership.businessUnitId,
-    targetDepartmentId: order.departmentId,
-    targetSiteId: order.siteId,
-    targetUserId: order.creatorUserId,
-    targetMembershipId: order.ownedByMembershipId,
-  })).allowed;
-  const [candidateAccess, historyAccess] = await Promise.all([
-    Promise.all(rawCandidateIndex.map(canReviewOrder)),
-    Promise.all(rawCustomerHistory.map(canReviewOrder)),
-  ]);
-  const candidateIndex = rawCandidateIndex.filter((_, index) => candidateAccess[index]);
   const customerHistoryCounts = new Map<string, number>();
-  rawCustomerHistory.forEach((order, index) => {
-    if (historyAccess[index]) customerHistoryCounts.set(order.customerId, (customerHistoryCounts.get(order.customerId) ?? 0) + 1);
+  rawCustomerHistory.forEach((order) => {
+    customerHistoryCounts.set(order.customerId, (customerHistoryCounts.get(order.customerId) ?? 0) + 1);
   });
   const repeatCustomers = new Set([...customerHistoryCounts].filter(([, count]) => count > 1).map(([customerId]) => customerId));
   const visibleEmployeeIds = [...new Set(candidateIndex.map((order) => order.creatorUserId))];
@@ -160,7 +140,7 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
   const pageIds = selected.slice((safePage - 1) * pageSize, safePage * pageSize).map((order) => order.id);
   const rows = pageIds.length
     ? await prisma.order.findMany({
-        where: { id: { in: pageIds }, businessUnitId: membership.businessUnitId },
+        where: { AND: [reviewAccess.where, { id: { in: pageIds }, businessUnitId: membership.businessUnitId }] },
         include: {
           customer: { select: { id: true, name: true } },
           creatorUser: { select: { id: true, username: true, fullName: true } },

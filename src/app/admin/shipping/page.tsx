@@ -4,6 +4,7 @@ import CrudPage from "@/components/admin/CrudPage";
 import LogisticsReturnImport from "@/components/admin/LogisticsReturnImport";
 import LogisticsTemplateManager from "@/components/admin/LogisticsTemplateManager";
 import { getActiveMembershipById } from "@/lib/auth";
+import { createOrderAccessPlan } from "@/lib/order-access";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookie } from "@/lib/session";
@@ -20,17 +21,26 @@ export default async function ShippingWorkbenchPage() {
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
 
-  const manualShipment = await checkPermission({
-    userId: session.userId,
-    membershipId: membership.id,
-    actionKey: "shipment.create",
-    targetBusinessUnitId: membership.businessUnitId,
-  });
-  if (!manualShipment.allowed) redirect("/admin");
+  // A shipment operator can be restricted to their department, department
+  // tree, direct reports, site, or an explicit Access Grant. Compile the
+  // predicate once so the waiting-shipment queue never fetches out-of-scope
+  // orders and then tries to hide them in the UI.
+  const [manualShipmentAccess, exportBatchAccess, templateRead, templateManage] = await Promise.all([
+    createOrderAccessPlan({ membership, actionKey: "shipment.create" }),
+    createOrderAccessPlan({ membership, actionKey: "logistics.export_batch.create" }),
+    checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "logistics_template.read", targetBusinessUnitId: membership.businessUnitId }),
+    checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "logistics_template.manage", targetBusinessUnitId: membership.businessUnitId }),
+  ]);
+  if (!manualShipmentAccess.allowed) redirect("/admin");
 
-  const [rawOrders, logisticsTemplates, templateRead, templateManage, rawBatches] = await Promise.all([
+  const [rawOrders, logisticsTemplates, rawBatches] = await Promise.all([
     prisma.order.findMany({
-      where: { businessUnitId: membership.businessUnitId, status: "WAITING_SHIPMENT" },
+      where: {
+        AND: [
+          { businessUnitId: membership.businessUnitId, status: "WAITING_SHIPMENT" },
+          { OR: [manualShipmentAccess.where, exportBatchAccess.where] },
+        ],
+      },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       select: {
         id: true,
@@ -56,8 +66,6 @@ export default async function ShippingWorkbenchPage() {
       orderBy: [{ isActive: "desc" }, { name: "asc" }, { id: "asc" }],
       select: { id: true, code: true, name: true, carrierName: true, version: true, isActive: true, configuration: true },
     }),
-    checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "logistics_template.read", targetBusinessUnitId: membership.businessUnitId }),
-    checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "logistics_template.manage", targetBusinessUnitId: membership.businessUnitId }),
     prisma.logisticsExportBatch.findMany({
       where: { businessUnitId: membership.businessUnitId },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -84,23 +92,15 @@ export default async function ShippingWorkbenchPage() {
     }),
   ]);
 
-  const orderPermissionInput = (target: typeof rawOrders[number], actionKey: string) => checkPermission({
-    userId: session.userId,
-    membershipId: membership.id,
-    actionKey,
-    targetBusinessUnitId: membership.businessUnitId,
-    targetDepartmentId: target.departmentId,
-    targetSiteId: target.siteId,
-    targetUserId: target.creatorUserId,
-    targetMembershipId: target.ownedByMembershipId,
+  const allowsOrder = (order: typeof rawOrders[number], access: typeof manualShipmentAccess) => access.allows({
+    businessUnitId: membership.businessUnitId,
+    departmentId: order.departmentId,
+    siteId: order.siteId,
+    ownerMembershipId: order.ownedByMembershipId,
   });
-  const [manualAccess, exportAccess] = await Promise.all([
-    Promise.all(rawOrders.map((order) => orderPermissionInput(order, "shipment.create"))),
-    Promise.all(rawOrders.map((order) => orderPermissionInput(order, "logistics.export_batch.create"))),
-  ]);
-  const orders = rawOrders.filter((_, index) => manualAccess[index].allowed);
+  const orders = rawOrders.filter((order) => allowsOrder(order, manualShipmentAccess));
   const exportCandidates = rawOrders
-    .filter((order, index) => exportAccess[index].allowed && !order.shipments[0]?.trackingNo)
+    .filter((order) => allowsOrder(order, exportBatchAccess) && !order.shipments[0]?.trackingNo)
     .map((order) => ({
       id: order.id,
       orderNo: order.orderNo,

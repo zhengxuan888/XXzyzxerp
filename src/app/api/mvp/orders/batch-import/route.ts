@@ -14,6 +14,7 @@ import {
 } from "@/lib/order-batch-import";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
+import { allocateOrderNumber, OrderNumberingError } from "@/lib/order-numbering";
 
 export const runtime = "nodejs";
 
@@ -90,6 +91,14 @@ export async function POST(request: NextRequest) {
       const result: Array<{ id: string; orderNo: string }> = [];
       const batchId = `${Date.now()}-${randomUUID().slice(0, 8)}`;
       for (const [index, row] of valid.entries()) {
+        const allocatedOrderNumber = row.orderNo
+          ? null
+          : await allocateOrderNumber(tx, {
+              legalEntityId: auth.membership.legalEntityId,
+              businessUnitId: auth.membership.businessUnitId,
+              departmentId: auth.membership.departmentId,
+              orderTemplateId: null,
+            });
         const contacts = [
           ...(row.email ? [{ contactEmail: row.email }] : []),
           ...(row.phone ? [{ contactPhone: row.phone }] : []),
@@ -120,7 +129,8 @@ export async function POST(request: NextRequest) {
             departmentId: auth.membership.departmentId,
             siteId: auth.membership.siteId,
             customerId: resolvedCustomer.id,
-            orderNo: row.orderNo || `ORD-${batchId}-${index + 1}`,
+            orderNo: row.orderNo || allocatedOrderNumber!.orderNo,
+            orderNumberRuleId: allocatedOrderNumber?.ruleId ?? null,
             creatorUserId: auth.userId,
             ownedByMembershipId: auth.membership.id,
             shopId: row.shopId,
@@ -166,6 +176,9 @@ export async function POST(request: NextRequest) {
       return result;
     });
   } catch (error) {
+    if (error instanceof OrderNumberingError) {
+      return fail(error.code, error.message, error.code === "ORDER_NUMBER_RULE_REQUIRED" ? 409 : 400);
+    }
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return fail("IMPORT_CONFLICT", "导入期间检测到重复订单号，请重新预览后再试。", 409);
     }

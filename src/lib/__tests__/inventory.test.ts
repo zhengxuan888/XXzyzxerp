@@ -20,6 +20,13 @@ describe("inventory invariants", () => {
     expect(() => consolidateSkuQuantities([{ skuId: null, quantity: 1 }])).toThrowError(InventoryError);
   });
 
+  it("does not reserve a hand-entered item explicitly marked as non-stock-controlled", () => {
+    expect(consolidateSkuQuantities([
+      { skuId: null, quantity: 1, stockControlled: false },
+      { skuId: "sku-a", quantity: 2, stockControlled: true },
+    ])).toEqual([{ skuId: "sku-a", quantity: 2 }]);
+  });
+
   it("rejects zero, negative, fractional, and unsafe quantities", () => {
     for (const quantity of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
       expect(() => consolidateSkuQuantities([{ skuId: "sku-a", quantity }])).toThrowError(InventoryError);

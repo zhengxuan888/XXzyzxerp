@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireAuthContext } from "@/lib/api-auth";
-import { assertOrderReadScope, resolveOrderReadScope } from "@/lib/order-access";
+import { assertOrderReadScope } from "@/lib/order-access";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
@@ -109,13 +109,8 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
   });
   if (!row) return NextResponse.json({ error: "Order not found." }, { status: 404 });
 
-  const orderReadScope = await resolveOrderReadScope(auth.membership, auth.userId);
-  if (orderReadScope === "NONE") {
-    return NextResponse.json({ error: "FORBIDDEN", reasons: ["NO_READ_SCOPE_FOR_ORDERS"] }, { status: 403 });
-  }
   const canRead = await assertOrderReadScope({
     membership: auth.membership,
-    userId: auth.userId,
     orderId: row.id,
   });
   if (!canRead) return NextResponse.json({ error: "FORBIDDEN", reasons: ["ORDER_READ_SCOPE_DENIED"] }, { status: 403 });

@@ -41,6 +41,7 @@ export default function OrderTemplateForm({ canManage, initial }: { canManage: b
         defaultShippingFeeCents: Math.round(Number(data.get("shippingFee") || 0) * 100),
         defaultCodAmountCents: Math.round(Number(data.get("codAmount") || 0) * 100),
         requireCodAmount: data.get("requireCodAmount") === "on",
+        requireShopId: data.get("requireShopId") === "on",
         requireRecipientPhone: data.get("requireRecipientPhone") === "on",
         requireRecipientEmail: data.get("requireRecipientEmail") === "on",
         requireRecipientAddress: data.get("requireRecipientAddress") === "on",
@@ -136,6 +137,7 @@ export default function OrderTemplateForm({ canManage, initial }: { canManage: b
       <div className="flex flex-wrap gap-4 text-sm md:col-span-3">
         <Check name="requireSku" label="SKU 必填" defaultChecked={initial?.configuration.requireSku ?? true} />
         <Check name="requireCodAmount" label="COD 金额必填" defaultChecked={initial?.configuration.requireCodAmount ?? true} />
+        <Check name="requireShopId" label="店铺 ID 必填" defaultChecked={initial?.configuration.requireShopId} />
         <Check name="requireRecipientPhone" label="电话必填" defaultChecked={initial?.configuration.requireRecipientPhone ?? true} />
         <Check name="requireRecipientEmail" label="邮箱必填" defaultChecked={initial?.configuration.requireRecipientEmail ?? true} />
         <Check name="requireRecipientAddress" label="地址必填" defaultChecked={initial?.configuration.requireRecipientAddress ?? true} />

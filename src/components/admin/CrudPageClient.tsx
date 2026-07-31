@@ -40,10 +40,21 @@ export type CrudPageProps = {
   showCreate?: boolean;
   detailPath?: string;
   deleteConfirmation?: string;
+  /**
+   * Some high-volume pages already query and paginate on the server. Passing
+   * their metadata here prevents this generic table from paginating the same
+   * page of rows a second time (which made page-size and total counts lie).
+   */
+  serverPagination?: {
+    page: number;
+    pageSize: number;
+    total: number;
+    pageCount: number;
+  };
 };
 
 const API_BASE = "/api/admin";
-const PAGE_SIZE = 20;
+const DEFAULT_PAGE_SIZE = 20;
 type FormBody = Record<string, string | number | boolean>;
 
 function displayValue(value: DataCellValue) {
@@ -84,6 +95,7 @@ export default function CrudPage({
   showCreate = true,
   detailPath,
   deleteConfirmation = "确定删除该记录吗？删除后无法恢复。",
+  serverPagination,
 }: CrudPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [loadingCreate, setLoadingCreate] = useState(false);
@@ -93,9 +105,12 @@ export default function CrudPage({
   const [showForm, setShowForm] = useState(false);
   const [keyword, setKeyword] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const endpointBase = apiBase ?? API_BASE;
+  const isServerPaginated = Boolean(serverPagination);
 
   const filteredRows = useMemo(() => {
+    if (isServerPaginated) return rows;
     const term = keyword.trim().toLowerCase();
     if (!term) return rows;
     return rows.filter((row) =>
@@ -104,11 +119,14 @@ export default function CrudPage({
         return rendered.toLowerCase().includes(term);
       }),
     );
-  }, [dataColumns, keyword, rows]);
+  }, [dataColumns, isServerPaginated, keyword, rows]);
 
-  const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
-  const safePage = Math.min(page, pageCount);
-  const visibleRows = filteredRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const pageCount = serverPagination?.pageCount ?? Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const safePage = serverPagination?.page ?? Math.min(page, pageCount);
+  const visibleRows = isServerPaginated
+    ? rows
+    : filteredRows.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const displayedTotal = serverPagination?.total ?? filteredRows.length;
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -219,12 +237,12 @@ export default function CrudPage({
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-bold text-slate-950">{zh(listTitle)}</h2>
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{filteredRows.length}</span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{displayedTotal}</span>
             </div>
             <p className="mt-1 text-xs text-slate-500">支持搜索、筛选和分页。</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
-            <label className="flex h-10 min-w-64 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 focus-within:border-violet-400 focus-within:bg-white focus-within:ring-4 focus-within:ring-violet-100">
+            {!isServerPaginated && <label className="flex h-10 min-w-64 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 focus-within:border-violet-400 focus-within:bg-white focus-within:ring-4 focus-within:ring-violet-100">
               <Search size={16} className="text-slate-400" />
               <input
                 value={keyword}
@@ -237,7 +255,7 @@ export default function CrudPage({
                 aria-label="搜索当前列表"
               />
               {keyword && <button type="button" aria-label="清除搜索" onClick={() => setKeyword("")}>{"✕"}</button>}
-            </label>
+            </label>}
             {showCreate && canCreate && (
               <button
                 type="button"
@@ -291,8 +309,8 @@ export default function CrudPage({
           <div className="grid min-h-64 place-items-center p-8 text-center">
             <div>
               <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-slate-100 text-slate-400"><FileSearch size={22} /></span>
-              <h3 className="mt-3 text-sm font-semibold text-slate-800">{keyword ? "未匹配到任何结果" : "当前无记录"}</h3>
-              <p className="mt-1 text-xs text-slate-500">{keyword ? "请检查筛选条件" : "请先创建记录。"}</p>
+              <h3 className="mt-3 text-sm font-semibold text-slate-800">{!isServerPaginated && keyword ? "未匹配到任何结果" : "当前无记录"}</h3>
+              <p className="mt-1 text-xs text-slate-500">{!isServerPaginated && keyword ? "请检查筛选条件" : "请先创建记录。"}</p>
             </div>
           </div>
         ) : (
@@ -358,8 +376,28 @@ export default function CrudPage({
           </div>
         )}
 
-        <footer className="flex flex-col gap-3 border-t border-slate-200 px-4 py-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-          <span>{safePage} / {pageCount} 页，共 {filteredRows.length} 条</span>
+        {!isServerPaginated && <footer className="flex flex-col gap-3 border-t border-slate-200 px-4 py-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <span>{safePage} / {pageCount} 页，共 {filteredRows.length} 条</span>
+            <label className="flex items-center gap-1">
+              <span>每页</span>
+              <select
+                value={pageSize}
+                onChange={(event) => {
+                  setPageSize(Number(event.target.value));
+                  setPage(1);
+                }}
+                aria-label="每页显示条数"
+                className="h-8 rounded-lg border border-slate-200 bg-white px-2"
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+              <span>条</span>
+            </label>
+          </div>
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -380,7 +418,7 @@ export default function CrudPage({
               <ChevronRight size={15} />
             </button>
           </div>
-        </footer>
+        </footer>}
       </section>
       {editingRow && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={() => setEditingRow(null)}>

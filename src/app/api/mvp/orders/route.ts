@@ -1,82 +1,33 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 
-import { Prisma } from "@prisma/client";
+import { Prisma, type OrderStatus } from "@prisma/client";
 
 import { requireAuthContext } from "@/lib/api-auth";
-import { resolveOrderReadScope, withOrderReadScope } from "@/lib/order-access";
+import { createOrderAccessPlan } from "@/lib/order-access";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
 import { fail, ok, paginated, parsePagination } from "@/lib/api-response";
 import { normalizeMoneyCents } from "@/lib/money";
+import { parseOrderItems, parseSingleOrderItem, type ParsedOrderItem } from "@/lib/order-item-input";
+import { allocateOrderNumber, OrderNumberingError } from "@/lib/order-numbering";
 import { parseOrderTemplateConfiguration, sanitizeOrderCustomValues } from "@/lib/order-template";
 
-type ParsedOrderItem = {
-  productId: string;
-  quantity: number;
-  unitPriceCents: number;
-  productName: string;
-  skuId: string | null;
-};
+const ORDER_STATUSES = new Set<OrderStatus>([
+  "DRAFT",
+  "SUBMITTED",
+  "WAITING_SHIPMENT",
+  "SHIPPED",
+  "DELIVERED",
+  "EXCEPTION",
+  "COMPLETED",
+  "CANCELLED",
+]);
 
-type SingleItemPayload = {
-  customerId?: unknown;
-  productId?: unknown;
-  productName?: unknown;
-  quantity?: unknown;
-  unitPriceCents?: unknown;
-  skuId?: unknown;
-};
-
-function parseItems(raw: unknown): ParsedOrderItem[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .map((item: unknown) => {
-      if (!item || typeof item !== "object") return null;
-      const obj = item as Record<string, unknown>;
-      const productId = typeof obj.productId === "string" ? obj.productId : null;
-      const quantity = Number(obj.quantity);
-      const unitPriceCents = Number(obj.unitPriceCents);
-      const productName = typeof obj.productName === "string" ? obj.productName : "";
-      if (!productId || !Number.isSafeInteger(quantity) || quantity <= 0) return null;
-      if (!Number.isSafeInteger(unitPriceCents) || unitPriceCents < 0) return null;
-      if (productName.trim().length === 0) return null;
-      return {
-        productId,
-        quantity,
-        unitPriceCents,
-        productName,
-        skuId: typeof obj.skuId === "string" ? obj.skuId : null,
-      };
-    })
-    .filter((item: ParsedOrderItem | null): item is ParsedOrderItem => item !== null);
-}
-
-function parseSingleItem(body: SingleItemPayload | null): ParsedOrderItem[] {
-  if (!body || typeof body !== "object") return [];
-  if (typeof body.productId !== "string" || typeof body.customerId !== "string") return [];
-
-  const productId = body.productId.trim();
-  const productName = typeof body.productName === "string" ? body.productName.trim() : "";
-  const skuId = typeof body.skuId === "string" && body.skuId.trim().length > 0 ? body.skuId.trim() : null;
-
-  const quantity = Number(body.quantity);
-  const unitPriceCents = Number(body.unitPriceCents);
-  if (!productId || !Number.isSafeInteger(quantity) || quantity <= 0 || !Number.isSafeInteger(unitPriceCents) || unitPriceCents < 0) {
-    return [];
-  }
-
-  if (!productName) return [];
-
-  return [
-    {
-      productId,
-      productName,
-      quantity,
-      unitPriceCents,
-      skuId,
-    },
-  ];
+function parseDateFilter(value: string | null, endOfDay = false) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const parsed = new Date(`${value}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 export async function GET(request: NextRequest) {
@@ -85,38 +36,42 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthenticated." }, { status: 401 });
   }
 
-  const canRead = await checkPermission({
-    userId: auth.userId,
-    membershipId: auth.membership.id,
-    actionKey: "order.read",
-    targetBusinessUnitId: auth.membership.businessUnitId,
-    targetUserId: auth.userId,
-  });
-  if (!canRead.allowed) {
-    return NextResponse.json({ error: "FORBIDDEN", reasons: canRead.reasons }, { status: 403 });
-  }
-  const orderReadScope = await resolveOrderReadScope(auth.membership, auth.userId);
-  if (orderReadScope === "NONE") {
+  const orderReadAccess = await createOrderAccessPlan({ membership: auth.membership, actionKey: "order.read" });
+  if (!orderReadAccess.allowed) {
     return NextResponse.json({ error: "FORBIDDEN", reasons: ["NO_READ_SCOPE_FOR_ORDERS"] }, { status: 403 });
   }
 
   const pagination = parsePagination(request);
-  const status = request.nextUrl.searchParams.get("status")?.trim().toUpperCase();
-  const query = request.nextUrl.searchParams.get("q")?.trim();
+  const requestedStatus = request.nextUrl.searchParams.get("status")?.trim().toUpperCase();
+  const status = requestedStatus && ORDER_STATUSES.has(requestedStatus as OrderStatus)
+    ? requestedStatus as OrderStatus
+    : undefined;
+  const query = request.nextUrl.searchParams.get("q")?.trim().slice(0, 200);
+  const employee = request.nextUrl.searchParams.get("employee")?.trim();
+  const product = request.nextUrl.searchParams.get("product")?.trim().slice(0, 120);
+  const country = request.nextUrl.searchParams.get("country")?.trim().toUpperCase().slice(0, 3);
+  const start = parseDateFilter(request.nextUrl.searchParams.get("start"));
+  const end = parseDateFilter(request.nextUrl.searchParams.get("end"), true);
   const baseWhere: Prisma.OrderWhereInput = {
     businessUnitId: auth.membership.businessUnitId,
-    ...(status ? { status: status as never } : {}),
+    ...(status ? { status } : {}),
+    ...(employee ? { creatorUserId: employee } : {}),
+    ...(country ? { recipientCountryCode: country } : {}),
+    ...(product ? { items: { some: { productName: { contains: product, mode: "insensitive" } } } } : {}),
+    ...((start || end) ? { createdAt: { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) } } : {}),
     ...(query
       ? {
           OR: [
             { orderNo: { contains: query, mode: "insensitive" } },
             { recipientName: { contains: query, mode: "insensitive" } },
+            { recipientEmail: { contains: query, mode: "insensitive" } },
             { recipientPhone: { contains: query } },
+            { customerWhatsapp: { contains: query, mode: "insensitive" } },
           ],
         }
       : {}),
   };
-  const where = withOrderReadScope(baseWhere as Record<string, unknown>, orderReadScope, auth.membership) as Prisma.OrderWhereInput;
+  const where: Prisma.OrderWhereInput = { AND: [orderReadAccess.where, baseWhere] };
   const [rows, total] = await prisma.$transaction([
     prisma.order.findMany({
       where,
@@ -155,7 +110,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Request body is required." }, { status: 400 });
   }
 
-  const items = parseItems(body.items).length > 0 ? parseItems(body.items) : parseSingleItem(body);
+  const parsedItems = parseOrderItems(body.items);
+  const items = parsedItems.length > 0 ? parsedItems : parseSingleOrderItem(body);
   if (items.length === 0) {
     return NextResponse.json({ error: "At least one order item is required." }, { status: 400 });
   }
@@ -179,7 +135,9 @@ export async function POST(request: NextRequest) {
   const customerName = typeof body.customerName === "string" ? body.customerName.trim().slice(0, 100) : "";
   const shopId = typeof body.shopId === "string" ? body.shopId.trim().slice(0, 100) : "";
   if (!customerName) return fail("RECIPIENT_NAME_REQUIRED", "请填写本次订单收件人/客户姓名。", 400);
-  if (!shopId) return fail("SHOP_ID_REQUIRED", "请填写店铺 ID。", 400);
+  if (templateConfiguration.requireShopId && !shopId) {
+    return fail("SHOP_ID_REQUIRED", "当前订单模板要求填写店铺 ID。", 400);
+  }
   const recipientEmail = typeof body.recipientEmail === "string" ? body.recipientEmail.trim().toLowerCase() : "";
   const recipientAddress = typeof body.recipientAddress === "string" ? body.recipientAddress.trim() : "";
   const recipientCountryCode = typeof body.recipientCountryCode === "string" ? body.recipientCountryCode.trim() : "";
@@ -227,13 +185,15 @@ export async function POST(request: NextRequest) {
   });
   if (customerId && !customer) return NextResponse.json({ error: "Customer invalid for current business unit." }, { status: 400 });
 
-  const productIds = [...new Set(items.map((item) => item.productId))];
-  const products = await prisma.product.findMany({
-    where: { id: { in: productIds }, businessUnitId: auth.membership.businessUnitId },
-    select: { id: true },
-  });
-  if (products.length !== productIds.length) {
-    return NextResponse.json({ error: "One or more products do not belong to current business unit." }, { status: 400 });
+  const productIds = [...new Set(items.flatMap((item) => item.productId ? [item.productId] : []))];
+  if (productIds.length > 0) {
+    const products = await prisma.product.findMany({
+      where: { id: { in: productIds }, businessUnitId: auth.membership.businessUnitId },
+      select: { id: true },
+    });
+    if (products.length !== productIds.length) {
+      return NextResponse.json({ error: "One or more products do not belong to current business unit." }, { status: 400 });
+    }
   }
   const requestedSkuIds = [...new Set(items.flatMap((item) => (item.skuId ? [item.skuId] : [])))];
   if (requestedSkuIds.length > 0) {
@@ -246,14 +206,14 @@ export async function POST(request: NextRequest) {
       select: { id: true, productId: true },
     });
     const validSkuMap = new Map(validSkus.map((sku) => [sku.id, sku.productId]));
-    const invalidSku = items.some((item) => item.skuId && validSkuMap.get(item.skuId) !== item.productId);
+    const invalidSku = items.some((item) => item.skuId && (!validSkuMap.has(item.skuId) || (item.productId && validSkuMap.get(item.skuId) !== item.productId)));
     if (validSkus.length !== requestedSkuIds.length || invalidSku) {
       return fail("SKU_OWNERSHIP_MISMATCH", "SKU must belong to the selected product and current business unit.", 400);
     }
+    for (const item of items) {
+      if (item.skuId) item.productId = validSkuMap.get(item.skuId) ?? null;
+    }
   }
-
-  const randomSuffix = Math.floor(Math.random() * 100000).toString().padStart(5, "0");
-  const orderNo = `ORD-${Date.now()}-${randomSuffix}`;
 
   let codAmount = 0;
   let shippingFee = 0;
@@ -281,7 +241,14 @@ export async function POST(request: NextRequest) {
     return fail("MONEY_OVERFLOW", "Calculated product value exceeds safe integer range.", 400);
   }
 
-  const created = await prisma.$transaction(async (tx) => {
+  try {
+    const created = await prisma.$transaction(async (tx) => {
+      const allocatedOrderNumber = await allocateOrderNumber(tx, {
+        legalEntityId: auth.membership.legalEntityId,
+        businessUnitId: auth.membership.businessUnitId,
+        departmentId: auth.membership.departmentId,
+        orderTemplateId: orderTemplate?.id ?? null,
+      });
     const resolvedCustomer = customer ?? await tx.customer.create({
       data: {
         legalEntityId: auth.membership.legalEntityId,
@@ -302,7 +269,8 @@ export async function POST(request: NextRequest) {
         departmentId: auth.membership.departmentId,
         siteId: auth.membership.siteId,
         customerId: resolvedCustomer.id,
-        orderNo,
+        orderNo: allocatedOrderNumber.orderNo,
+        orderNumberRuleId: allocatedOrderNumber.ruleId,
         creatorUserId: auth.userId,
         ownedByMembershipId: auth.membership.id,
         shopId,
@@ -339,12 +307,20 @@ export async function POST(request: NextRequest) {
           code: orderTemplate.code,
           name: orderTemplate.name,
           configuration: templateConfiguration,
+          orderNumbering: {
+            ruleId: allocatedOrderNumber.ruleId,
+            ruleCode: allocatedOrderNumber.ruleCode,
+            sequence: allocatedOrderNumber.sequence,
+            periodKey: allocatedOrderNumber.periodKey,
+            counterScopeKey: allocatedOrderNumber.counterScopeKey,
+          },
           capturedAt: new Date().toISOString(),
         } as Prisma.InputJsonValue : undefined,
         items: {
           create: items.map((item: ParsedOrderItem) => ({
             productId: item.productId,
             skuId: item.skuId,
+            stockControlled: Boolean(item.skuId),
             productName: item.productName,
             quantity: item.quantity,
             unitPriceCents: item.unitPriceCents,
@@ -356,21 +332,27 @@ export async function POST(request: NextRequest) {
     });
 
     return order;
-  });
+    });
 
-  await writeAuditLog({
-    actorUserId: auth.userId,
-    actorMembershipId: auth.membership.id,
-    module: "mvp.orders",
-    action: "order.create",
-    targetType: "order",
-    targetId: created.id,
-    businessUnitId: auth.membership.businessUnitId,
-    roleId: auth.membership.roleId,
-    details: { orderNo: created.orderNo, customerId: created.customerId },
-  });
+    await writeAuditLog({
+      actorUserId: auth.userId,
+      actorMembershipId: auth.membership.id,
+      module: "mvp.orders",
+      action: "order.create",
+      targetType: "order",
+      targetId: created.id,
+      businessUnitId: auth.membership.businessUnitId,
+      roleId: auth.membership.roleId,
+      details: { orderNo: created.orderNo, customerId: created.customerId, orderNumberRuleId: created.orderNumberRuleId },
+    });
 
-  return ok(created, { status: 201 });
+    return ok(created, { status: 201 });
+  } catch (error) {
+    if (error instanceof OrderNumberingError) {
+      return fail(error.code, error.message, error.code === "ORDER_NUMBER_RULE_REQUIRED" ? 409 : 400);
+    }
+    throw error;
+  }
 }
 
 export async function PUT(request: NextRequest) {
@@ -392,14 +374,17 @@ export async function PUT(request: NextRequest) {
   const target = await prisma.order.findUnique({ where: { id: body.id } });
   if (!target) return NextResponse.json({ error: "Order not found." }, { status: 404 });
 
-  const canUpdate = await checkPermission({
-    userId: auth.userId,
-    membershipId: auth.membership.id,
-    actionKey: "order.update",
-    targetBusinessUnitId: target.businessUnitId,
-  });
-  if (!canUpdate.allowed) {
-    return NextResponse.json({ error: "FORBIDDEN", reasons: canUpdate.reasons }, { status: 403 });
+  // Do not reduce a department/site/self update permission to a business-unit
+  // check. The compiled predicate is also used by lists and dashboards, so a
+  // direct API call cannot update a row the caller would not be allowed to see.
+  const updateAccess = await createOrderAccessPlan({ membership: auth.membership, actionKey: "order.update" });
+  if (!updateAccess.allowed || !updateAccess.allows({
+    businessUnitId: target.businessUnitId,
+    departmentId: target.departmentId,
+    siteId: target.siteId,
+    ownerMembershipId: target.ownedByMembershipId,
+  })) {
+    return NextResponse.json({ error: "FORBIDDEN", reasons: ["ORDER_UPDATE_SCOPE_DENIED"] }, { status: 403 });
   }
 
   const data: {

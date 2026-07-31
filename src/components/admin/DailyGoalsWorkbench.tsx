@@ -43,6 +43,7 @@ type TeamGoalRow = {
 type TeamPayload = {
   date: string;
   canManage: boolean;
+  canManageBusinessUnit: boolean;
   departments: { id: string; name: string }[];
   rows: TeamGoalRow[];
 };
@@ -131,9 +132,11 @@ export default function DailyGoalsWorkbench() {
   }
 
   function openTeamEditor(row?: TeamGoalRow) {
+    const defaultScope = teamData?.canManageBusinessUnit ? "BUSINESS_UNIT" : "DEPARTMENT";
+    const defaultDepartmentId = teamData?.departments[0]?.id ?? "";
     setTeamForm({
-      scopeType: row?.scopeType ?? "BUSINESS_UNIT",
-      departmentId: row?.departmentId ?? "",
+      scopeType: row?.scopeType ?? defaultScope,
+      departmentId: row?.departmentId ?? (defaultScope === "DEPARTMENT" ? defaultDepartmentId : ""),
       targetOrderCount: String(row?.targetOrderCount ?? 0),
       targetAmount: String((row?.targetAmountCents ?? 0) / 100),
       currency: row?.currency ?? "EUR",
@@ -338,7 +341,8 @@ export default function DailyGoalsWorkbench() {
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <label className="text-sm font-medium text-slate-700">目标范围
                 <select value={teamForm.scopeType} onChange={(event) => setTeamForm({ ...teamForm, scopeType: event.target.value, departmentId: "" })} className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3">
-                  <option value="BUSINESS_UNIT">当前业务板块</option><option value="DEPARTMENT">指定部门</option>
+                  {teamData.canManageBusinessUnit && <option value="BUSINESS_UNIT">当前业务板块</option>}
+                  {teamData.departments.length > 0 && <option value="DEPARTMENT">指定部门</option>}
                 </select>
               </label>
               {teamForm.scopeType === "DEPARTMENT" && (

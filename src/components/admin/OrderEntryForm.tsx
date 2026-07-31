@@ -14,17 +14,23 @@ export default function OrderEntryForm({
   templates,
   countries,
   canCreate,
+  canUploadOrderProof,
+  canDeleteOrderProof,
+  canSubmitForReview,
   myOrderStats,
 }: {
   products: ProductOption[];
   templates: TemplateOption[];
   countries: { code: string; name: string }[];
   canCreate: boolean;
+  canUploadOrderProof: boolean;
+  canDeleteOrderProof: boolean;
+  canSubmitForReview: boolean;
   myOrderStats: { total: number; draft: number; submitted: number; waiting_shipment: number; shipped: number; delivered: number; exception: number; completed: number; cancelled: number };
 }) {
   const defaultTemplate = templates.find((item) => item.isDefault) ?? templates[0];
   const [templateId, setTemplateId] = useState(defaultTemplate?.id ?? "");
-  const [selectedProductId, setSelectedProductId] = useState(products[0]?.id ?? "");
+  const [selectedProductId, setSelectedProductId] = useState("");
   const selectedProduct = products.find((item) => item.id === selectedProductId);
   const [productName, setProductName] = useState(selectedProduct?.name ?? "");
   const [error, setError] = useState("");
@@ -65,8 +71,8 @@ export default function OrderEntryForm({
       setError("请填写商品名称。");
       return;
     }
-    if (!selectedProductId) {
-      setError("请先选择商品。");
+    if (config?.requireSku && !selectedProductId) {
+      setError("当前订单模板要求选择关联库存商品和 SKU。");
       return;
     }
     setSaving(true);
@@ -191,7 +197,7 @@ export default function OrderEntryForm({
         <Search size={16} className="text-gray-400" />
         <input
           className="h-10 flex-1 outline-none"
-          placeholder="搜索客户名称或订单号后可快速筛选"
+          placeholder="电商订单按本次收件信息录入，无需选择固定客户"
           disabled
         />
       </div>
@@ -201,7 +207,7 @@ export default function OrderEntryForm({
           <CircleHelp size={18} className="mt-0.5 shrink-0 text-amber-600" />
           <div>
             <p className="font-semibold">录单后请补充客户沟通凭证</p>
-            <p className="mt-1 text-xs leading-5 text-amber-800">订单创建后进入详情页上传客户聊天截图、PDF 或视频；上传完成后才能提交核单。新客可以直接录入，不需要先建立固定客户档案。</p>
+            <p className="mt-1 text-xs leading-5 text-amber-800">新客直接按本次收件信息录入；订单保存后可在当前页面上传客户聊天截图、PDF 或视频，上传完成后才能提交核单。</p>
           </div>
         </div>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-violet-100 bg-violet-50/70 px-3 py-2">
@@ -221,24 +227,24 @@ export default function OrderEntryForm({
           <Field label="订单号">
             <input name="orderNo" readOnly value="保存后自动生成" className={`${input} bg-slate-50 text-slate-500`} aria-label="订单号（保存后自动生成）" />
           </Field>
-          <Field label="店铺 ID" required><input name="shopId" required className={input} placeholder="旧 ERP 的店铺标识" /></Field>
-          <Field label="产品搜索">
+          <Field label="店铺 ID" required={config?.requireShopId}><input name="shopId" required={config?.requireShopId} className={input} placeholder="可按订单模板设为必填" /></Field>
+          <Field label="搜索库存商品（可选）">
             <input
               className={input}
               value={searchKeyword}
               onChange={(event) => setSearchKeyword(event.target.value)}
-              placeholder="输入关键字过滤左侧产品"
+              placeholder="需要关联库存/SKU 时再搜索"
             />
           </Field>
-          <Field label="商品" required>
+          <Field label="关联库存商品" required={config?.requireSku}>
             <select
               name="productId"
-              required
+              required={config?.requireSku}
               className={input}
               value={selectedProductId}
               onChange={(e) => handleProductChange(e.target.value)}
             >
-              <option value="">请输入并选择商品</option>
+              <option value="">手工商品（不扣库存）</option>
               {visibleProducts.map((item) => <option key={item.id} value={item.id}>{item.code} / {item.name}</option>)}
             </select>
           </Field>
@@ -257,7 +263,7 @@ export default function OrderEntryForm({
             </datalist>
           </Field>
           <Field label="SKU" required={config?.requireSku}>
-            <select name="skuId" required={config?.requireSku} className={input}>
+            <select name="skuId" required={config?.requireSku} disabled={!selectedProductId} className={`${input} disabled:cursor-not-allowed disabled:bg-slate-50`}>
               <option value="">选择 SKU</option>
               {selectedProduct?.skus.map((sku) => <option key={sku.id} value={sku.id}>{sku.code}</option>)}
             </select>
@@ -343,19 +349,20 @@ export default function OrderEntryForm({
           <AttachmentPanel
             targetType="ORDER"
             targetId={createdOrder.id}
-            canUpload={canCreate}
-            canDelete={canCreate}
+            canUpload={canUploadOrderProof}
+            canDelete={canDeleteOrderProof}
             title="客户沟通凭证（提交核单前必传）"
           />
           <button
             type="button"
             onClick={() => void submitForReview()}
-            disabled={submittingReview}
+            disabled={!canSubmitForReview || submittingReview}
             className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
           >
             <Check size={18} />
             {submittingReview ? "正在提交核单..." : "凭证确认无误，提交核单"}
           </button>
+          {(!canUploadOrderProof || !canSubmitForReview) && <p className="text-xs text-amber-800">当前角色尚未配置订单凭证上传或提交核单权限，请由管理员在“角色权限”中开启对应动作。</p>}
         </div>
       )}
       {error && <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
