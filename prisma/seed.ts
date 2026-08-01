@@ -193,6 +193,27 @@ const actionDefs: SeedAction[] = [
   { key: "resource.configure", name: "配置资源分类和流转规则", namespace: "resource", scope: "BUSINESS_UNIT" },
   { key: "software_asset.account.read", name: "查看软件账号标识", namespace: "resource", scope: "BUSINESS_UNIT" },
   { key: "software_asset.account.manage", name: "登记或修改软件账号标识", namespace: "resource", scope: "BUSINESS_UNIT" },
+  // Stable capabilities only: labels, roles, source trees and KPI definitions
+  // remain data that an authorized administrator can configure at runtime.
+  { key: "marketing.workbench.view", name: "查看投放运营工作台", namespace: "marketing", scope: "SELF" },
+  { key: "marketing.workbench.configure", name: "配置投放运营工作台", namespace: "marketing", scope: "BUSINESS_UNIT" },
+  { key: "marketing.source.read", name: "查看投放数据源", namespace: "marketing", scope: "BUSINESS_UNIT" },
+  { key: "marketing.source.manage", name: "配置投放数据源", namespace: "marketing", scope: "BUSINESS_UNIT" },
+  { key: "marketing.metric.read", name: "查看投放指标定义", namespace: "marketing", scope: "BUSINESS_UNIT" },
+  { key: "marketing.metric.manage", name: "配置投放指标定义", namespace: "marketing", scope: "BUSINESS_UNIT" },
+  { key: "marketing.report.read", name: "查看投放日报", namespace: "marketing", scope: "SELF" },
+  { key: "marketing.report.create", name: "创建投放日报", namespace: "marketing", scope: "SELF" },
+  { key: "marketing.report.update", name: "编辑投放日报", namespace: "marketing", scope: "SELF" },
+  { key: "marketing.report.submit", name: "提交投放日报", namespace: "marketing", scope: "SELF" },
+  { key: "marketing.report.review", name: "审核投放日报", namespace: "marketing", scope: "SUBORDINATES" },
+  { key: "marketing.report.export", name: "导出投放日报", namespace: "marketing", scope: "SUBORDINATES" },
+  { key: "marketing.kpi.read", name: "查看投放 KPI", namespace: "marketing", scope: "SELF" },
+  { key: "marketing.kpi.manage", name: "配置投放 KPI", namespace: "marketing", scope: "SUBORDINATES" },
+  { key: "marketing.creative.read", name: "查看投放素材", namespace: "marketing", scope: "DEPARTMENT" },
+  { key: "marketing.creative.create", name: "创建投放素材", namespace: "marketing", scope: "SELF" },
+  { key: "marketing.creative.update", name: "编辑投放素材", namespace: "marketing", scope: "SELF" },
+  { key: "marketing.creative.archive", name: "归档投放素材", namespace: "marketing", scope: "SUBORDINATES" },
+  { key: "marketing.creative.tag.manage", name: "配置投放素材标签", namespace: "marketing", scope: "DEPARTMENT" },
 ];
 
 const menuDefs = [
@@ -429,6 +450,46 @@ const menuDefs = [
     isActive: true,
   },
   {
+    key: "marketing-workbench",
+    label: "投放运营工作台",
+    path: "/admin/marketing",
+    requiredActionKey: "marketing.workbench.view",
+    sortOrder: 152,
+    isActive: true,
+  },
+  {
+    key: "marketing-reports",
+    label: "投放日报",
+    path: "/admin/marketing/reports",
+    requiredActionKey: "marketing.report.read",
+    sortOrder: 153,
+    isActive: true,
+  },
+  {
+    key: "marketing-kpis",
+    label: "投放 KPI",
+    path: "/admin/marketing/kpis",
+    requiredActionKey: "marketing.kpi.read",
+    sortOrder: 154,
+    isActive: true,
+  },
+  {
+    key: "marketing-creatives",
+    label: "素材中心",
+    path: "/admin/marketing/creatives",
+    requiredActionKey: "marketing.creative.read",
+    sortOrder: 155,
+    isActive: true,
+  },
+  {
+    key: "marketing-settings",
+    label: "投放配置",
+    path: "/admin/marketing/settings",
+    requiredActionKey: "marketing.workbench.configure",
+    sortOrder: 156,
+    isActive: true,
+  },
+  {
     key: "statistics",
     label: "统计报表",
     path: "/admin/statistics",
@@ -497,6 +558,7 @@ const menuGroupDefs = [
   { key: "group-hr", label: "人事与行政", path: "/admin/attendance", icon: "UsersRound", sortOrder: 60 },
   { key: "group-organization", label: "组织与权限", path: "/admin/users", icon: "ShieldCheck", sortOrder: 70 },
   { key: "group-system", label: "系统配置", path: "/admin/menus", icon: "Settings2", sortOrder: 80 },
+  { key: "group-marketing", label: "投放运营", path: "/admin/marketing", icon: "Megaphone", sortOrder: 57 },
 ] as const;
 
 const menuGroupByKey: Record<string, (typeof menuGroupDefs)[number]["key"]> = {
@@ -518,6 +580,11 @@ const menuGroupByKey: Record<string, (typeof menuGroupDefs)[number]["key"]> = {
   "finance-allocation-adjustments": "group-finance",
   approvals: "group-finance",
   "daily-goals": "group-workforce",
+  "marketing-workbench": "group-marketing",
+  "marketing-reports": "group-marketing",
+  "marketing-kpis": "group-marketing",
+  "marketing-creatives": "group-marketing",
+  "marketing-settings": "group-marketing",
   statistics: "group-data",
   attendance: "group-hr",
   "leave-requests": "group-hr",
@@ -542,6 +609,7 @@ const dashboardShortcutOrder = new Map<string, number>([
   ["shipping-workbench", 30],
   ["shipments", 40],
   ["daily-goals", 50],
+  ["marketing-workbench", 52],
   ["statistics", 55],
   ["expenses", 60],
   ["attendance", 70],
@@ -860,6 +928,25 @@ async function main() {
     "resource.configure",
     "software_asset.account.read",
     "software_asset.account.manage",
+    "marketing.workbench.view",
+    "marketing.workbench.configure",
+    "marketing.source.read",
+    "marketing.source.manage",
+    "marketing.metric.read",
+    "marketing.metric.manage",
+    "marketing.report.read",
+    "marketing.report.create",
+    "marketing.report.update",
+    "marketing.report.submit",
+    "marketing.report.review",
+    "marketing.report.export",
+    "marketing.kpi.read",
+    "marketing.kpi.manage",
+    "marketing.creative.read",
+    "marketing.creative.create",
+    "marketing.creative.update",
+    "marketing.creative.archive",
+    "marketing.creative.tag.manage",
   ]);
 
   for (const action of actions) {
@@ -907,6 +994,76 @@ async function main() {
     { code: "demo_after_sales", name: "演示物流售后员", username: "demo_after_sales", email: "demo.after.sales@local.erp", allowed: ["dashboard.view", "customer.read", "order.read", "shipment.read", "shipment.tracking_no.view", "shipment.timeline.view", "shipment.track.update", "inbox.read", "inbox.manage", "inbox.assign", "inbox.customer.link", "attachment.read", "attachment.create"] },
     { code: "demo_finance", name: "演示财务员", username: "demo_finance", email: "demo.finance@local.erp", allowed: ["dashboard.view", "order.read", "expense.read", "expense.create", "approval.read", "approval.review"] },
     { code: "demo_hr", name: "演示人事员", username: "demo_hr", email: "demo.hr@local.erp", allowed: ["dashboard.view", "daily_goal.read", "daily_goal.manage", "team_goal.read", "user.read", "user.create", "user.import", "user.update", "membership.read", "membership.create", "membership.update", "department.read", "attendance.read", "attendance.create", "attendance.approve", "leave_request.read", "leave_request.approve", "announcement.read", "announcement.create", "document.read", "document.create", "document.review", "document.archive", "document.category.configure", "resource.read", "resource.create", "resource.update", "resource.lifecycle.manage", "resource.lifecycle.history.read", "resource.archive", "resource.configure", "software_asset.account.read", "software_asset.account.manage"] },
+    {
+      code: "demo_marketing_operator",
+      name: "演示投放专员",
+      username: "demo_marketing_operator",
+      email: "demo.marketing.operator@local.erp",
+      allowed: [
+        "dashboard.view",
+        "marketing.workbench.view",
+        "marketing.source.read",
+        "marketing.metric.read",
+        "marketing.report.read",
+        "marketing.report.create",
+        "marketing.report.update",
+        "marketing.report.submit",
+        "marketing.kpi.read",
+        "marketing.creative.read",
+        "marketing.creative.create",
+        "marketing.creative.update",
+        "attachment.read",
+        "attachment.create",
+      ],
+      scopes: {
+        "marketing.report.read": "SELF",
+        "marketing.report.update": "SELF",
+        "marketing.kpi.read": "SELF",
+        "marketing.creative.read": "DEPARTMENT",
+        "marketing.creative.update": "SELF",
+      },
+    },
+    {
+      code: "demo_marketing_manager",
+      name: "演示投放主管",
+      username: "demo_marketing_manager",
+      email: "demo.marketing.manager@local.erp",
+      allowed: [
+        "dashboard.view",
+        "marketing.workbench.view",
+        "marketing.workbench.configure",
+        "marketing.source.read",
+        "marketing.source.manage",
+        "marketing.metric.read",
+        "marketing.metric.manage",
+        "marketing.report.read",
+        "marketing.report.create",
+        "marketing.report.update",
+        "marketing.report.submit",
+        "marketing.report.review",
+        "marketing.report.export",
+        "marketing.kpi.read",
+        "marketing.kpi.manage",
+        "marketing.creative.read",
+        "marketing.creative.create",
+        "marketing.creative.update",
+        "marketing.creative.archive",
+        "marketing.creative.tag.manage",
+        "attachment.read",
+        "attachment.create",
+        "attachment.delete",
+      ],
+      scopes: {
+        "marketing.report.read": "DEPARTMENT_TREE",
+        "marketing.report.review": "SUBORDINATES",
+        "marketing.report.export": "SUBORDINATES",
+        "marketing.kpi.read": "DEPARTMENT_TREE",
+        "marketing.kpi.manage": "DEPARTMENT_TREE",
+        "marketing.creative.read": "DEPARTMENT_TREE",
+        "marketing.creative.update": "DEPARTMENT_TREE",
+        "marketing.creative.archive": "DEPARTMENT_TREE",
+      },
+    },
   ];
   const demoRoles = new Map<string, { id: string }>();
   for (const profile of roleProfiles) {
@@ -1138,6 +1295,235 @@ async function main() {
   const founderMembership = await prisma.membership.findFirstOrThrow({
     where: { userId: founderUser.id, businessUnitId: businessUnit.id, isPrimary: true, isActive: true },
   });
+
+  // Local-only marketing examples. They are deliberately generic and
+  // replaceable: runtime code reads these records rather than branching on a
+  // platform, team name, or demo role.
+  const marketingManagerRole = demoRoles.get("demo_marketing_manager");
+  const marketingOperatorRole = demoRoles.get("demo_marketing_operator");
+  const marketingManagerMembership = marketingManagerRole
+    ? await prisma.membership.findFirst({
+        where: { businessUnitId: businessUnit.id, roleId: marketingManagerRole.id, user: { username: "demo_marketing_manager" }, isPrimary: true },
+      })
+    : null;
+  const marketingOperatorMembership = marketingOperatorRole
+    ? await prisma.membership.findFirst({
+        where: { businessUnitId: businessUnit.id, roleId: marketingOperatorRole.id, user: { username: "demo_marketing_operator" }, isPrimary: true },
+      })
+    : null;
+  if (marketingManagerMembership && marketingOperatorMembership) {
+    await prisma.membership.update({
+      where: { id: marketingOperatorMembership.id },
+      data: { managerMembershipId: marketingManagerMembership.id },
+    });
+  }
+
+  const marketingSource = await prisma.marketingSource.upsert({
+    where: { businessUnitId_code: { businessUnitId: businessUnit.id, code: "DEMO_MANUAL_SOURCE" } },
+    update: { name: "演示手工投放来源", kind: "SOURCE", isActive: true, sortOrder: 10 },
+    create: {
+      legalEntityId: legalEntity.id,
+      businessUnitId: businessUnit.id,
+      departmentId: rootDepartment.id,
+      siteId: site.id,
+      code: "DEMO_MANUAL_SOURCE",
+      name: "演示手工投放来源",
+      kind: "SOURCE",
+      sortOrder: 10,
+    },
+  });
+  const metricSeeds: Array<{
+    code: string;
+    name: string;
+    valueType: "COUNT" | "MONEY_CENTS" | "DECIMAL" | "PERCENT";
+    calculation?: "DIRECT" | "RATIO";
+    numeratorMetricCode?: string;
+    denominatorMetricCode?: string;
+    multiplier?: Prisma.Decimal;
+    inputRequired?: boolean;
+    showOnWorkbench?: boolean;
+    sortOrder: number;
+  }> = [
+    { code: "SPEND", name: "投放花费", valueType: "MONEY_CENTS", inputRequired: true, showOnWorkbench: true, sortOrder: 10 },
+    { code: "REVENUE", name: "投放收入", valueType: "MONEY_CENTS", inputRequired: true, showOnWorkbench: true, sortOrder: 20 },
+    { code: "IMPRESSIONS", name: "展示次数", valueType: "COUNT", inputRequired: true, sortOrder: 30 },
+    { code: "CLICKS", name: "点击次数", valueType: "COUNT", inputRequired: true, sortOrder: 40 },
+    { code: "CONVERSIONS", name: "转化次数", valueType: "COUNT", inputRequired: true, showOnWorkbench: true, sortOrder: 50 },
+    { code: "CREATIVE_COUNT", name: "使用素材数", valueType: "COUNT", inputRequired: true, sortOrder: 60 },
+    { code: "ROAS", name: "ROAS", valueType: "DECIMAL", calculation: "RATIO", numeratorMetricCode: "REVENUE", denominatorMetricCode: "SPEND", multiplier: new Prisma.Decimal(1), showOnWorkbench: true, sortOrder: 70 },
+    { code: "CPA", name: "单次转化成本", valueType: "MONEY_CENTS", calculation: "RATIO", numeratorMetricCode: "SPEND", denominatorMetricCode: "CONVERSIONS", multiplier: new Prisma.Decimal(1), showOnWorkbench: true, sortOrder: 80 },
+    { code: "CTR", name: "点击率", valueType: "PERCENT", calculation: "RATIO", numeratorMetricCode: "CLICKS", denominatorMetricCode: "IMPRESSIONS", multiplier: new Prisma.Decimal(100), showOnWorkbench: true, sortOrder: 90 },
+  ];
+  for (const metric of metricSeeds) {
+    await prisma.marketingMetricDefinition.upsert({
+      where: { businessUnitId_code: { businessUnitId: businessUnit.id, code: metric.code } },
+      update: { ...metric, isActive: true },
+      create: { legalEntityId: legalEntity.id, businessUnitId: businessUnit.id, ...metric },
+    });
+  }
+  // This is an editable first-run layout only. Runtime workbench rendering
+  // reads the database record and validates every action/metric again.
+  await prisma.marketingWorkbenchSetting.upsert({
+    where: { businessUnitId: businessUnit.id },
+    update: {},
+    create: {
+      legalEntityId: legalEntity.id,
+      businessUnitId: businessUnit.id,
+      updatedByUserId: founderUser.id,
+      cards: [
+        { key: "report-entry", kind: "QUICK_ACTION", label: "填写日报", description: "记录今天的原始投放数据，系统自动计算比率指标。", isVisible: true, zone: "FOCUS", sortOrder: 10, audience: { roleIds: [], departmentIds: [], membershipIds: [] }, metricCode: null, queueKey: null, actionKey: "marketing.report.create", href: "/admin/marketing/reports?create=1" },
+        { key: "my-draft-reports", kind: "QUEUE", label: "待完成日报", description: "继续填写自己的草稿日报。", isVisible: true, zone: "FOCUS", sortOrder: 20, audience: { roleIds: [], departmentIds: [], membershipIds: [] }, metricCode: null, queueKey: "MY_DRAFT_REPORTS", actionKey: "marketing.report.read", href: "/admin/marketing/reports?status=DRAFT" },
+        { key: "returned-reports", kind: "QUEUE", label: "退回待修改", description: "处理被退回的日报并重新提交。", isVisible: true, zone: "FOCUS", sortOrder: 30, audience: { roleIds: [], departmentIds: [], membershipIds: [] }, metricCode: null, queueKey: "RETURNED_REPORTS", actionKey: "marketing.report.read", href: "/admin/marketing/reports?status=RETURNED" },
+        { key: "today-spend", kind: "METRIC", label: "今日花费", description: "当前日期、当前币种范围内的投放花费。", isVisible: true, zone: "OVERVIEW", sortOrder: 40, audience: { roleIds: [], departmentIds: [], membershipIds: [] }, metricCode: "SPEND", queueKey: null, actionKey: "marketing.report.read", href: null },
+        { key: "today-revenue", kind: "METRIC", label: "今日收入", description: "当前日期、当前币种范围内的投放收入。", isVisible: true, zone: "OVERVIEW", sortOrder: 50, audience: { roleIds: [], departmentIds: [], membershipIds: [] }, metricCode: "REVENUE", queueKey: null, actionKey: "marketing.report.read", href: null },
+        { key: "today-roas", kind: "METRIC", label: "ROAS", description: "基于原始收入与花费自动计算。", isVisible: true, zone: "OVERVIEW", sortOrder: 60, audience: { roleIds: [], departmentIds: [], membershipIds: [] }, metricCode: "ROAS", queueKey: null, actionKey: "marketing.report.read", href: null },
+        { key: "kpi-overview", kind: "QUICK_ACTION", label: "团队与 KPI", description: "查看当前授权范围内的目标、实际与达成情况。", isVisible: true, zone: "QUICK", sortOrder: 70, audience: { roleIds: [], departmentIds: [], membershipIds: [] }, metricCode: null, queueKey: null, actionKey: "marketing.kpi.read", href: "/admin/marketing/kpis" },
+        { key: "creative-library", kind: "QUICK_ACTION", label: "素材中心", description: "查找、上传、标注并管理投放素材。", isVisible: true, zone: "QUICK", sortOrder: 80, audience: { roleIds: [], departmentIds: [], membershipIds: [] }, metricCode: null, queueKey: null, actionKey: "marketing.creative.read", href: "/admin/marketing/creatives" },
+      ],
+    },
+  });
+  for (const [code, name, color, isTerminal, sortOrder] of [
+    ["DRAFT", "草稿", "slate", false, 10],
+    ["IN_REVIEW", "审核中", "gold", false, 20],
+    ["ACTIVE", "投放中", "emerald", false, 30],
+    ["PAUSED", "已暂停", "amber", false, 40],
+    ["RETIRED", "已淘汰", "gray", true, 50],
+  ] as const) {
+    await prisma.marketingCreativeStatus.upsert({
+      where: { businessUnitId_code: { businessUnitId: businessUnit.id, code } },
+      update: { name, color, isTerminal, isActive: true, sortOrder },
+      create: { legalEntityId: legalEntity.id, businessUnitId: businessUnit.id, code, name, color, isTerminal, sortOrder },
+    });
+  }
+  for (const [name, color, sortOrder] of [
+    ["新品测试", "gold", 10],
+    ["待优化", "orange", 20],
+    ["高潜力", "emerald", 30],
+    ["需复盘", "slate", 40],
+  ] as const) {
+    await prisma.marketingTag.upsert({
+      where: { businessUnitId_name: { businessUnitId: businessUnit.id, name } },
+      update: { color, sortOrder, isActive: true },
+      create: { legalEntityId: legalEntity.id, businessUnitId: businessUnit.id, name, color, sortOrder },
+    });
+  }
+  if (marketingOperatorMembership) {
+    const demoReportDate = new Date();
+    demoReportDate.setUTCHours(0, 0, 0, 0);
+    const report = await prisma.marketingDailyReport.upsert({
+      where: {
+        businessUnitId_ownerMembershipId_sourceId_reportDate: {
+          businessUnitId: businessUnit.id,
+          ownerMembershipId: marketingOperatorMembership.id,
+          sourceId: marketingSource.id,
+          reportDate: demoReportDate,
+        },
+      },
+      update: { status: "SUBMITTED", submittedAt: new Date(), note: "本地演示日报，仅用于验收。" },
+      create: {
+        legalEntityId: legalEntity.id,
+        businessUnitId: businessUnit.id,
+        departmentId: marketingOperatorMembership.departmentId,
+        siteId: marketingOperatorMembership.siteId,
+        sourceId: marketingSource.id,
+        ownerMembershipId: marketingOperatorMembership.id,
+        createdByUserId: marketingOperatorMembership.userId,
+        reportDate: demoReportDate,
+        currency: "EUR",
+        status: "SUBMITTED",
+        submittedAt: new Date(),
+        note: "本地演示日报，仅用于验收。",
+      },
+    });
+    const metricMap = new Map((await prisma.marketingMetricDefinition.findMany({ where: { businessUnitId: businessUnit.id } })).map((metric) => [metric.code, metric]));
+    for (const [metricCode, valueCents, valueDecimal] of [
+      ["SPEND", BigInt("12500"), null],
+      ["REVENUE", BigInt("42000"), null],
+      ["IMPRESSIONS", null, new Prisma.Decimal(12500)],
+      ["CLICKS", null, new Prisma.Decimal(620)],
+      ["CONVERSIONS", null, new Prisma.Decimal(14)],
+      ["CREATIVE_COUNT", null, new Prisma.Decimal(3)],
+    ] as const) {
+      const metric = metricMap.get(metricCode);
+      if (!metric) continue;
+      await prisma.marketingDailyMetricValue.upsert({
+        where: { reportId_metricDefinitionId: { reportId: report.id, metricDefinitionId: metric.id } },
+        update: { valueCents, valueDecimal },
+        create: { reportId: report.id, metricDefinitionId: metric.id, valueCents, valueDecimal },
+      });
+    }
+  }
+  if (marketingManagerMembership && marketingOperatorMembership) {
+    const spendMetric = await prisma.marketingMetricDefinition.findUnique({
+      where: { businessUnitId_code: { businessUnitId: businessUnit.id, code: "SPEND" } },
+    });
+    if (spendMetric) {
+      const periodStart = new Date();
+      periodStart.setUTCDate(1);
+      periodStart.setUTCHours(0, 0, 0, 0);
+      const periodEnd = new Date(Date.UTC(periodStart.getUTCFullYear(), periodStart.getUTCMonth() + 1, 0));
+      await prisma.marketingKpiTarget.upsert({
+        where: {
+          businessUnitId_metricDefinitionId_scopeType_scopeKey_periodStart_periodEnd: {
+            businessUnitId: businessUnit.id,
+            metricDefinitionId: spendMetric.id,
+            scopeType: "MEMBERSHIP",
+            scopeKey: marketingOperatorMembership.id,
+            periodStart,
+            periodEnd,
+          },
+        },
+        update: { targetCents: BigInt("30000"), targetDecimal: null, currency: "EUR", setByMembershipId: marketingManagerMembership.id },
+        create: {
+          legalEntityId: legalEntity.id,
+          businessUnitId: businessUnit.id,
+          departmentId: marketingOperatorMembership.departmentId,
+          targetMembershipId: marketingOperatorMembership.id,
+          metricDefinitionId: spendMetric.id,
+          scopeType: "MEMBERSHIP",
+          scopeKey: marketingOperatorMembership.id,
+          periodStart,
+          periodEnd,
+          targetCents: BigInt("30000"),
+          currency: "EUR",
+          setByMembershipId: marketingManagerMembership.id,
+        },
+      });
+    }
+    const activeStatus = await prisma.marketingCreativeStatus.findUnique({
+      where: { businessUnitId_code: { businessUnitId: businessUnit.id, code: "ACTIVE" } },
+    });
+    if (activeStatus) {
+      const creative = await prisma.marketingCreative.upsert({
+        where: { businessUnitId_code: { businessUnitId: businessUnit.id, code: "DEMO-CREATIVE-001" } },
+        update: { name: "演示素材：产品卖点短视频", statusId: activeStatus.id, isArchived: false },
+        create: {
+          legalEntityId: legalEntity.id,
+          businessUnitId: businessUnit.id,
+          departmentId: marketingOperatorMembership.departmentId,
+          siteId: marketingOperatorMembership.siteId,
+          sourceId: marketingSource.id,
+          statusId: activeStatus.id,
+          ownerMembershipId: marketingOperatorMembership.id,
+          createdByUserId: marketingOperatorMembership.userId,
+          code: "DEMO-CREATIVE-001",
+          name: "演示素材：产品卖点短视频",
+          description: "本地演示记录；上传真实素材后可直接预览、打标签和归档。",
+        },
+      });
+      const highPotentialTag = await prisma.marketingTag.findUnique({
+        where: { businessUnitId_name: { businessUnitId: businessUnit.id, name: "高潜力" } },
+      });
+      if (highPotentialTag) {
+        await prisma.marketingCreativeTag.upsert({
+          where: { creativeId_tagId: { creativeId: creative.id, tagId: highPotentialTag.id } },
+          update: {},
+          create: { creativeId: creative.id, tagId: highPotentialTag.id },
+        });
+      }
+    }
+  }
+
   // Create a strict default without overwriting a business unit's later
   // authorized configuration. This remains seed data, not a code dependency.
   await prisma.financeControlPolicy.upsert({

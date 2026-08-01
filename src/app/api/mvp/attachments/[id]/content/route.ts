@@ -4,6 +4,7 @@ import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { localDemoStorage } from "@/lib/storage/local-demo";
 import {
+  hasTargetBusinessAttachmentPermission,
   isStoredAttachmentTargetConsistent,
   resolveCanonicalAttachmentTarget,
   storedAttachmentPermissionTarget,
@@ -28,8 +29,10 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
     targetDepartmentId: scope.departmentId,
     targetSiteId: scope.siteId,
     targetUserId: scope.ownerUserId,
+    targetMembershipId: scope.ownerMembershipId,
   });
   if (!decision.allowed) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  if (!(await hasTargetBusinessAttachmentPermission(auth, target, "attachment.read"))) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   const bytes = await localDemoStorage.get(attachment.storageKey);
   if (!bytes) return NextResponse.json({ error: "STORED_OBJECT_MISSING" }, { status: 404 });
   return new NextResponse(Buffer.from(bytes), {

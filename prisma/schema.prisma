@@ -252,6 +252,46 @@ enum FinancePaymentAllocationEffectType {
   REVERSAL
 }
 
+// Marketing facts are intentionally kept separate from sales orders. Raw
+// figures are captured once and calculated indicators are derived from the
+// approved metric definitions, so teams cannot accidentally mix formulas.
+enum MarketingReportStatus {
+  DRAFT
+  SUBMITTED
+  RETURNED
+  LOCKED
+}
+
+enum MarketingMetricValueType {
+  COUNT
+  MONEY_CENTS
+  DECIMAL
+  PERCENT
+}
+
+enum MarketingMetricAggregation {
+  SUM
+  AVG
+  LAST
+}
+
+enum MarketingMetricCalculation {
+  DIRECT
+  RATIO
+}
+
+enum MarketingKpiScopeType {
+  BUSINESS_UNIT
+  DEPARTMENT
+  MEMBERSHIP
+}
+
+enum MarketingCreativeAssetPurpose {
+  PRIMARY
+  SUPPORTING
+  COPY_REFERENCE
+}
+
 model LegalEntity {
   id        String   @id @default(uuid())
   code      String   @unique
@@ -302,6 +342,14 @@ model LegalEntity {
   resourceLifecycleActions            ResourceLifecycleAction[]
   resourceAssets                      ResourceAsset[]
   resourceLifecycleEvents             ResourceLifecycleEvent[]
+  marketingSources                    MarketingSource[]
+  marketingMetricDefinitions          MarketingMetricDefinition[]
+  marketingDailyReports               MarketingDailyReport[]
+  marketingKpiTargets                 MarketingKpiTarget[]
+  marketingCreativeStatuses           MarketingCreativeStatus[]
+  marketingTags                       MarketingTag[]
+  marketingCreatives                  MarketingCreative[]
+  marketingWorkbenchSettings          MarketingWorkbenchSetting[]
 }
 
 model BusinessUnit {
@@ -368,6 +416,14 @@ model BusinessUnit {
   resourceLifecycleActions            ResourceLifecycleAction[]
   resourceAssets                      ResourceAsset[]
   resourceLifecycleEvents             ResourceLifecycleEvent[]
+  marketingSources                    MarketingSource[]
+  marketingMetricDefinitions          MarketingMetricDefinition[]
+  marketingDailyReports               MarketingDailyReport[]
+  marketingKpiTargets                 MarketingKpiTarget[]
+  marketingCreativeStatuses           MarketingCreativeStatus[]
+  marketingTags                       MarketingTag[]
+  marketingCreatives                  MarketingCreative[]
+  marketingWorkbenchSetting           MarketingWorkbenchSetting?
 
   @@unique([legalEntityId, code])
   @@index([legalEntityId])
@@ -409,6 +465,10 @@ model Department {
   financeStatementImportBatches FinanceStatementImportBatch[]
   resourceAssets                ResourceAsset[]
   resourceLifecycleEvents       ResourceLifecycleEvent[]
+  marketingSources              MarketingSource[]
+  marketingDailyReports         MarketingDailyReport[]
+  marketingKpiTargets           MarketingKpiTarget[]
+  marketingCreatives            MarketingCreative[]
 
   @@unique([businessUnitId, code, parentId])
   @@index([businessUnitId, parentId])
@@ -443,6 +503,9 @@ model Site {
   financeStatementImportBatches FinanceStatementImportBatch[]
   resourceAssets                ResourceAsset[]
   resourceLifecycleEvents       ResourceLifecycleEvent[]
+  marketingSources              MarketingSource[]
+  marketingDailyReports         MarketingDailyReport[]
+  marketingCreatives            MarketingCreative[]
 
   @@unique([businessUnitId, code])
   @@index([departmentId])
@@ -468,6 +531,9 @@ model User {
   inventoryTransactions InventoryTransaction[]
   inboxAuditEvents      InboxAuditEvent[]      @relation("InboxAuditActor")
   attachments           Attachment[]           @relation("AttachmentUploader")
+  marketingDailyReports MarketingDailyReport[] @relation("MarketingReportCreator")
+  marketingCreatives    MarketingCreative[]    @relation("MarketingCreativeCreator")
+  updatedMarketingWorkbenchSettings MarketingWorkbenchSetting[] @relation("MarketingWorkbenchSettingUpdater")
 }
 
 model Role {
@@ -633,6 +699,12 @@ model Membership {
   resourceLifecycleEvents                      ResourceLifecycleEvent[]             @relation("ResourceLifecycleActor")
   transferredFromResourceEvents                ResourceLifecycleEvent[]             @relation("ResourceLifecycleFromAssignee")
   transferredToResourceEvents                  ResourceLifecycleEvent[]             @relation("ResourceLifecycleToAssignee")
+  marketingDailyReports                        MarketingDailyReport[]               @relation("MarketingReportOwner")
+  reviewedMarketingDailyReports                MarketingDailyReport[]               @relation("MarketingReportReviewer")
+  lockedMarketingDailyReports                  MarketingDailyReport[]               @relation("MarketingReportLocker")
+  marketingKpiTargetsSet                       MarketingKpiTarget[]                 @relation("MarketingKpiTargetSetter")
+  marketingKpiTargets                          MarketingKpiTarget[]                 @relation("MarketingKpiTargetMembership")
+  marketingCreatives                           MarketingCreative[]                  @relation("MarketingCreativeOwner")
 
   @@index([userId, isActive])
   @@index([businessUnitId, isActive])
@@ -747,6 +819,8 @@ model Product {
   businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
   skus         ProductSku[]
   orderItems   OrderItem[]
+  marketingDailyReports MarketingDailyReport[]
+  marketingCreatives    MarketingCreative[]
 
   @@unique([businessUnitId, code])
   @@index([legalEntityId])
@@ -2402,6 +2476,314 @@ model InboxAuditEvent {
   @@index([businessUnitId, conversationId, createdAt])
 }
 
+// A workbench is a configuration record, not a hard-coded dashboard. The
+// cards carry audience/zone/order data and are validated server-side before
+// persistence so an authorized user can change the layout without a deploy.
+model MarketingWorkbenchSetting {
+  id              String   @id @default(uuid())
+  legalEntityId   String
+  businessUnitId  String   @unique
+  cards           Json
+  updatedByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  legalEntity   LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit  BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  updatedByUser User?        @relation("MarketingWorkbenchSettingUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+}
+
+// A source is a configuration record. It can represent a platform, account,
+// campaign or any future reporting dimension without putting those names in
+// application logic. The optional parent makes a configurable source tree.
+model MarketingSource {
+  id             String   @id @default(uuid())
+  legalEntityId  String
+  businessUnitId String
+  departmentId   String?
+  siteId         String?
+  parentId       String?
+  code           String
+  name           String
+  kind           String   @default("SOURCE")
+  isActive       Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  metadata       Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  legalEntity  LegalEntity      @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit     @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department   Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  site         Site?            @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  parent       MarketingSource? @relation("MarketingSourceTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children     MarketingSource[] @relation("MarketingSourceTree")
+  reports      MarketingDailyReport[]
+  creatives    MarketingCreative[]
+
+  @@unique([businessUnitId, code])
+  @@index([businessUnitId, parentId, isActive, sortOrder])
+  @@index([departmentId, siteId])
+}
+
+// Definitions make metric labels, types, input requirements and safe ratio
+// formulas configuration-driven. There is deliberately no free-form formula
+// execution or code branch for an ad platform.
+model MarketingMetricDefinition {
+  id                     String                       @id @default(uuid())
+  legalEntityId          String
+  businessUnitId         String
+  code                   String
+  name                   String
+  valueType              MarketingMetricValueType
+  aggregation            MarketingMetricAggregation  @default(SUM)
+  calculation            MarketingMetricCalculation  @default(DIRECT)
+  numeratorMetricCode    String?
+  denominatorMetricCode  String?
+  multiplier             Decimal?                     @db.Decimal(20, 6)
+  inputRequired          Boolean                      @default(false)
+  showOnWorkbench        Boolean                      @default(false)
+  sortOrder              Int                          @default(0)
+  isActive               Boolean                      @default(true)
+  description            String?
+  createdAt              DateTime                     @default(now())
+  updatedAt              DateTime                     @updatedAt
+
+  legalEntity LegalEntity                   @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit                 @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  values      MarketingDailyMetricValue[]
+  kpiTargets  MarketingKpiTarget[]
+  creativeValues MarketingCreativeMetricValue[]
+
+  @@unique([businessUnitId, code])
+  @@index([businessUnitId, isActive, sortOrder])
+}
+
+// A daily report records raw facts for one employee, source and day. Ratios
+// such as CTR/CPA/ROAS are derived only from metric definitions and never
+// accepted as untraceable client-side calculations.
+model MarketingDailyReport {
+  id                     String                @id @default(uuid())
+  legalEntityId          String
+  businessUnitId         String
+  departmentId           String?
+  siteId                 String?
+  sourceId               String
+  productId              String?
+  ownerMembershipId      String
+  createdByUserId        String
+  reportDate             DateTime              @db.Date
+  marketCode             String?
+  currency               String                @default("EUR")
+  note                   String?
+  status                 MarketingReportStatus @default(DRAFT)
+  submittedAt            DateTime?
+  reviewedByMembershipId String?
+  reviewedAt             DateTime?
+  returnReason           String?
+  lockedByMembershipId   String?
+  lockedAt               DateTime?
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+
+  legalEntity        LegalEntity                  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit       BusinessUnit                 @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department         Department?                  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  site               Site?                        @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  source             MarketingSource              @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  product            Product?                     @relation(fields: [productId], references: [id], onDelete: SetNull)
+  ownerMembership    Membership                   @relation("MarketingReportOwner", fields: [ownerMembershipId], references: [id], onDelete: Restrict)
+  createdByUser      User                         @relation("MarketingReportCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  reviewedByMembership Membership?                @relation("MarketingReportReviewer", fields: [reviewedByMembershipId], references: [id], onDelete: SetNull)
+  lockedByMembership Membership?                  @relation("MarketingReportLocker", fields: [lockedByMembershipId], references: [id], onDelete: SetNull)
+  metricValues       MarketingDailyMetricValue[]
+
+  @@unique([businessUnitId, ownerMembershipId, sourceId, reportDate])
+  @@index([businessUnitId, reportDate, status])
+  @@index([businessUnitId, departmentId, reportDate])
+  @@index([ownerMembershipId, reportDate])
+  @@index([sourceId, reportDate])
+}
+
+model MarketingDailyMetricValue {
+  id                 String   @id @default(uuid())
+  reportId           String
+  metricDefinitionId String
+  valueCents         BigInt?
+  valueDecimal       Decimal? @db.Decimal(22, 6)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  report           MarketingDailyReport     @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  metricDefinition MarketingMetricDefinition @relation(fields: [metricDefinitionId], references: [id], onDelete: Restrict)
+
+  @@unique([reportId, metricDefinitionId])
+  @@index([metricDefinitionId])
+}
+
+// KPI targets use the same configured metric definition as reports. Scope is
+// explicit and validated on the server; the scope key is kept for a stable
+// unique constraint and is never treated as an untrusted client permission.
+model MarketingKpiTarget {
+  id                     String                  @id @default(uuid())
+  legalEntityId          String
+  businessUnitId         String
+  departmentId           String?
+  targetMembershipId     String?
+  metricDefinitionId     String
+  scopeType              MarketingKpiScopeType
+  scopeKey               String
+  periodStart            DateTime                @db.Date
+  periodEnd              DateTime                @db.Date
+  targetCents            BigInt?
+  targetDecimal          Decimal?                @db.Decimal(22, 6)
+  currency               String                  @default("EUR")
+  note                   String?
+  setByMembershipId      String
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+
+  legalEntity      LegalEntity                   @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit     BusinessUnit                  @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department       Department?                   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  targetMembership Membership?                   @relation("MarketingKpiTargetMembership", fields: [targetMembershipId], references: [id], onDelete: SetNull)
+  metricDefinition MarketingMetricDefinition     @relation(fields: [metricDefinitionId], references: [id], onDelete: Restrict)
+  setByMembership  Membership                    @relation("MarketingKpiTargetSetter", fields: [setByMembershipId], references: [id], onDelete: Restrict)
+
+  @@unique([businessUnitId, metricDefinitionId, scopeType, scopeKey, periodStart, periodEnd])
+  @@index([businessUnitId, periodStart, periodEnd])
+  @@index([departmentId, periodStart, periodEnd])
+  @@index([targetMembershipId, periodStart, periodEnd])
+}
+
+// Creative lifecycle and tags are data records, allowing a permitted manager
+// to add a new status or classification without a code deployment.
+model MarketingCreativeStatus {
+  id             String   @id @default(uuid())
+  legalEntityId  String
+  businessUnitId String
+  code           String
+  name           String
+  color          String?
+  isTerminal     Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  legalEntity  LegalEntity        @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit       @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  creatives    MarketingCreative[]
+
+  @@unique([businessUnitId, code])
+  @@index([businessUnitId, isActive, sortOrder])
+}
+
+model MarketingTag {
+  id             String   @id @default(uuid())
+  legalEntityId  String
+  businessUnitId String
+  name           String
+  color          String?
+  isActive       Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  legalEntity  LegalEntity              @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit             @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  creatives    MarketingCreativeTag[]
+
+  @@unique([businessUnitId, name])
+  @@index([businessUnitId, isActive, sortOrder])
+}
+
+model MarketingCreative {
+  id                String   @id @default(uuid())
+  legalEntityId     String
+  businessUnitId    String
+  departmentId      String?
+  siteId            String?
+  sourceId          String?
+  productId         String?
+  statusId          String
+  ownerMembershipId String
+  createdByUserId   String
+  code              String
+  name              String
+  marketCode        String?
+  languageCode      String?
+  description       String?
+  isArchived        Boolean  @default(false)
+  retiredReason     String?
+  metadata          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  legalEntity      LegalEntity             @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit     BusinessUnit            @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department       Department?             @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  site             Site?                   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  source           MarketingSource?        @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  product          Product?                @relation(fields: [productId], references: [id], onDelete: SetNull)
+  status           MarketingCreativeStatus @relation(fields: [statusId], references: [id], onDelete: Restrict)
+  ownerMembership  Membership              @relation("MarketingCreativeOwner", fields: [ownerMembershipId], references: [id], onDelete: Restrict)
+  createdByUser    User                    @relation("MarketingCreativeCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  assets           MarketingCreativeAttachment[]
+  tags             MarketingCreativeTag[]
+  metricValues     MarketingCreativeMetricValue[]
+
+  @@unique([businessUnitId, code])
+  @@index([businessUnitId, statusId, isArchived, updatedAt])
+  @@index([businessUnitId, departmentId, ownerMembershipId])
+  @@index([sourceId, productId])
+}
+
+model MarketingCreativeAttachment {
+  id           String                       @id @default(uuid())
+  creativeId   String
+  attachmentId String
+  purpose      MarketingCreativeAssetPurpose @default(PRIMARY)
+  sortOrder    Int                          @default(0)
+  createdAt    DateTime                     @default(now())
+
+  creative   MarketingCreative @relation(fields: [creativeId], references: [id], onDelete: Cascade)
+  attachment Attachment        @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+
+  @@unique([creativeId, attachmentId])
+  @@index([attachmentId])
+  @@index([creativeId, purpose, sortOrder])
+}
+
+model MarketingCreativeTag {
+  creativeId String
+  tagId      String
+  createdAt  DateTime @default(now())
+
+  creative MarketingCreative @relation(fields: [creativeId], references: [id], onDelete: Cascade)
+  tag      MarketingTag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([creativeId, tagId])
+  @@index([tagId])
+}
+
+model MarketingCreativeMetricValue {
+  id                 String   @id @default(uuid())
+  creativeId         String
+  metricDefinitionId String
+  recordedOn         DateTime @db.Date
+  valueCents         BigInt?
+  valueDecimal       Decimal? @db.Decimal(22, 6)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  creative         MarketingCreative         @relation(fields: [creativeId], references: [id], onDelete: Cascade)
+  metricDefinition MarketingMetricDefinition @relation(fields: [metricDefinitionId], references: [id], onDelete: Restrict)
+
+  @@unique([creativeId, metricDefinitionId, recordedOn])
+  @@index([metricDefinitionId, recordedOn])
+}
+
 model Attachment {
   id                     String           @id @default(uuid())
   legalEntityId          String
@@ -2429,6 +2811,7 @@ model Attachment {
   uploadedByUser       User         @relation("AttachmentUploader", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
   uploadedByMembership Membership   @relation("AttachmentUploaderMembership", fields: [uploadedByMembershipId], references: [id], onDelete: Restrict)
   document             Document?    @relation("DocumentAttachment")
+  marketingCreativeAssets MarketingCreativeAttachment[]
 
   @@index([businessUnitId, departmentId, targetType, targetId, status])
   @@index([sha256])

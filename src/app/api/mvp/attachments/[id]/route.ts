@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { localDemoStorage } from "@/lib/storage/local-demo";
 import { writeAuditLog } from "@/lib/audit";
 import {
+  hasTargetBusinessAttachmentPermission,
   isStoredAttachmentTargetConsistent,
   resolveCanonicalAttachmentTarget,
   storedAttachmentPermissionTarget,
@@ -30,8 +31,10 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ id
     targetDepartmentId: scope.departmentId,
     targetSiteId: scope.siteId,
     targetUserId: scope.ownerUserId,
+    targetMembershipId: scope.ownerMembershipId,
   });
   if (!decision.allowed) return fail("NOT_FOUND", "附件不存在。", 404);
+  if (!(await hasTargetBusinessAttachmentPermission(auth, target, "attachment.delete"))) return fail("NOT_FOUND", "附件不存在。", 404);
   if (attachment.targetType === "ORDER_REVIEW") {
     const reviewOrder = await prisma.order.findFirst({
       where: { id: attachment.targetId, businessUnitId: auth.membership.businessUnitId },

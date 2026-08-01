@@ -1,7 +1,8 @@
 import type { AuthContext } from "@/lib/api-auth";
+import { createMarketingCreativeAccessPlan } from "@/lib/marketing-access";
 import { prisma } from "@/lib/prisma";
 
-export const attachmentTargets = ["PRODUCT", "ORDER", "ORDER_REVIEW", "CONVERSATION", "SHIPMENT"] as const;
+export const attachmentTargets = ["PRODUCT", "ORDER", "ORDER_REVIEW", "CONVERSATION", "SHIPMENT", "MARKETING_CREATIVE"] as const;
 export type AttachmentTargetType = (typeof attachmentTargets)[number];
 
 export type CanonicalAttachmentTarget = {
@@ -11,6 +12,10 @@ export type CanonicalAttachmentTarget = {
   departmentId: string | null;
   siteId: string | null;
   ownerUserId: string | null;
+  // Older attachment target callers do not have a Membership concept. It is
+  // optional for those legacy target types, but required at runtime for a
+  // marketing creative before its binary can be accessed.
+  ownerMembershipId?: string | null;
 };
 
 type StoredAttachmentScope = {
@@ -41,7 +46,31 @@ export function storedAttachmentPermissionTarget(
     departmentId: attachment.departmentId,
     siteId: target.siteId,
     ownerUserId: target.ownerUserId ?? attachment.uploadedByUserId,
+    ...(target.ownerMembershipId ? { ownerMembershipId: target.ownerMembershipId } : {}),
   };
+}
+
+/**
+ * Attachments inherit both the generic file permission and the business
+ * permission of their target. This closes the common "file URL bypass" where
+ * a user could otherwise read a secure attachment without permission to the
+ * marketing record that owns it.
+ */
+export async function hasTargetBusinessAttachmentPermission(
+  auth: AuthContext,
+  target: CanonicalAttachmentTarget,
+  attachmentAction: "attachment.read" | "attachment.create" | "attachment.delete",
+) {
+  if (target.targetType !== "MARKETING_CREATIVE") return true;
+  if (!target.ownerMembershipId) return false;
+  const actionKey = attachmentAction === "attachment.read" ? "marketing.creative.read" : "marketing.creative.update";
+  const access = await createMarketingCreativeAccessPlan({ membership: auth.membership, actionKey });
+  return access.allowed && access.allows({
+    businessUnitId: target.businessUnitId,
+    departmentId: target.departmentId,
+    siteId: target.siteId,
+    ownerMembershipId: target.ownerMembershipId,
+  });
 }
 
 async function resolveAttachmentTargetInternal(
@@ -65,6 +94,7 @@ async function resolveAttachmentTargetInternal(
           departmentId: actorDepartmentId,
           siteId: null,
           ownerUserId: null,
+          ownerMembershipId: null,
         }
       : null;
   }
@@ -84,6 +114,7 @@ async function resolveAttachmentTargetInternal(
           departmentId: order.departmentId ?? actorDepartmentId,
           siteId: order.siteId,
           ownerUserId: order.creatorUserId,
+          ownerMembershipId: null,
         }
       : null;
   }
@@ -103,6 +134,7 @@ async function resolveAttachmentTargetInternal(
           departmentId: conversation.departmentId ?? actorDepartmentId,
           siteId: null,
           ownerUserId: null,
+          ownerMembershipId: null,
         }
       : null;
   }
@@ -129,8 +161,25 @@ async function resolveAttachmentTargetInternal(
           departmentId: shipment.order.departmentId ?? actorDepartmentId,
           siteId: shipment.siteId,
           ownerUserId: shipment.order.creatorUserId,
+          ownerMembershipId: null,
         }
       : null;
+  }
+  if (targetType === "MARKETING_CREATIVE") {
+    const creative = await prisma.marketingCreative.findFirst({
+      where: { id: targetId, businessUnitId: auth.membership.businessUnitId },
+      select: { id: true, businessUnitId: true, departmentId: true, siteId: true, createdByUserId: true, ownerMembershipId: true, isArchived: true },
+    });
+    if (!creative || creative.isArchived) return null;
+    return {
+      targetType: "MARKETING_CREATIVE",
+      targetId: creative.id,
+      businessUnitId: creative.businessUnitId,
+      departmentId: creative.departmentId ?? actorDepartmentId,
+      siteId: creative.siteId,
+      ownerUserId: creative.createdByUserId,
+      ownerMembershipId: creative.ownerMembershipId,
+    };
   }
   return null;
 }

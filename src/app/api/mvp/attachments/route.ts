@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { requireAuthContext } from "@/lib/api-auth";
 import { checkPermission } from "@/lib/permission";
 import { fail, ok } from "@/lib/api-response";
-import { resolveAttachmentTarget } from "@/lib/attachments";
+import { hasTargetBusinessAttachmentPermission, resolveAttachmentTarget } from "@/lib/attachments";
 import { validateUpload } from "@/lib/storage/file-validation";
 import { localDemoStorage } from "@/lib/storage/local-demo";
 import { prisma } from "@/lib/prisma";
@@ -43,8 +43,12 @@ async function authorizeTarget(request: NextRequest, actionKey: string, targetTy
     targetDepartmentId: target.departmentId,
     targetSiteId: target.siteId,
     targetUserId: target.ownerUserId,
+    targetMembershipId: target.ownerMembershipId,
   });
   if (!decision.allowed) return { response: fail("FORBIDDEN", "没有附件操作权限。", 403, decision.reasons) };
+  if (!(await hasTargetBusinessAttachmentPermission(auth, target, actionKey as "attachment.read" | "attachment.create"))) {
+    return { response: fail("FORBIDDEN", "没有目标业务记录的附件操作权限。", 403) };
+  }
   return { auth, target };
 }
 
@@ -83,8 +87,12 @@ export async function POST(request: NextRequest) {
     targetDepartmentId: target.departmentId,
     targetSiteId: target.siteId,
     targetUserId: target.ownerUserId,
+    targetMembershipId: target.ownerMembershipId,
   });
   if (!decision.allowed) return fail("FORBIDDEN", "没有附件操作权限。", 403, decision.reasons);
+  if (!(await hasTargetBusinessAttachmentPermission(auth, target, "attachment.create"))) {
+    return fail("FORBIDDEN", "没有目标业务记录的附件上传权限。", 403);
+  }
   if (targetType === "ORDER_REVIEW") {
     const reviewOrder = await prisma.order.findFirst({
       where: { id: targetId, businessUnitId: auth.membership.businessUnitId },
@@ -114,6 +122,14 @@ export async function POST(request: NextRequest) {
     return fail("FILE_REQUIRED", "请选择需要上传的文件。", 400);
   }
   if (file.size > 50 * 1024 * 1024) return fail("FILE_SIZE_LIMIT_EXCEEDED", "文件超过允许大小。", 413);
+  const requestedPurpose = String(form?.get("purpose") ?? "PRIMARY").trim().toUpperCase();
+  if (target.targetType === "MARKETING_CREATIVE" && !["PRIMARY", "SUPPORTING", "COPY_REFERENCE"].includes(requestedPurpose)) {
+    return fail("INVALID_ATTACHMENT_PURPOSE", "素材附件用途不正确。", 400);
+  }
+  const requestedSortOrder = Number(form?.get("sortOrder") ?? 0);
+  if (!Number.isInteger(requestedSortOrder) || requestedSortOrder < 0 || requestedSortOrder > 100000) {
+    return fail("INVALID_ATTACHMENT_SORT_ORDER", "素材附件排序不正确。", 400);
+  }
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   let validated;
@@ -151,6 +167,16 @@ export async function POST(request: NextRequest) {
         },
         select: safeSelect,
       });
+      if (target.targetType === "MARKETING_CREATIVE") {
+        await tx.marketingCreativeAttachment.create({
+          data: {
+            creativeId: target.targetId,
+            attachmentId: created.id,
+            purpose: requestedPurpose as "PRIMARY" | "SUPPORTING" | "COPY_REFERENCE",
+            sortOrder: requestedSortOrder,
+          },
+        });
+      }
       await writeAuditLog({
         actorUserId: auth.userId,
         actorMembershipId: auth.membership.id,
