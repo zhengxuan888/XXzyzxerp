@@ -16,6 +16,13 @@ services:
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
+    cpus: 1.5
+    mem_limit: 2g
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 15s
@@ -39,6 +46,13 @@ services:
       postgres:
         condition: service_healthy
     restart: "no"
+    cpus: 1.0
+    mem_limit: 2g
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "2"
     networks:
       - erp-internal
 
@@ -56,6 +70,13 @@ services:
       timeout: 5s
       retries: 12
     restart: unless-stopped
+    cpus: 1.0
+    mem_limit: 2g
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
     networks:
       - erp-internal
 
@@ -70,6 +91,13 @@ services:
       timeout: 3s
       retries: 12
     restart: unless-stopped
+    cpus: 0.5
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
     networks:
       - erp-internal
 
