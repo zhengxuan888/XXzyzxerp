@@ -280,7 +280,7 @@ export default function OrderEntryForm({
 
         <Section title="收件信息">
           <div className="md:col-span-4 rounded-xl border border-violet-100 bg-violet-50/60 p-3">
-            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-violet-800"><Sparkles size={15} />智能识别地址（辅助，不替代人工核对）</div>
+            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-violet-800"><Sparkles size={15} />智能识别地址（请仔细核对）</div>
             <textarea value={smartAddress} onChange={(event) => setSmartAddress(event.target.value)} className="min-h-20 w-full rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-violet-100" placeholder="粘贴客户发来的姓名、电话、地址和邮箱，每行一项" />
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <button type="button" onClick={parseSmartAddress} className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-700">识别并填充</button>
