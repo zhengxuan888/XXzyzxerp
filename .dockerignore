@@ -1,0 +1,14 @@
+.git
+.next
+node_modules
+.env
+.env.*
+!.env.example
+!.env.staging.example
+playwright-report
+test-results
+storybook-static
+acceptance-evidence
+.local-logs
+.local-storage
+*.log
