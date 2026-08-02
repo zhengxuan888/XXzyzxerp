@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { issueSessionToken, parseSessionFromToken } from "@/lib/auth";
+import { describe, expect, it, vi } from "vitest";
+import { isSecureSessionCookie, issueSessionToken, parseSessionFromToken } from "@/lib/auth";
 
 describe("登录与 Session 编码一致性", () => {
   it("中文用户名只作为 JWT 数据，不依赖 URL 或 Header 编码", async () => {
@@ -21,5 +21,17 @@ describe("登录与 Session 编码一致性", () => {
     });
     await expect(parseSessionFromToken(`${token.slice(0, -2)}xx`)).resolves.toBeNull();
     await expect(parseSessionFromToken("not-a-jwt")).resolves.toBeNull();
+  });
+
+  it("按公开访问协议设置 Session Cookie 的 Secure 属性", () => {
+    try {
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("APP_BASE_URL", "http://43.134.91.39");
+      expect(isSecureSessionCookie()).toBe(false);
+      vi.stubEnv("APP_BASE_URL", "https://erp.example.com");
+      expect(isSecureSessionCookie()).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

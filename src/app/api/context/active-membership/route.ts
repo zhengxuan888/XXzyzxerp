@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getActiveMembershipById, issueSessionToken, SESSION_COOKIE } from "@/lib/auth";
+import { getActiveMembershipById, isSecureSessionCookie, issueSessionToken, SESSION_COOKIE } from "@/lib/auth";
 import { getSessionFromRequest } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
-    secure: process.env.NODE_ENV === "production",
+    secure: isSecureSessionCookie(),
     maxAge: 60 * 60 * 8,
   });
   return response;

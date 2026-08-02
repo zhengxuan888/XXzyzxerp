@@ -5,6 +5,18 @@ import { prisma } from "@/lib/prisma";
 export const SESSION_COOKIE = "erpv2_session";
 const SESSION_TTL_SECONDS = Number(process.env.SESSION_TTL_SECONDS ?? "28800"); // 8 hours
 
+export function isSecureSessionCookie() {
+  const appBaseUrl = process.env.APP_BASE_URL;
+  if (appBaseUrl) {
+    try {
+      return new URL(appBaseUrl).protocol === "https:";
+    } catch {
+      // Invalid deployment configuration should retain the production-safe default.
+    }
+  }
+  return process.env.NODE_ENV === "production";
+}
+
 function getSessionSecret() {
   const configured = process.env.SESSION_SECRET;
   if (configured) return configured;
