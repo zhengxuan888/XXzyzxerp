@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ClipboardCopy, Loader2, RefreshCw, Truck } from "lucide-react";
+import { AlertCircle, Check, ClipboardCopy, Loader2, RefreshCw, Truck } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 type Row = { membershipId: string; employeeName: string; username: string; departmentName: string; todayOrders: number; monthOrders: number; previousMonthOrders: number; todayShipped: number; monthShipped: number; previousMonthShipped: number; todayDelivered: number; monthDelivered: number; previousMonthDelivered: number };
@@ -12,17 +12,38 @@ const summaryCards: Array<[string, string]> = [
   ["previousMonthInTransit", "上月末在途"], ["todayDelivered", "今日签收"], ["monthDelivered", "本月签收"], ["previousMonthDelivered", "上月签收"],
 ];
 
+async function copyText(text: string) {
+  if (window.isSecureContext && navigator.clipboard) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  activeElement?.focus();
+  if (!copied) throw new Error("COPY_NOT_SUPPORTED");
+}
+
 export default function AfterSalesDailyReport() {
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true); setMessage("");
+    setLoading(true); setMessage(null);
     const response = await fetch("/api/mvp/after-sales-daily-report", { cache: "no-store" });
     const payload = await response.json().catch(() => null);
     setLoading(false);
-    if (!response.ok) { setMessage(payload?.error?.message ?? "售后日报加载失败。"); return; }
+    if (!response.ok) { setMessage({ type: "error", text: payload?.error?.message ?? "售后日报加载失败。" }); return; }
     setData(payload.data);
   }, []);
 
@@ -32,7 +53,12 @@ export default function AfterSalesDailyReport() {
     if (!data) return;
     const s = data.summary;
     const lines = [`${data.date} 售后统一日报`, `今日跟踪 ${s.todayTracking}｜今日开单 ${s.todayOrders}｜今日发货 ${s.todayShipped}｜今日签收 ${s.todayDelivered}`, `本月开单 ${s.monthOrders}｜本月发货 ${s.monthShipped}｜当前在途 ${s.currentInTransit}｜本月签收 ${s.monthDelivered}`, `上月开单 ${s.previousMonthOrders}｜上月发货 ${s.previousMonthShipped}｜上月末在途 ${s.previousMonthInTransit}｜上月签收 ${s.previousMonthDelivered}`, "", "员工明细", ...data.rows.map((row) => `${row.employeeName}：今日开单 ${row.todayOrders}，今日发货 ${row.todayShipped}，今日签收 ${row.todayDelivered}，本月开单 ${row.monthOrders}，本月签收 ${row.monthDelivered}`)];
-    await navigator.clipboard.writeText(lines.join("\n")); setMessage("日报文字已复制，可以直接粘贴到工作群。");
+    try {
+      await copyText(lines.join("\n"));
+      setMessage({ type: "success", text: "日报文字已复制，可以直接粘贴到工作群。" });
+    } catch {
+      setMessage({ type: "error", text: "浏览器未允许复制，请使用 HTTPS 或允许此网站访问剪贴板。" });
+    }
   }
 
   return <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -46,6 +72,6 @@ export default function AfterSalesDailyReport() {
         <div className="overflow-x-auto"><table className="w-full min-w-[820px] text-left text-sm"><thead><tr className="bg-slate-50 text-xs text-slate-500"><th className="rounded-l-xl px-3 py-3">员工</th><th className="px-3 py-3">今日开单</th><th className="px-3 py-3">今日发货</th><th className="px-3 py-3">今日签收</th><th className="px-3 py-3">本月签收</th><th className="px-3 py-3">上月签收</th><th className="rounded-r-xl px-3 py-3">本月开单</th></tr></thead><tbody>{data?.rows.map((row) => <tr key={row.membershipId} className="border-b border-slate-100"><td className="px-3 py-3"><p className="font-semibold text-slate-900">{row.employeeName}</p><p className="text-xs text-slate-400">{row.departmentName}</p></td><td className="px-3 py-3 font-bold">{row.todayOrders}</td><td className="px-3 py-3 font-semibold">{row.todayShipped}</td><td className="px-3 py-3 font-semibold">{row.todayDelivered}</td><td className="px-3 py-3">{row.monthDelivered}</td><td className="px-3 py-3">{row.previousMonthDelivered}</td><td className="px-3 py-3 font-bold">{row.monthOrders}</td></tr>)}{!data?.rows.length && <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">当前权限范围内暂无员工数据</td></tr>}</tbody></table></div>
       </div>
     </>}
-    {message && <div role="status" className="flex items-center gap-2 border-t border-slate-100 bg-slate-50 px-5 py-3 text-sm text-slate-700"><Check size={15} className="text-emerald-600" />{message}</div>}
+    {message && <div role="status" className={`flex items-center gap-2 border-t px-5 py-3 text-sm ${message.type === "success" ? "border-emerald-100 bg-emerald-50 text-emerald-800" : "border-red-100 bg-red-50 text-red-700"}`}>{message.type === "success" ? <Check size={15} /> : <AlertCircle size={15} />}{message.text}</div>}
   </section>;
 }

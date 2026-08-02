@@ -5,12 +5,13 @@ import { prisma } from "@/lib/prisma";
 import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
 import { checkPermission } from "@/lib/permission";
+import { actionLabel, scopeLabel } from "@/lib/permission-display";
 
 const SCOPE_OPTIONS = [
-  { value: "SITE", label: "SITE" },
-  { value: "DEPARTMENT", label: "DEPARTMENT" },
-  { value: "BUSINESS_UNIT", label: "BUSINESS_UNIT" },
-  { value: "ALL", label: "ALL" },
+  { value: "SITE", label: scopeLabel("SITE") },
+  { value: "DEPARTMENT", label: scopeLabel("DEPARTMENT") },
+  { value: "BUSINESS_UNIT", label: scopeLabel("BUSINESS_UNIT") },
+  { value: "ALL", label: scopeLabel("ALL") },
 ];
 
 export default async function AccessGrantsPage() {
@@ -65,7 +66,7 @@ export default async function AccessGrantsPage() {
     prisma.site.findMany({ where: canSeeAll ? {} : { businessUnitId: membership.businessUnitId }, orderBy: { name: "asc" } }),
   ]);
 
-  const actionOptions = actions.map((action) => ({ value: action.key, label: action.key }));
+  const actionOptions = actions.map((action) => ({ value: action.key, label: actionLabel(action.key) }));
   const membershipOptions = memberships.map((item) => ({
     value: item.id,
     label: `${item.user.username} | ${item.businessUnit?.name ?? "BU"} | ${item.role?.name ?? item.roleId}`,
@@ -74,7 +75,7 @@ export default async function AccessGrantsPage() {
   return (
     <CrudPage
       resource="access-grants"
-      listTitle="Access Grants"
+      listTitle="临时授权"
       canCreate={canCreate.allowed}
       canUpdate={canUpdate.allowed}
       canDelete={canDelete.allowed}
@@ -83,14 +84,14 @@ export default async function AccessGrantsPage() {
       createFields={[
         {
           key: "granteeMembershipId",
-          label: "Grantee Membership",
+          label: "授权员工",
           type: "select",
           required: true,
           options: membershipOptions,
         },
         {
           key: "actionKey",
-          label: "Action",
+          label: "授权动作",
           type: "select",
           required: true,
           options: actionOptions,
@@ -104,7 +105,7 @@ export default async function AccessGrantsPage() {
         },
         {
           key: "scope",
-          label: "Scope",
+          label: "数据范围",
           type: "select",
           required: true,
           options: SCOPE_OPTIONS,
@@ -124,13 +125,13 @@ export default async function AccessGrantsPage() {
         { key: "isActive", label: "启用授权", type: "checkbox" },
         {
           key: "reason",
-          label: "Reason",
+          label: "授权原因",
           required: true,
           type: "text",
         },
         {
           key: "expiresAt",
-          label: "Expires At",
+          label: "到期时间",
           type: "text",
           placeholder: "YYYY-MM-DDTHH:mm:ssZ",
         },
@@ -138,7 +139,7 @@ export default async function AccessGrantsPage() {
       dataColumns={[
         {
           key: "granteeMembership",
-          label: "Target",
+          label: "授权员工",
           render: (row) => {
             const membership = row.granteeMembership as { user?: { username?: string } } | undefined;
             return membership?.user?.username || "-";
@@ -146,12 +147,12 @@ export default async function AccessGrantsPage() {
         },
         {
           key: "action",
-          label: "Action",
-          render: (row) => ((row.action as { key?: string } | undefined)?.key ?? "-"),
+          label: "授权动作",
+          render: (row) => actionLabel((row.action as { key?: string } | undefined)?.key ?? ""),
         },
-        { key: "scope", label: "Scope" },
-        { key: "businessUnitId", label: "Business Unit ID" },
-        { key: "reason", label: "Reason" },
+        { key: "scope", label: "数据范围", render: (row) => scopeLabel(String(row.scope ?? "")) },
+        { key: "businessUnitId", label: "业务板块", render: (row) => (row.granteeMembership as { businessUnit?: { name?: string } } | undefined)?.businessUnit?.name ?? "-" },
+        { key: "reason", label: "授权原因" },
         { key: "expiresAt", label: "到期时间", render: (row) => row.expiresAt instanceof Date ? row.expiresAt.toLocaleString("zh-CN") : "长期有效" },
         { key: "isActive", label: "状态", render: (row) => {
           if (!row.isActive || row.revokedAt) return "已撤销";

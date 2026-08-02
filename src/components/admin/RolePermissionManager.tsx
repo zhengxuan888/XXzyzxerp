@@ -2,6 +2,7 @@
 
 import { LoaderCircle, Pencil, Plus } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
+import { actionLabel, namespaceLabel } from "@/lib/permission-display";
 
 type Scope = "ALL" | "BUSINESS_UNIT" | "DEPARTMENT" | "DEPARTMENT_TREE" | "SUBORDINATES" | "SITE" | "SELF";
 type ActionOption = { key: string; name: string; namespace: string; defaultScope: Scope };
@@ -115,11 +116,11 @@ function RoleForm({ role, actions, busy, onSubmit, onCancel }: {
       <div className="max-h-[34rem] space-y-4 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-3">
         {groups.map((namespace) => (
           <fieldset key={namespace} className="rounded-xl border border-slate-200 bg-white p-3">
-            <legend className="px-2 text-xs font-bold uppercase text-violet-700">{namespace}</legend>
+            <legend className="px-2 text-xs font-bold text-violet-700">{namespaceLabel(namespace)}</legend>
             <div className="grid gap-2 xl:grid-cols-2">
               {actions.filter((action) => action.namespace === namespace).map((action) => (
                 <div key={action.key} className="grid grid-cols-[1fr_9rem] items-center gap-2 rounded-lg border border-slate-100 p-2">
-                  <label className="flex min-w-0 items-start gap-2 text-xs"><input type="checkbox" name={`allowed:${action.key}`} defaultChecked={permissionMap.has(action.key)} /><span className="min-w-0"><strong className="block truncate">{action.name}</strong><small className="block truncate text-slate-400">{action.key}</small></span></label>
+                  <label className="flex min-w-0 items-start gap-2 text-xs"><input type="checkbox" name={`allowed:${action.key}`} defaultChecked={permissionMap.has(action.key)} /><span className="min-w-0"><strong className="block truncate">{actionLabel(action.key)}</strong></span></label>
                   <select name={`scope:${action.key}`} defaultValue={permissionMap.get(action.key) ?? action.defaultScope} className="h-8 rounded-lg border border-slate-200 px-2 text-xs">{scopes.map((scope) => <option key={scope.value} value={scope.value}>{scope.label}</option>)}</select>
                 </div>
               ))}

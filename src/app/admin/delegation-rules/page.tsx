@@ -6,6 +6,7 @@ import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookie } from "@/lib/session";
 import { getSystemConfigurationPermission } from "@/lib/system-configuration";
+import { actionLabel, scopeLabel } from "@/lib/permission-display";
 
 const scopes = [
   { value: "SELF", label: "本人" },
@@ -53,14 +54,14 @@ export default async function DelegationRulesPage() {
       rows={rows}
       createFields={[
         { key: "roleId", label: "授权来源角色", type: "select", required: true, options: roles.map((role) => ({ value: role.id, label: role.name })) },
-        { key: "actionKey", label: "允许转授的动作", type: "select", required: true, options: actions.map((action) => ({ value: action.key, label: `${action.key} · ${action.name}` })) },
+        { key: "actionKey", label: "允许转授的动作", type: "select", required: true, options: actions.map((action) => ({ value: action.key, label: actionLabel(action.key) })) },
         { key: "maxScope", label: "最大授权范围", type: "select", required: true, options: scopes },
         { key: "canTransfer", label: "允许转授", type: "checkbox" },
       ]}
       dataColumns={[
         { key: "role", label: "来源角色", render: (row) => (row.role as { name?: string } | undefined)?.name ?? "-" },
-        { key: "actionKey", label: "动作" },
-        { key: "maxScope", label: "最大范围" },
+        { key: "actionKey", label: "动作", render: (row) => actionLabel(String(row.actionKey ?? "")) },
+        { key: "maxScope", label: "最大范围", render: (row) => scopeLabel(String(row.maxScope ?? "")) },
         { key: "canTransfer", label: "转授状态", render: (row) => row.canTransfer ? "允许" : "禁止" },
       ]}
     />

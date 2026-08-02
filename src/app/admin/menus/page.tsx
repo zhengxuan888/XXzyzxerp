@@ -6,6 +6,7 @@ import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
 import { checkPermission } from "@/lib/permission";
 import { getSystemConfigurationPermission } from "@/lib/system-configuration";
+import { actionLabel } from "@/lib/permission-display";
 
 export default async function MenusPage() {
   const session = await getSessionFromCookie();
@@ -47,7 +48,7 @@ export default async function MenusPage() {
       canCreate={canCreate.allowed}
       canUpdate={canUpdate.allowed}
       menus={rows.map((row) => ({ id: row.id, key: row.key, label: row.label, path: row.path, icon: row.icon, parentId: row.parentId, parentLabel: row.parent?.label ?? null, sortOrder: row.sortOrder, isActive: row.isActive, requiredActionKey: row.requiredActionKey }))}
-      actionOptions={actions.map((action) => ({ value: action.key, label: `${action.key} · ${action.name}` }))}
+      actionOptions={actions.map((action) => ({ value: action.key, label: actionLabel(action.key) }))}
     />
   );
 }
