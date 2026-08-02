@@ -1,20 +1,16 @@
-import { feishuWebhookFromEnv } from "@/lib/notifications/feishu-webhook";
+import { FeishuWebhookNotificationProvider } from "@/lib/notifications/feishu-webhook";
+import { getFeishuCredential } from "@/lib/integration-credentials";
 import { nextNotificationRetryAt, safeNotificationError } from "@/lib/notifications/logistics-delivery";
 import { prisma } from "@/lib/prisma";
 
 const MAX_ATTEMPTS = 5;
 
 async function main() {
-  const provider = feishuWebhookFromEnv();
-  if (!provider) {
-    console.log("Feishu webhook disabled or missing; notification queue remains pending.");
-    return;
-  }
   const now = new Date();
   const staleLock = new Date(now.getTime() - 10 * 60_000);
   const deliveries = await prisma.notificationDelivery.findMany({
     where: {
-      channel: provider.key,
+      channel: "FEISHU_WEBHOOK",
       OR: [
         { status: { in: ["PENDING", "RETRY"] }, nextAttemptAt: { lte: now } },
         { status: "PROCESSING", lockedAt: { lte: staleLock } },
@@ -26,6 +22,7 @@ async function main() {
   });
   let sent = 0;
   let failed = 0;
+  const providers = new Map<string, FeishuWebhookNotificationProvider | null>();
   for (const delivery of deliveries) {
     const claimed = await prisma.notificationDelivery.updateMany({
       where: {
@@ -39,6 +36,12 @@ async function main() {
     });
     if (!claimed.count) continue;
     try {
+      if (!providers.has(delivery.businessUnitId)) {
+        const credential = await getFeishuCredential(delivery.businessUnitId);
+        providers.set(delivery.businessUnitId, credential?.botWebhookUrl ? new FeishuWebhookNotificationProvider(credential.botWebhookUrl, credential.botSecret) : null);
+      }
+      const provider = providers.get(delivery.businessUnitId);
+      if (!provider) throw new Error("飞书机器人未启用或缺少 Webhook 地址。");
       const orderNo = delivery.shipment?.order.orderNo ?? "未知订单";
       const result = await provider.send({
         title: "ERP 物流售后提醒",

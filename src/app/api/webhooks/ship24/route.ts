@@ -6,9 +6,9 @@ import { prisma } from "@/lib/prisma";
 import { normalizeProviderEventStatus, providerFollowUpAt, shouldApplyProviderStatus } from "@/lib/logistics/provider";
 import { parseLogisticsWorkbenchConfig } from "@/lib/logistics-workbench-config";
 import { queueLogisticsNotification } from "@/lib/notifications/logistics-delivery";
+import { getShip24Credential } from "@/lib/integration-credentials";
 
-function validSignature(raw: string, signature: string | null) {
-  const secret = process.env.SHIP24_WEBHOOK_SECRET?.trim();
+function validSignature(raw: string, signature: string | null, secret?: string) {
   if (!secret || !signature) return false;
   const expected = createHmac("sha256", secret).update(raw).digest("hex");
   const given = signature.replace(/^sha256=/, "");
@@ -17,9 +17,6 @@ function validSignature(raw: string, signature: string | null) {
 
 export async function POST(request: NextRequest) {
   const raw = await request.text();
-  if (!validSignature(raw, request.headers.get("x-ship24-signature"))) {
-    return NextResponse.json({ ok: false, error: "Invalid webhook signature." }, { status: 401 });
-  }
   let payload: Record<string, unknown>;
   try { payload = JSON.parse(raw) as Record<string, unknown>; } catch { return NextResponse.json({ ok: false, error: "Invalid JSON." }, { status: 400 }); }
   const data = (payload.data && typeof payload.data === "object" ? payload.data : payload) as Record<string, unknown>;
@@ -27,8 +24,16 @@ export async function POST(request: NextRequest) {
   const eventKey = String(data.eventId ?? data.id ?? payload.eventId ?? "").trim();
   const status = String(data.statusMilestone ?? data.status ?? "UNKNOWN").toUpperCase();
   if (!trackingNo || !eventKey) return NextResponse.json({ ok: false, error: "trackingNumber and event id are required." }, { status: 400 });
-  const shipment = await prisma.shipment.findFirst({ where: { trackingNo, status: { not: "PENDING" } }, select: { id: true, businessUnitId: true, status: true } });
-  if (!shipment) return NextResponse.json({ ok: true, ignored: true });
+  const candidates = await prisma.shipment.findMany({ where: { trackingNo, status: { not: "PENDING" } }, select: { id: true, businessUnitId: true, status: true } });
+  let shipment: (typeof candidates)[number] | undefined;
+  for (const candidate of candidates) {
+    const credential = await getShip24Credential(candidate.businessUnitId);
+    if (validSignature(raw, request.headers.get("x-ship24-signature"), credential?.webhookSecret)) {
+      shipment = candidate;
+      break;
+    }
+  }
+  if (!shipment) return NextResponse.json({ ok: false, error: "Invalid webhook signature." }, { status: 401 });
   const normalized = normalizeProviderEventStatus(status);
   if (!normalized) return NextResponse.json({ ok: true, ignored: true, reason: "UNKNOWN_STATUS" });
   const occurredAt = new Date(String(data.dateTime ?? data.datetime ?? new Date().toISOString()));

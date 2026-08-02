@@ -1,15 +1,13 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
-import { Ship24Adapter, ship24ConfigFromEnv } from "@/lib/logistics/ship24-adapter";
+import { Ship24Adapter } from "@/lib/logistics/ship24-adapter";
+import { getShip24Credential } from "@/lib/integration-credentials";
 import { parseLogisticsWorkbenchConfig } from "@/lib/logistics-workbench-config";
 import { normalizeProviderEventStatus, providerFollowUpAt, shouldApplyProviderStatus } from "@/lib/logistics/provider";
 import { queueLogisticsNotification } from "@/lib/notifications/logistics-delivery";
 
 async function main() {
-  const config = ship24ConfigFromEnv();
-  if (!config) { console.log("Ship24 disabled or missing key; skip sync."); return; }
-  const adapter = new Ship24Adapter(config);
   const candidates = await prisma.shipment.findMany({
     where: {
       trackingNo: { not: null },
@@ -25,8 +23,15 @@ async function main() {
     return !shipment.lastTrackedAt || now - shipment.lastTrackedAt.getTime() >= interval * 60_000;
   });
   let inserted = 0; let failed = 0;
+  const adapters = new Map<string, Ship24Adapter | null>();
   for (const shipment of shipments) {
     try {
+      if (!adapters.has(shipment.businessUnitId)) {
+        const config = await getShip24Credential(shipment.businessUnitId);
+        adapters.set(shipment.businessUnitId, config ? new Ship24Adapter({ ...config, enabled: true }) : null);
+      }
+      const adapter = adapters.get(shipment.businessUnitId);
+      if (!adapter) continue;
       const result = await adapter.track(shipment.trackingNo!, shipment.carrier ?? undefined);
       const shipmentResult = await prisma.$transaction(async (tx) => {
         let shipmentInserted = 0;

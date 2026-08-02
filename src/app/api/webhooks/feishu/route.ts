@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { syncChannelConnection } from "@/lib/inbox/sync";
 import { FeishuWebhookAdapter, parseFeishuMessage } from "@/lib/inbox/feishu-adapter";
+import { getFeishuCredential } from "@/lib/integration-credentials";
 
 export const runtime = "nodejs";
 
@@ -16,7 +17,12 @@ function sameSecret(actual: string | null, expected: string | undefined) {
 export async function POST(request: NextRequest) {
   const payload = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!payload) return NextResponse.json({ error: "INVALID_JSON" }, { status: 400 });
-  const expectedToken = process.env.FEISHU_VERIFICATION_TOKEN;
+  const connectionId = request.headers.get("x-feishu-connection-id");
+  if (!connectionId) return NextResponse.json({ error: "MISSING_CONNECTION_ID" }, { status: 400 });
+  const connection = await prisma.channelConnection.findFirst({ where: { id: connectionId, providerKey: "FEISHU", isActive: true } });
+  if (!connection) return NextResponse.json({ error: "FEISHU_CONNECTION_NOT_FOUND" }, { status: 404 });
+  const credential = await getFeishuCredential(connection.businessUnitId);
+  const expectedToken = credential?.verificationToken;
   const token = typeof payload.token === "string" ? payload.token : request.headers.get("x-feishu-verification-token");
   if (!sameSecret(token, expectedToken)) return NextResponse.json({ error: "INVALID_VERIFICATION_TOKEN" }, { status: 401 });
 
@@ -24,10 +30,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ challenge: payload.challenge });
   }
 
-  const connectionId = request.headers.get("x-feishu-connection-id");
-  if (!connectionId) return NextResponse.json({ error: "MISSING_CONNECTION_ID" }, { status: 400 });
-  const connection = await prisma.channelConnection.findFirst({ where: { id: connectionId, providerKey: "FEISHU", isActive: true } });
-  if (!connection) return NextResponse.json({ error: "FEISHU_CONNECTION_NOT_FOUND" }, { status: 404 });
   const message = parseFeishuMessage(payload);
   if (!message) return NextResponse.json({ ok: true, ignored: true });
   const result = await syncChannelConnection(connection.id, new FeishuWebhookAdapter(message));

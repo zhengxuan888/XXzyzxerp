@@ -72,6 +72,7 @@ function main() {
     "DATABASE_URL",
     "REDIS_URL",
     "SESSION_SECRET",
+    "INTEGRATION_CREDENTIAL_MASTER_KEY",
     "SESSION_TTL_SECONDS",
     "STORAGE_PROVIDER",
   ];
@@ -91,10 +92,12 @@ function main() {
     errors.push("SESSION_TTL_SECONDS 必须是 300-86400 的整数");
   }
   if ((config.SESSION_SECRET ?? "").length < 32) errors.push("SESSION_SECRET 至少需要 32 个字符");
+  if ((config.INTEGRATION_CREDENTIAL_MASTER_KEY ?? "").length < 32) errors.push("INTEGRATION_CREDENTIAL_MASTER_KEY 至少需要 32 个字符");
 
   if (options.mode === "local") {
     if (config.NODE_ENV !== "development") warnings.push("本地模式建议 NODE_ENV=development");
     if (isPlaceholder(config.SESSION_SECRET)) warnings.push("SESSION_SECRET 仍是占位值，只允许本地演示");
+    if (isPlaceholder(config.INTEGRATION_CREDENTIAL_MASTER_KEY)) warnings.push("接口凭据主密钥仍是占位值，只允许本地演示");
     if (config.STORAGE_PROVIDER !== "LOCAL_DEMO") warnings.push("本地模式通常使用 LOCAL_DEMO");
   } else {
     if (config.NODE_ENV !== "production") errors.push("预发布必须使用 NODE_ENV=production");

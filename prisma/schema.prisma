@@ -388,6 +388,7 @@ model BusinessUnit {
   logisticsFollowUps                  LogisticsFollowUp[]
   logisticsEventAnnotations           LogisticsEventAnnotation[]
   logisticsWorkbenchSetting           LogisticsWorkbenchSetting?
+  integrationCredentials              IntegrationCredential[]
   dashboardWorkbenchSetting           DashboardWorkbenchSetting?
   channelConnections                  ChannelConnection[]
   contactIdentities                   ContactIdentity[]
@@ -1373,6 +1374,24 @@ model LogisticsWorkbenchSetting {
   updatedAt                  DateTime @updatedAt
 
   businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+}
+
+// Third-party credentials are encrypted as one authenticated payload. Raw
+// values are never stored in JSON configuration columns or audit records.
+model IntegrationCredential {
+  id              String   @id @default(uuid())
+  businessUnitId  String
+  providerKey     String
+  encryptedPayload String
+  isEnabled       Boolean  @default(false)
+  updatedByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+
+  @@unique([businessUnitId, providerKey])
+  @@index([businessUnitId, isEnabled])
 }
 
 // Dashboard cards are business-unit configuration, not a hard-coded role

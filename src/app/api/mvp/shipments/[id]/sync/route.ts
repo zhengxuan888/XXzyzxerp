@@ -8,7 +8,8 @@ import { prisma } from "@/lib/prisma";
 import { fail, ok } from "@/lib/api-response";
 import { DemoTrackingAdapter } from "@/lib/logistics/ship24-adapter";
 import { normalizeProviderEventStatus, providerFollowUpAt, ProviderConfigurationError, shouldApplyProviderStatus } from "@/lib/logistics/provider";
-import { Ship24Adapter, ship24ConfigFromEnv } from "@/lib/logistics/ship24-adapter";
+import { Ship24Adapter } from "@/lib/logistics/ship24-adapter";
+import { getShip24Credential } from "@/lib/integration-credentials";
 import { parseLogisticsWorkbenchConfig } from "@/lib/logistics-workbench-config";
 import { queueLogisticsNotification } from "@/lib/notifications/logistics-delivery";
 
@@ -35,15 +36,13 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
   if (!shipment.trackingNo) return fail("TRACKING_NO_REQUIRED", "请先填写物流单号。", 409);
 
   const body = await request.json().catch(() => null) as { provider?: string } | null;
-  const adapter = body?.provider === "DEMO" && process.env.NODE_ENV !== "production"
-    ? new DemoTrackingAdapter()
-    : (() => {
-        const config = ship24ConfigFromEnv();
-        if (!config) throw new ProviderConfigurationError("Ship24 未启用或缺少 API Key。");
-        return new Ship24Adapter(config);
-      })();
-
   try {
+    const adapter = body?.provider === "DEMO" && process.env.NODE_ENV !== "production"
+      ? new DemoTrackingAdapter()
+      : await getShip24Credential(shipment.businessUnitId).then((config) => {
+          if (!config) throw new ProviderConfigurationError("Ship24 未启用或缺少 API Key。");
+          return new Ship24Adapter({ ...config, enabled: true });
+        });
     const result = await adapter.track(shipment.trackingNo, shipment.carrier ?? undefined);
     const workbenchSetting = await prisma.logisticsWorkbenchSetting.findUnique({
       where: { businessUnitId: shipment.businessUnitId },
