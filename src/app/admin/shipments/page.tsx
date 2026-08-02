@@ -3,6 +3,7 @@
 import LogisticsTrackingWorkbench from "@/components/admin/LogisticsTrackingWorkbench";
 import LogisticsWorkbenchSettings from "@/components/admin/LogisticsWorkbenchSettings";
 import IntegrationCredentialSettings from "@/components/admin/IntegrationCredentialSettings";
+import AfterSalesDailyReport from "@/components/admin/AfterSalesDailyReport";
 import { ShipmentStatus, type Prisma } from "@prisma/client";
 import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
@@ -460,6 +461,7 @@ export default async function ShipmentsPage({
 
   return (
     <div className="space-y-4">
+    <AfterSalesDailyReport />
     {canConfigure.allowed && <>
       <IntegrationCredentialSettings />
       <LogisticsWorkbenchSettings initial={workbenchConfig} />
