@@ -38,29 +38,24 @@ type DashboardConfigurationRows = [
 function WorkbenchSection({ title, description, items }: { title: string; description: string; items: WorkbenchItem[] }) {
   if (items.length === 0) return null;
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <div><h2 className="font-bold text-slate-900">{title}</h2><p className="mt-1 text-xs text-slate-500">{description}</p></div>
-        <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">权限范围内</span>
+    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div><h2 className="font-bold text-slate-900">{title}</h2><p className="mt-0.5 text-xs text-slate-500">{description}</p></div>
+        <span className="text-xs font-medium text-teal-700">仅显示当前权限范围</span>
       </div>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="divide-y divide-slate-100">
         {items.map((item, index) => (
           <Link
             key={item.key}
             href={item.href}
             data-dashboard-card={item.key}
-            className={`group relative overflow-hidden rounded-2xl border p-4 transition hover:-translate-y-0.5 hover:shadow-md ${
-              item.priority ? "border-amber-300 bg-amber-50/80" : "border-slate-200 bg-white hover:border-amber-300"
-            }`}
+            className="group grid min-h-14 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 transition hover:bg-slate-50 sm:grid-cols-[52px_120px_minmax(0,1fr)_72px_90px]"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <span className={`grid size-9 place-items-center rounded-xl text-xs font-black ${item.priority ? "bg-amber-600 text-white" : "bg-amber-50 text-amber-800 group-hover:bg-amber-700 group-hover:text-white"}`}>{index + 1}</span>
-                <h3 className="font-bold text-slate-900">{item.label}</h3>
-              </div>
-              <span className={`min-w-8 rounded-full px-2 py-1 text-center text-xs font-semibold ${item.priority ? "bg-amber-600 text-white" : "bg-slate-100 text-slate-700"}`}>{item.count}</span>
-            </div>
-            <p className="mt-3 pl-12 text-xs leading-5 text-slate-500">{item.description}</p>
+            <span className={`grid size-7 place-items-center rounded text-xs font-bold ${item.priority ? "bg-rose-50 text-rose-700" : "bg-slate-100 text-slate-600"}`}>{index + 1}</span>
+            <span className="hidden text-xs font-medium text-slate-500 sm:block">{item.priority ? "高优先级" : "常规任务"}</span>
+            <span className="min-w-0"><strong className="block truncate text-sm text-slate-800">{item.label}</strong><small className="mt-0.5 block truncate text-xs text-slate-500">{item.description}</small></span>
+            <strong className="text-right text-sm text-slate-800">{item.count}</strong>
+            <span className="hidden h-8 items-center justify-center rounded border border-slate-200 bg-white px-3 text-xs font-semibold text-teal-700 group-hover:border-teal-300 sm:inline-flex">开始处理</span>
           </Link>
         ))}
       </div>
@@ -190,13 +185,18 @@ export default async function AdminHomePage() {
   const [roleRows, departmentRows, membershipRows] = configurationOptions;
 
   return (
-    <div className="space-y-6">
-      <header className="overflow-hidden rounded-2xl bg-gradient-to-r from-slate-950 via-[#3a2b08] to-amber-800 p-6 text-white shadow-lg shadow-amber-100 md:p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-200">{membership.businessUnit?.name ?? "当前业务板块"}</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight">我的工作台</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-amber-50/80">根据当前业务上下文、岗位权限和数据范围展示需要处理的工作；数字不会混入未被授权的部门或员工数据。</p>
-        <p className="mt-5 border-l-2 border-amber-300 pl-3 text-xs leading-5 text-amber-100">择优秀伙伴，选优质资源，创卓越服务。</p>
+    <div className="space-y-4">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div><p className="text-xs font-semibold text-teal-700">{membership.businessUnit?.name ?? "当前业务板块"}</p><h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">我的工作台</h1><p className="mt-1 text-sm text-slate-500">聚合当前岗位的关键指标与待办任务，数据严格遵循权限范围。</p></div>
+        <p className="text-xs text-slate-400">数据更新于当前页面访问时间</p>
       </header>
+
+      <section className="grid grid-cols-2 overflow-hidden rounded-lg border border-slate-200 bg-white sm:grid-cols-3 xl:grid-cols-6" aria-label="工作台关键指标">
+        {[
+          ["我的草稿", myDrafts], ["待核订单", pendingReview], ["待发货", pendingShipment],
+          ["运输中", inTransit], ["高优先级", highPriorityTodo], ["异常物流", needsAttention],
+        ].map(([label, value], index) => <div key={String(label)} className={`px-4 py-3 ${index >= 2 ? "border-t border-slate-100 sm:border-t-0" : ""} ${index % 2 ? "border-l border-slate-100" : "sm:border-l"}`}><p className="text-xs text-slate-500">{label}</p><strong className="mt-1 block text-xl font-bold tabular-nums text-slate-950">{value}</strong></div>)}
+      </section>
 
       {canConfigure.allowed && <DashboardWorkbenchSettings
         initial={workbenchConfig}
@@ -210,10 +210,10 @@ export default async function AdminHomePage() {
       {workbench.length === 0 && <p className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-sm">当前岗位暂未配置可见工作台卡片，请联系拥有工作台配置权限的管理员。</p>}
 
       {secondary.length > 0 && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="rounded-lg border border-slate-200 bg-white p-4">
           <h2 className="mb-3 font-bold text-slate-900">常用功能</h2>
           <div className="flex flex-wrap gap-2">
-            {secondary.map((item) => <Link key={item.href} href={item.href} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800">{item.label}</Link>)}
+            {secondary.map((item) => <Link key={item.href} href={item.href} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800">{item.label}</Link>)}
           </div>
         </section>
       )}

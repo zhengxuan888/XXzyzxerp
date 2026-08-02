@@ -4,11 +4,11 @@
   --background: #ffffff;
   --foreground: #0f172a;
   --surface: #ffffff;
-  --surface-muted: #faf9f6;
-  --brand: #b8892d;
-  --brand-strong: #936817;
-  --brand-soft: #fbf5e8;
-  --brand-border: #ead8ad;
+  --surface-muted: #f6f8f9;
+  --brand: #0891a3;
+  --brand-strong: #0e7482;
+  --brand-soft: #ecf9fa;
+  --brand-border: #b9e6ea;
   --success: #059669;
   --warning: #d97706;
   --danger: #e11d48;
@@ -34,8 +34,8 @@ body {
 }
 
 ::selection {
-  background: #ead8ad;
-  color: #4b3510;
+  background: #b9e6ea;
+  color: #0f3f46;
 }
 
 :focus-visible {
@@ -43,21 +43,21 @@ body {
   outline-offset: 2px;
 }
 
-/* ZC brand bridge: existing utility classes keep their semantics while the
-   shared visual language moves from violet to white + warm gold. */
+/* ZC brand bridge: existing semantic utilities inherit the selected
+   graphite + teal ERP visual system without rewriting every feature page. */
 .bg-violet-50 { background-color: var(--brand-soft) !important; }
-.bg-violet-100 { background-color: #f5e8c9 !important; }
+.bg-violet-100 { background-color: #d8f2f4 !important; }
 .bg-violet-500, .bg-violet-600 { background-color: var(--brand) !important; }
 .bg-violet-700 { background-color: var(--brand-strong) !important; }
 .text-violet-600, .text-violet-700, .text-violet-800 { color: var(--brand-strong) !important; }
 .border-violet-100, .border-violet-200, .border-violet-300 { border-color: var(--brand-border) !important; }
-.ring-violet-100 { --tw-ring-color: #f5e8c9 !important; }
+.ring-violet-100 { --tw-ring-color: #d8f2f4 !important; }
 .focus\:border-violet-400:focus, .focus-within\:border-violet-400:focus-within { border-color: var(--brand) !important; }
 .hover\:bg-violet-50:hover, .focus\:bg-violet-50:focus { background-color: var(--brand-soft) !important; }
 .hover\:bg-violet-700:hover { background-color: var(--brand-strong) !important; }
 .hover\:text-violet-700:hover, .hover\:text-violet-800:hover { color: var(--brand-strong) !important; }
 .from-violet-600 { --tw-gradient-from: var(--brand) var(--tw-gradient-from-position) !important; }
-.from-violet-500 { --tw-gradient-from: #c49a43 var(--tw-gradient-from-position) !important; }
+.from-violet-500 { --tw-gradient-from: #0aa1b3 var(--tw-gradient-from-position) !important; }
 .to-violet-500 { --tw-gradient-to: var(--brand-strong) var(--tw-gradient-to-position) !important; }
 .to-violet-600 { --tw-gradient-to: var(--brand-strong) var(--tw-gradient-to-position) !important; }
 

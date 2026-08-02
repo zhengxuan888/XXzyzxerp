@@ -46,7 +46,7 @@ test("统一收件箱可完成 Demo 消息、状态和客户关联闭环", async
   await expect(page.getByRole("heading", { name: "统一收件箱" })).toBeVisible();
   await expect(page.getByText("演示咨询客户").first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "会话图片与附件" })).toBeVisible();
-  await page.getByRole("button", { name: "拉取演示消息" }).click();
+  await page.getByRole("button", { name: "同步消息" }).click();
   await expect(page.getByRole("article").getByText("可以帮我确认预计送达时间吗？").last()).toBeVisible();
   await page.getByLabel("处理状态").selectOption("PENDING");
   await expect(page.getByText("跟进中").first()).toBeVisible();
@@ -234,8 +234,9 @@ test("商品图片完成安全上传、预览、404 占位与删除", async ({ p
 
   await page.route("**/api/mvp/attachments/*/content**", async (route) => route.fulfill({ status: 404, body: "missing" }));
   await page.reload();
-  await expect(page.getByText("图片加载失败")).toBeVisible();
-  await expect(page.getByRole("button", { name: "重试" })).toBeVisible();
+  const uploadedAsset = page.getByRole("article").filter({ hasText: uploadName });
+  await expect(uploadedAsset.getByText("图片加载失败")).toBeVisible();
+  await expect(uploadedAsset.getByRole("button", { name: "重试" })).toBeVisible();
   await page.unroute("**/api/mvp/attachments/*/content**");
 
   page.once("dialog", (dialog) => dialog.accept());

@@ -70,7 +70,7 @@ export default function DashboardWorkbenchSettings({
   }
 
   return (
-    <section className="rounded-2xl border border-amber-200 bg-white shadow-sm">
+    <section className="rounded-lg border border-slate-200 bg-white">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
@@ -78,20 +78,20 @@ export default function DashboardWorkbenchSettings({
         className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
       >
         <span className="flex items-center gap-3">
-          <span className="grid size-9 place-items-center rounded-xl bg-amber-100 text-amber-800"><Settings2 size={18} /></span>
+          <span className="grid size-9 place-items-center rounded-md bg-teal-50 text-teal-700"><Settings2 size={18} /></span>
           <span><strong className="block text-sm text-slate-900">配置我的工作台</strong><small className="mt-0.5 block text-xs text-slate-500">调整卡片显示、排序、区域，以及适用角色、部门或员工。</small></span>
         </span>
-        <span className="text-xs font-semibold text-amber-800">{open ? "收起配置" : "打开配置"}</span>
+        <span className="text-xs font-semibold text-teal-700">{open ? "收起配置" : "打开配置"}</span>
       </button>
 
-      {open && <div className="space-y-4 border-t border-amber-100 p-5">
-        <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">卡片只决定入口与展示，不增加任何数据权限；实际数字与跳转页面仍会在服务端按当前 Membership、Action、Scope 和临时授权过滤。</p>
+      {open && <div className="space-y-4 border-t border-slate-200 p-5">
+        <p className="rounded-md bg-teal-50 px-3 py-2 text-xs leading-5 text-teal-900">卡片只决定入口与展示，不增加任何数据权限；实际数字与跳转页面仍会在服务端按当前 Membership、Action、Scope 和临时授权过滤。</p>
         <div className="space-y-3">
           {config.cards.map((card, index) => (
-            <article key={card.key} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+            <article key={card.key} className="rounded-lg border border-slate-200 bg-slate-50/70 p-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
-                  <code className="text-xs font-semibold text-amber-800">{card.key}</code>
+                  <code className="text-xs font-semibold text-teal-700">{card.key}</code>
                   <p className="mt-1 text-xs text-slate-500">选择适用范围后，未匹配的角色/部门/员工不会看到此卡片。</p>
                 </div>
                 <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700"><input type="checkbox" checked={card.isVisible} onChange={(event) => updateCard(index, { isVisible: event.target.checked })} />显示此卡片</label>
@@ -111,7 +111,7 @@ export default function DashboardWorkbenchSettings({
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <button type="button" disabled={saving} onClick={() => void save()} className="inline-flex h-10 items-center gap-2 rounded-xl bg-amber-700 px-4 text-sm font-semibold text-white shadow-sm shadow-amber-200 hover:bg-amber-800 disabled:opacity-50"><Save size={16} />{saving ? "保存中…" : "保存工作台配置"}</button>
+          <button type="button" disabled={saving} onClick={() => void save()} className="inline-flex h-10 items-center gap-2 rounded-md bg-teal-700 px-4 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"><Save size={16} />{saving ? "保存中…" : "保存工作台配置"}</button>
           {message && <p role="status" className="text-sm text-slate-600">{message}</p>}
         </div>
       </div>}

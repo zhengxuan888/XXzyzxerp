@@ -46,20 +46,20 @@ export default async function OrganizationsPage() {
   return (
     <CrudPage
       resource="legal-entities"
-      listTitle="Legal entities"
+      listTitle="公司主体"
       canCreate={canCreate.allowed}
       canUpdate={canUpdate.allowed}
       canDelete={canDelete.allowed}
       deleteConfirmation="确定停用该公司吗？历史业务数据会保留，可通过编辑重新启用。"
       rows={rows}
       createFields={[
-        { key: "code", label: "Code", required: true },
-        { key: "name", label: "Name", required: true },
+        { key: "code", label: "主体编码", required: true },
+        { key: "name", label: "主体名称", required: true },
         { key: "isActive", label: "启用", type: "checkbox" },
       ]}
       dataColumns={[
-        { key: "code", label: "Code" },
-        { key: "name", label: "Name" },
+        { key: "code", label: "主体编码" },
+        { key: "name", label: "主体名称" },
         { key: "isActive", label: "状态", render: (row) => row.isActive ? "启用" : "停用" },
       ]}
     />

@@ -186,24 +186,24 @@ export default function AppShell({
 
   return (
     <div className="min-h-screen bg-[var(--surface-muted)] text-slate-900">
-      <header className="fixed inset-x-0 top-0 z-40 h-16 border-b border-slate-200/80 bg-white/95 backdrop-blur">
-        <div className="flex h-full items-center gap-3 px-4 lg:px-6">
+      <header className="fixed inset-x-0 top-0 z-40 h-14 border-b border-slate-200 bg-white">
+        <div className="flex h-full items-center gap-3 px-3 lg:px-5">
           <button
             type="button"
             aria-label="打开导航"
             onClick={() => setMobileOpen(true)}
-            className="inline-flex size-10 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100 lg:hidden"
+            className="inline-flex size-9 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 lg:hidden"
           >
             <Menu size={20} />
           </button>
 
-          <Link href="/admin" className="flex min-w-0 items-center gap-3">
-            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-violet-600 to-cyan-500 text-sm font-black tracking-tight text-white shadow-sm shadow-violet-200">
+          <Link href="/admin" className="flex min-w-0 items-center gap-2.5">
+            <span className="grid size-8 shrink-0 place-items-center rounded-md bg-teal-600 text-xs font-black tracking-tight text-white">
               ZC
             </span>
             <span className="min-w-0">
               <strong className="block truncate text-sm font-bold tracking-tight text-slate-950">{brand}</strong>
-              <span className="block truncate text-[11px] text-slate-500">择优臻选 · 业务运营系统</span>
+              <span className="block truncate text-[10px] text-slate-400">择优臻选 · 业务运营系统</span>
             </span>
           </Link>
 
@@ -211,7 +211,7 @@ export default function AppShell({
             <button
               type="button"
               onClick={openSearch}
-              className="ml-8 flex h-10 w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-slate-400 transition hover:border-violet-300 hover:bg-white hover:text-slate-600 focus:outline-none focus:ring-4 focus:ring-violet-100"
+              className="ml-8 flex h-9 w-full items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 text-slate-400 transition hover:border-teal-300 hover:bg-white hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-teal-100"
             >
               <Search size={16} />
               <span className="text-xs">快速查找功能</span>
@@ -220,7 +220,7 @@ export default function AppShell({
           </div>
 
           <div className="ml-auto flex items-center gap-1 lg:ml-4">
-            <div className="hidden items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 xl:flex">
+            <div className="hidden items-center gap-2 border-l border-slate-200 px-3 py-1.5 xl:flex">
               <Building2 size={15} className="text-violet-600" />
               <span className="max-w-64 truncate text-xs font-medium text-slate-700">
                 {activeMembership?.label ?? "当前业务板块"}
@@ -234,12 +234,12 @@ export default function AppShell({
             >
               <Search size={18} />
             </button>
-            <button type="button" aria-label="通知" className="relative grid size-10 place-items-center rounded-xl text-slate-500 hover:bg-slate-100">
+            <button type="button" aria-label="通知" className="relative grid size-9 place-items-center rounded-md text-slate-500 hover:bg-slate-100">
               <Bell size={18} />
               <span className="absolute right-2 top-2 size-1.5 rounded-full bg-rose-500" />
             </button>
             <div className="hidden items-center gap-2 pl-2 sm:flex">
-              <span className="grid size-9 place-items-center rounded-xl bg-slate-900 text-white"><CircleUserRound size={18} /></span>
+              <span className="grid size-8 place-items-center rounded-full bg-slate-100 text-slate-600"><CircleUserRound size={17} /></span>
               <span className="max-w-44 truncate text-xs font-semibold text-slate-700">{userName || "当前用户"}</span>
             </div>
           </div>
@@ -314,8 +314,8 @@ export default function AppShell({
       )}
 
       <aside
-        className={`fixed bottom-0 left-0 top-16 z-50 border-r border-slate-200 bg-white transition-all duration-200 ${
-          collapsed ? "w-[76px]" : "w-64"
+        className={`fixed bottom-0 left-0 top-14 z-50 border-r border-slate-200 bg-white transition-all duration-200 ${
+          collapsed ? "w-16" : "w-60"
         } ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
         <div className="flex h-full flex-col">
@@ -356,7 +356,7 @@ export default function AppShell({
                             updateGroup(item.id, !expanded);
                           }
                         }}
-                        className={`group flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-sm font-semibold transition ${
+                        className={`group flex min-h-10 w-full items-center gap-3 rounded-md px-3 text-sm font-semibold transition ${
                           childActive ? "bg-violet-50 text-violet-700" : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"
                         }`}
                       >
@@ -379,7 +379,7 @@ export default function AppShell({
                                   onClick={() => setMobileOpen(false)}
                                   className={`flex min-h-9 items-center rounded-lg px-3 text-sm transition ${
                                     activeChild
-                                      ? "bg-violet-600 font-semibold text-white shadow-sm shadow-violet-200"
+                                      ? "bg-teal-50 font-semibold text-teal-800"
                                       : "text-slate-500 hover:bg-slate-100 hover:text-slate-950"
                                   }`}
                                 >
@@ -399,9 +399,9 @@ export default function AppShell({
                       href={item.path}
                       title={collapsed ? menuLabel(item) : undefined}
                       onClick={() => setMobileOpen(false)}
-                      className={`group flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition ${
+                      className={`group flex min-h-10 items-center gap-3 rounded-md px-3 text-sm font-medium transition ${
                         active
-                          ? "bg-gradient-to-r from-violet-600 to-violet-500 text-white shadow-sm shadow-violet-200"
+                          ? "bg-teal-50 font-semibold text-teal-800"
                           : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
                       }`}
                     >
@@ -451,8 +451,8 @@ export default function AppShell({
         </div>
       </aside>
 
-      <main className={`min-h-screen pt-16 transition-all duration-200 ${collapsed ? "lg:pl-[76px]" : "lg:pl-64"}`}>
-        <div className="mx-auto w-full max-w-[1680px] p-4 md:p-6 xl:p-8">{children}</div>
+      <main className={`min-h-screen min-w-0 overflow-x-hidden pt-14 transition-all duration-200 ${collapsed ? "lg:pl-16" : "lg:pl-60"}`}>
+        <div className="mx-auto min-w-0 w-full max-w-[1720px] p-3 md:p-5 xl:p-6">{children}</div>
       </main>
     </div>
   );

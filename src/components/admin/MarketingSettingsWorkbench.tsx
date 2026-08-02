@@ -480,7 +480,30 @@ export default function MarketingSettingsWorkbench() {
   }
 
   if (loading && !data) {
-    return <section className="grid min-h-80 place-items-center rounded-2xl border border-slate-200 bg-white text-sm text-slate-500 shadow-sm"><span className="inline-flex items-center gap-2"><LoaderCircle size={18} className="animate-spin" />正在读取当前业务范围内的投放配置…</span></section>;
+    return (
+      <section aria-busy="true" aria-label="正在加载投放配置" className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 bg-gradient-to-r from-slate-950 via-[#3a2b08] to-amber-800 px-5 py-6 text-white sm:px-6">
+          <p className="text-xs font-semibold tracking-[0.16em] text-amber-200">投放运营 · 可配置基础</p>
+          <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">投放配置中心</h1>
+          <p className="mt-2 text-sm text-amber-50/80">正在同步当前业务范围、权限与工作台卡片，请稍候。</p>
+        </div>
+        <div className="space-y-5 p-5 sm:p-6">
+          <div className="flex items-center gap-3 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status">
+            <LoaderCircle size={18} className="shrink-0 animate-spin" />
+            <span><strong className="font-semibold">正在加载配置</strong><span className="ml-1 text-amber-800/80">首次进入可能需要数秒，不会影响已保存数据。</span></span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-hidden="true">
+            {tabItems.map((tab) => (
+              <div key={tab.key} className="rounded-xl border border-slate-100 p-4">
+                <div className="h-4 w-24 animate-pulse rounded bg-slate-200" />
+                <div className="mt-3 h-3 w-full animate-pulse rounded bg-slate-100" />
+                <div className="mt-2 h-3 w-2/3 animate-pulse rounded bg-slate-100" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    );
   }
 
   if (error || !data) {

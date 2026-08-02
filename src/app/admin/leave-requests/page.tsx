@@ -42,22 +42,22 @@ export default async function LeaveRequestsPage() {
     <CrudPage
       apiBase="/api/mvp"
       resource="leave-requests"
-      listTitle="Leave Requests"
+      listTitle="请假申请"
       canCreate={canSubmit.allowed}
       canDelete={canApprove.allowed || canSubmit.allowed}
       rows={rows}
       createFields={[
-        { key: "startDate", label: "Start Date (YYYY-MM-DD)", required: true },
-        { key: "endDate", label: "End Date (YYYY-MM-DD)", required: true },
-        { key: "reason", label: "Reason", required: true },
-        { key: "rejectReason", label: "Reject Reason" },
+        { key: "startDate", label: "开始日期（YYYY-MM-DD）", required: true },
+        { key: "endDate", label: "结束日期（YYYY-MM-DD）", required: true },
+        { key: "reason", label: "请假原因", required: true },
+        { key: "rejectReason", label: "驳回原因" },
       ]}
       dataColumns={[
-        { key: "startDate", label: "Start" },
-        { key: "endDate", label: "End" },
-        { key: "status", label: "Status" },
-        { key: "reason", label: "Reason" },
-        { key: "rejectReason", label: "Reject Reason" },
+        { key: "startDate", label: "开始日期" },
+        { key: "endDate", label: "结束日期" },
+        { key: "status", label: "状态" },
+        { key: "reason", label: "请假原因" },
+        { key: "rejectReason", label: "驳回原因" },
       ]}
     />
   );
