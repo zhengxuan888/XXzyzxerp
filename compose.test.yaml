@@ -10,6 +10,8 @@ services:
       REDIS_URL: redis://redis:6379
     ports:
       - "127.0.0.1:3100:3000"
+    volumes:
+      - ./data/storage:/app/.local-storage
     depends_on:
       migrate:
         condition: service_completed_successfully
