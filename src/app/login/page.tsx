@@ -3,6 +3,7 @@
 import { ArrowRight, Eye, EyeOff, LockKeyhole, ShieldCheck, UserRound } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -43,7 +44,7 @@ export default function LoginPage() {
         <div className="absolute -left-32 top-20 size-96 rounded-full bg-violet-600/30 blur-3xl" />
         <div className="absolute -right-24 bottom-10 size-80 rounded-full bg-cyan-400/20 blur-3xl" />
         <div className="relative z-10 flex items-center gap-3">
-          <span className="grid size-11 place-items-center rounded-2xl bg-gradient-to-br from-amber-300 to-amber-700 text-base font-black text-white">ZC</span>
+          <Image src="/zc-logo.svg" alt="择优臻选" width={44} height={44} priority className="size-11 rounded-xl shadow-[0_8px_24px_rgba(184,137,45,0.2)]" />
           <div>
             <strong className="block text-base">择优臻选</strong>
             <span className="text-xs text-slate-400">公司运营管理系统</span>
@@ -56,7 +57,7 @@ export default function LoginPage() {
           </span>
           <h1 className="text-5xl font-bold leading-[1.15] tracking-tight">
             与优秀的人同行
-            <span className="mt-2 block bg-gradient-to-r from-amber-200 to-amber-500 bg-clip-text text-transparent">
+            <span className="mt-2 block text-amber-300">
               为客户臻选更好的产品与服务
             </span>
           </h1>
@@ -71,7 +72,7 @@ export default function LoginPage() {
       <section className="flex items-center justify-center px-5 py-12 sm:px-10">
         <div className="w-full max-w-md">
           <div className="mb-9 flex items-center gap-3 lg:hidden">
-            <span className="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-amber-300 to-amber-700 text-sm font-black text-white">ZC</span>
+            <Image src="/zc-logo.svg" alt="择优臻选" width={40} height={40} priority className="size-10 rounded-xl shadow-[0_6px_18px_rgba(184,137,45,0.18)]" />
             <div>
               <strong className="block text-sm">择优臻选</strong>
               <span className="text-xs text-slate-500">择优臻选 ERP</span>

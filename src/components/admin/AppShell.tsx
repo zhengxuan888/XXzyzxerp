@@ -25,6 +25,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -186,7 +187,7 @@ export default function AppShell({
 
   return (
     <div className="min-h-screen bg-[var(--surface-muted)] text-slate-900">
-      <header className="fixed inset-x-0 top-0 z-40 h-14 border-b border-slate-200 bg-white">
+      <header className="fixed inset-x-0 top-0 z-40 h-14 border-b border-white/80 bg-white/82 shadow-[0_1px_3px_rgba(15,23,42,0.04)] backdrop-blur-xl">
         <div className="flex h-full items-center gap-3 px-3 lg:px-5">
           <button
             type="button"
@@ -197,13 +198,11 @@ export default function AppShell({
             <Menu size={20} />
           </button>
 
-          <Link href="/admin" className="flex min-w-0 items-center gap-2.5">
-            <span className="grid size-8 shrink-0 place-items-center rounded-md bg-teal-600 text-xs font-black tracking-tight text-white">
-              ZC
-            </span>
+          <Link href="/admin" className="flex min-w-0 items-center gap-2.5 rounded-lg pr-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500">
+            <Image src="/zc-logo.svg" alt="择优臻选" width={34} height={34} priority className="size-[34px] shrink-0 rounded-[9px] shadow-[0_4px_12px_rgba(184,137,45,0.16)]" />
             <span className="min-w-0">
               <strong className="block truncate text-sm font-bold tracking-tight text-slate-950">{brand}</strong>
-              <span className="block truncate text-[10px] text-slate-400">择优臻选 · 业务运营系统</span>
+              <span className="block truncate text-[10px] text-slate-400">电商业务运营系统</span>
             </span>
           </Link>
 
@@ -211,7 +210,7 @@ export default function AppShell({
             <button
               type="button"
               onClick={openSearch}
-              className="ml-8 flex h-9 w-full items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 text-slate-400 transition hover:border-teal-300 hover:bg-white hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-teal-100"
+              className="ml-8 flex h-9 w-full items-center gap-2 rounded-lg border border-slate-200/80 bg-slate-50/80 px-3 text-slate-400 transition duration-200 hover:border-amber-300 hover:bg-white hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-100"
             >
               <Search size={16} />
               <span className="text-xs">快速查找功能</span>
@@ -290,7 +289,7 @@ export default function AppShell({
                         onClick={() => goToMenu(item)}
                         className="group flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left hover:bg-violet-50 focus:bg-violet-50 focus:outline-none"
                       >
-                        <span className="grid size-8 place-items-center rounded-lg bg-slate-100 text-slate-500 group-hover:bg-violet-100 group-hover:text-violet-700">
+                        <span className="grid size-8 place-items-center rounded-lg bg-slate-100 text-slate-600 group-hover:bg-violet-100 group-hover:text-violet-700">
                           {item.path === "/admin" ? <LayoutDashboard size={16} /> : <Search size={15} />}
                         </span>
                         <span className="min-w-0 flex-1">
@@ -314,7 +313,7 @@ export default function AppShell({
       )}
 
       <aside
-        className={`fixed bottom-0 left-0 top-14 z-50 border-r border-slate-200 bg-white transition-all duration-200 ${
+        className={`fixed bottom-0 left-0 top-14 z-50 border-r border-white/90 bg-white/76 shadow-[8px_0_28px_rgba(15,23,42,0.045)] backdrop-blur-2xl transition-all duration-200 ${
           collapsed ? "w-16" : "w-60"
         } ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
@@ -356,8 +355,8 @@ export default function AppShell({
                             updateGroup(item.id, !expanded);
                           }
                         }}
-                        className={`group flex min-h-10 w-full items-center gap-3 rounded-md px-3 text-sm font-semibold transition ${
-                          childActive ? "bg-violet-50 text-violet-700" : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"
+                        className={`group flex min-h-10 w-full items-center gap-3 rounded-lg border px-3 text-sm font-semibold transition duration-200 ${
+                          childActive ? "border-amber-200/70 bg-white/72 text-amber-900 shadow-[0_4px_16px_rgba(184,137,45,0.08)]" : "border-transparent text-slate-700 hover:border-white hover:bg-white/58 hover:text-slate-950 hover:shadow-sm"
                         }`}
                       >
                         <span className="grid size-5 shrink-0 place-items-center"><MenuIcon name={item.icon} /></span>
@@ -379,8 +378,8 @@ export default function AppShell({
                                   onClick={() => setMobileOpen(false)}
                                   className={`flex min-h-9 items-center rounded-lg px-3 text-sm transition ${
                                     activeChild
-                                      ? "bg-teal-50 font-semibold text-teal-800"
-                                      : "text-slate-500 hover:bg-slate-100 hover:text-slate-950"
+                                      ? "bg-gradient-to-r from-amber-50/90 to-blue-50/70 font-semibold text-slate-950 shadow-[inset_2px_0_0_#b8892d]"
+                                      : "text-slate-500 hover:bg-white/70 hover:text-slate-950"
                                   }`}
                                 >
                                   <span className="truncate">{zh(child.label)}</span>
@@ -399,10 +398,10 @@ export default function AppShell({
                       href={item.path}
                       title={collapsed ? menuLabel(item) : undefined}
                       onClick={() => setMobileOpen(false)}
-                      className={`group flex min-h-10 items-center gap-3 rounded-md px-3 text-sm font-medium transition ${
+                      className={`group flex min-h-10 items-center gap-3 rounded-lg border px-3 text-sm font-medium transition duration-200 ${
                         active
-                          ? "bg-teal-50 font-semibold text-teal-800"
-                          : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+                          ? "border-amber-200/70 bg-gradient-to-r from-amber-50/90 to-blue-50/70 font-semibold text-slate-950 shadow-[inset_3px_0_0_#b8892d,0_5px_18px_rgba(79,110,247,0.07)]"
+                          : "border-transparent text-slate-600 hover:border-white hover:bg-white/68 hover:text-slate-950 hover:shadow-sm"
                       }`}
                     >
                       <span className="grid size-5 shrink-0 place-items-center">
@@ -441,7 +440,7 @@ export default function AppShell({
               <button
                 type="submit"
                 title={collapsed ? "退出登录" : undefined}
-                className="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm font-medium text-slate-500 hover:bg-rose-50 hover:text-rose-600"
+                className="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm font-medium text-slate-600 hover:bg-rose-50 hover:text-rose-700"
               >
                 <LogOut size={17} />
                 {!collapsed && "退出登录"}
@@ -451,7 +450,7 @@ export default function AppShell({
         </div>
       </aside>
 
-      <main className={`min-h-screen min-w-0 overflow-x-hidden pt-14 transition-all duration-200 ${collapsed ? "lg:pl-16" : "lg:pl-60"}`}>
+      <main className={`min-h-screen min-w-0 overflow-x-hidden bg-[radial-gradient(circle_at_92%_4%,rgba(79,110,247,0.055),transparent_24%),radial-gradient(circle_at_10%_96%,rgba(184,137,45,0.045),transparent_22%)] pt-14 transition-all duration-200 ${collapsed ? "lg:pl-16" : "lg:pl-60"}`}>
         <div className="mx-auto min-w-0 w-full max-w-[1720px] p-3 md:p-5 xl:p-6">{children}</div>
       </main>
     </div>
