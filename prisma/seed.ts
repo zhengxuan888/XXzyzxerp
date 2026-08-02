@@ -290,6 +290,14 @@ const menuDefs = [
     isActive: true,
   },
   {
+    key: "integrations",
+    label: "第三方接口",
+    path: "/admin/integrations",
+    requiredActionKey: "shipment.workbench.configure",
+    sortOrder: 85,
+    isActive: true,
+  },
+  {
     key: "access-grants",
     label: "协作授权",
     path: "/admin/access-grants",
@@ -601,6 +609,7 @@ const menuGroupByKey: Record<string, (typeof menuGroupDefs)[number]["key"]> = {
   roles: "group-organization",
   "access-grants": "group-organization",
   menus: "group-system",
+  integrations: "group-system",
 };
 
 const dashboardShortcutOrder = new Map<string, number>([
