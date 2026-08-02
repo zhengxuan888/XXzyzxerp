@@ -878,7 +878,6 @@ async function main() {
     "shipment.create",
     "shipment.track.update",
     "shipment.followup.assign",
-    "shipment.workbench.configure",
     "logistics_template.read",
     "logistics_template.manage",
     "logistics_template.export",
