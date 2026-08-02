@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   if (!permission.allowed) return fail("FORBIDDEN", "没有下载商品导入模板的权限。", 403);
 
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = "ZC ERP";
+  workbook.creator = "择优臻选 ERP";
   workbook.created = new Date();
   const sheet = workbook.addWorksheet("商品SKU导入");
   sheet.columns = [

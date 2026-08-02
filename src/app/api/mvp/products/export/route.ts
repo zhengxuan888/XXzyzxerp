@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
   });
 
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = "ZC ERP";
+  workbook.creator = "择优臻选 ERP";
   const sheet = workbook.addWorksheet("商品SKU导出");
   sheet.columns = [
     { header: "商品编码", key: "productCode", width: 22 },
