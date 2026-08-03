@@ -50,7 +50,7 @@ export default async function MembershipsPage() {
     prisma.user.findMany({ where: { OR: [{ memberships: { none: {} } }, { memberships: { some: { businessUnitId: membership.businessUnitId } } }] }, orderBy: { username: "asc" } }),
     prisma.legalEntity.findMany({ where: { businessUnits: { some: { id: membership.businessUnitId } } }, orderBy: { name: "asc" } }),
     prisma.businessUnit.findMany({ where: { id: membership.businessUnitId }, orderBy: { name: "asc" } }),
-    prisma.role.findMany({ orderBy: { name: "asc" } }),
+    prisma.role.findMany({ where: { code: { not: "legacy_fulfillment" } }, orderBy: { name: "asc" } }),
     prisma.department.findMany({ where: { businessUnitId: membership.businessUnitId }, orderBy: { name: "asc" } }),
     prisma.site.findMany({ where: { businessUnitId: membership.businessUnitId }, orderBy: { code: "asc" } }),
   ]);

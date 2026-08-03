@@ -18,7 +18,7 @@ export default async function EmployeePermissionsPage({ params }: { params: Prom
   if (!canRead.allowed || !canUpdate.allowed) redirect("/admin/users");
   const [user, roles] = await Promise.all([
     prisma.user.findFirst({ where: { id, memberships: { some: { businessUnitId: actor.businessUnitId } } }, include: { memberships: { where: { businessUnitId: actor.businessUnitId, isActive: true }, include: { role: true, businessUnit: true, department: true, site: true } } } }),
-    prisma.role.findMany({ orderBy: { name: "asc" }, include: { rolePermissions: { where: { isAllowed: true }, orderBy: { actionKey: "asc" } } } }),
+    prisma.role.findMany({ where: { code: { not: "legacy_fulfillment" } }, orderBy: { name: "asc" }, include: { rolePermissions: { where: { isAllowed: true }, orderBy: { actionKey: "asc" } } } }),
   ]);
   if (!user) notFound();
   return <EmployeePermissionWorkspace userName={user.fullName || user.username} memberships={user.memberships.map((item) => ({ id: item.id, roleId: item.roleId, businessUnitName: item.businessUnit.name, departmentName: item.department?.name ?? null, siteName: item.site?.name ?? null, scope: item.scope, isPrimary: item.isPrimary, isActive: item.isActive, departmentId: item.departmentId, siteId: item.siteId, managerMembershipId: item.managerMembershipId }))} roles={roles.map((role) => ({ id: role.id, name: role.name, description: role.description, permissions: role.rolePermissions.map((permission) => actionLabel(permission.actionKey)) }))} />;

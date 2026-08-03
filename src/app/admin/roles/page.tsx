@@ -37,7 +37,7 @@ export default async function RolesPage() {
   if (!canRead.allowed) redirect("/admin");
 
   const [rows, actions] = await Promise.all([
-    prisma.role.findMany({ orderBy: { createdAt: "desc" }, include: { rolePermissions: { where: { isAllowed: true } } } }),
+    prisma.role.findMany({ where: { code: { not: "legacy_fulfillment" } }, orderBy: { createdAt: "desc" }, include: { rolePermissions: { where: { isAllowed: true } } } }),
     prisma.action.findMany({ orderBy: [{ namespace: "asc" }, { key: "asc" }] }),
   ]);
 
