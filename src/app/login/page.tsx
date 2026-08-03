@@ -92,7 +92,7 @@ export default function LoginPage() {
             </div>
 
             <header className="mb-8">
-              <p className="text-xs font-semibold tracking-[0.14em] text-amber-700">WELCOME BACK</p>
+              <p className="text-xs font-semibold tracking-[0.14em] text-amber-700">欢迎回来</p>
               <h2 className="mt-3 text-[32px] font-bold tracking-[-0.035em] text-slate-950">登录工作台</h2>
               <p className="mt-2 text-sm leading-6 text-slate-500">使用管理员分配的员工账号登录</p>
             </header>
