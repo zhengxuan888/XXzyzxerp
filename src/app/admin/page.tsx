@@ -233,7 +233,7 @@ export default async function AdminHomePage() {
         <WorkbenchSection title="今日重点" description="按优先级处理" items={coreWorkbench} />
         <WorkbenchSection title="业务概览" description="由管理员按角色、部门或员工配置展示。" items={overviewWorkbench} />
       </div>
-      {workbench.length === 0 && <p className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-sm">当前岗位暂未配置可见工作台卡片，请联系拥有工作台配置权限的管理员。</p>}
+      {workbench.length === 0 && <p className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-sm">暂无可见卡片</p>}
 
       {secondary.length > 0 && (
         <section className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-surface)] p-5 shadow-[var(--elevation-card)] backdrop-blur-xl">

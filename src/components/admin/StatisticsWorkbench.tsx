@@ -90,7 +90,7 @@ export default function StatisticsWorkbench() {
         <div className="pointer-events-none absolute -right-16 -top-20 size-56 rounded-full border-[38px] border-amber-100/55" />
         <p className="text-xs font-semibold text-amber-700">数据与报表</p>
         <h1 className="mt-1 text-2xl font-bold text-slate-950">统计报表</h1>
-        <p className="mt-1 text-sm text-slate-500">员工看本人，上级按授权范围查看团队；不同业务板块的数据不会混合。</p>
+        <p className="mt-1 text-sm text-slate-500">按账号权限显示</p>
       </header>
 
       <section className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-surface)] p-4 shadow-[var(--elevation-card)] backdrop-blur-xl">
@@ -130,14 +130,14 @@ export default function StatisticsWorkbench() {
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 px-5 py-4"><h2 className="font-bold text-slate-950">员工订单排行</h2><p className="text-xs text-slate-500">只统计当前授权范围内的员工</p></div>
+        <div className="border-b border-slate-100 px-5 py-4"><h2 className="font-bold text-slate-950">员工订单排行</h2></div>
         <div className="space-y-2 p-3 sm:hidden">{data?.rankings.map((row, index) => <article key={row.membershipId} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-amber-50 text-xs font-bold text-amber-800">{index + 1}</span><div className="min-w-0"><p className="truncate font-semibold text-slate-900">{row.employeeName}</p><p className="truncate text-xs text-slate-400">{row.departmentName} · {row.username}</p></div></div><strong className="text-lg tabular-nums text-slate-950">{row.count}<span className="ml-1 text-xs font-medium text-slate-400">单</span></strong></div><div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">{row.currencyTotals.map((item) => <span key={item.currency}>{money(item.amountCents, item.currency)}</span>)}</div></article>)}</div>
         <div className="hidden overflow-x-auto sm:block"><table className="w-full min-w-[720px] text-left text-sm"><thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-4 py-3">员工</th><th className="px-4 py-3">部门</th><th className="px-4 py-3">订单数</th><th className="px-4 py-3">COD 合计</th></tr></thead><tbody>{data?.rankings.map((row) => <tr key={row.membershipId} className="border-t border-slate-100"><td className="px-4 py-3"><p className="font-semibold">{row.employeeName}</p><p className="text-xs text-slate-400">{row.username}</p></td><td className="px-4 py-3">{row.departmentName}</td><td className="px-4 py-3 font-bold">{row.count}</td><td className="px-4 py-3 text-slate-500">{row.currencyTotals.map((item) => <span key={item.currency} className="mr-3 whitespace-nowrap">{money(item.amountCents, item.currency)}</span>)}</td></tr>)}</tbody></table></div>
         {loading && <p className="px-4 py-8 text-center text-sm text-slate-400">正在加载统计…</p>}
         {!loading && !data?.rankings.length && <p className="px-4 py-8 text-center text-sm text-slate-400">当前范围暂无员工订单</p>}
         <footer className="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2"><span>共 {data?.pagination.total ?? 0} 人</span><select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }} className="h-9 rounded-lg border border-slate-200 px-2"><option value="10">10 / 页</option><option value="20">20 / 页</option><option value="50">50 / 页</option></select></div><div className="flex items-center gap-2"><span>第 {data?.pagination.page ?? 1}/{data?.pagination.totalPages ?? 1} 页</span><Button type="button" variant="ghost" size="icon" aria-label="上一页" disabled={(data?.pagination.page ?? 1) <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}><ChevronLeft size={16} /></Button><Button type="button" variant="ghost" size="icon" aria-label="下一页" disabled={(data?.pagination.page ?? 1) >= (data?.pagination.totalPages ?? 1)} onClick={() => setPage((value) => value + 1)}><ChevronRight size={16} /></Button></div></footer>
       </section>
-      <p className="text-xs text-slate-400">多币种金额分别统计，不进行未经配置的汇率换算。</p>
+      <p className="text-xs text-slate-400">金额按币种分别统计</p>
     </div>
   );
 }

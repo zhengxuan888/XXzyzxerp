@@ -178,7 +178,7 @@ export default function DailyGoalsWorkbench() {
           <div>
             <p className="text-xs font-semibold tracking-[0.16em] text-amber-700">目标与协作</p>
             <h1 className="mt-1 text-2xl font-bold text-slate-950">团队今日目标</h1>
-            <p className="mt-1 text-sm text-slate-500">员工看本人，上级按汇报线和授权范围逐级查看。</p>
+            <p className="mt-1 text-sm text-slate-500">按账号权限显示</p>
           </div>
           <input aria-label="目标日期" type="date" value={date} onChange={(event) => { setDate(event.target.value); setPage(1); }} className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm" />
         </div>
