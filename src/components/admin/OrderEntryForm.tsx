@@ -3,7 +3,6 @@
 import { FormEvent, useMemo, useState } from "react";
 import { CalendarDays, Check, CircleCheck, CircleHelp, CircleX, LoaderCircle, MailCheck, Package, Search, Sparkles, WalletCards } from "lucide-react";
 import type { OrderTemplateConfiguration } from "@/lib/order-template";
-import { phoneVariantNames } from "@/lib/phone-specifications";
 import AttachmentPanel from "@/components/admin/AttachmentPanel";
 
 type Option = { id: string; code: string; name: string };
@@ -33,8 +32,7 @@ export default function OrderEntryForm({
   const [templateId, setTemplateId] = useState(defaultTemplate?.id ?? "");
   const [selectedProductId, setSelectedProductId] = useState("");
   const selectedProduct = products.find((item) => item.id === selectedProductId);
-  const [productName, setProductName] = useState(selectedProduct?.name ?? "");
-  const [productSuggestionsOpen, setProductSuggestionsOpen] = useState(false);
+  const [selectedSkuId, setSelectedSkuId] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [createdOrder, setCreatedOrder] = useState<{ id: string; orderNo: string } | null>(null);
@@ -56,21 +54,6 @@ export default function OrderEntryForm({
     );
   }, [products, searchKeyword]);
 
-  const productNameOptions = useMemo(() => {
-    const options = new Set<string>();
-    for (const product of products) {
-      options.add(product.name);
-      for (const variant of phoneVariantNames(product.name)) options.add(variant.name);
-    }
-    return Array.from(options);
-  }, [products]);
-
-  const filteredProductNameOptions = useMemo(() => {
-    const keyword = productName.trim().toLowerCase();
-    if (!keyword) return productNameOptions;
-    return productNameOptions.filter((name) => name.toLowerCase().includes(keyword));
-  }, [productName, productNameOptions]);
-
   const defaultValues = useMemo(() => ({
     currency: config?.currency ?? "CNY",
     logisticsChannel: config?.logisticsChannel ?? "",
@@ -80,7 +63,8 @@ export default function OrderEntryForm({
   }), [config]);
 
   const selectedProductName = selectedProduct?.name ?? "";
-  const finalProductName = productName.trim() || selectedProductName;
+  const selectedSkuName = selectedProduct?.skus.find((sku) => sku.id === selectedSkuId)?.code ?? "";
+  const finalProductName = selectedSkuName || selectedProductName;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -105,7 +89,7 @@ export default function OrderEntryForm({
       customerName: String(data.get("recipientName") ?? ""),
       shopId: String(data.get("shopId") ?? ""),
       productId: selectedProductId,
-      skuId: String(data.get("skuId") ?? ""),
+      skuId: selectedSkuId,
       productName: finalProductName,
       quantity: Number(data.get("quantity") ?? 1),
       unitPriceCents: moneyToCents("unitPrice"),
@@ -171,8 +155,7 @@ export default function OrderEntryForm({
 
   const handleProductChange = (nextId: string) => {
     setSelectedProductId(nextId);
-    const nextProduct = products.find((item) => item.id === nextId);
-    setProductName(nextProduct?.name ?? "");
+    setSelectedSkuId("");
   };
 
   const input =
@@ -277,48 +260,8 @@ export default function OrderEntryForm({
               {visibleProducts.map((item) => <option key={item.id} value={item.id}>{item.code} / {item.name}</option>)}
             </select>
           </Field>
-            <Field label="商品名称（可手打）" required={config?.requireProductName !== false}>
-              <div className="relative">
-                <input
-                  name="productName"
-                  required={config?.requireProductName !== false}
-                  value={productName}
-                  onFocus={() => setProductSuggestionsOpen(true)}
-                  onBlur={() => window.setTimeout(() => setProductSuggestionsOpen(false), 120)}
-                  onChange={(event) => {
-                    setProductName(event.target.value);
-                    setProductSuggestionsOpen(true);
-                  }}
-                  className={input}
-                  autoComplete="off"
-                  placeholder="输入型号、颜色或容量筛选"
-                  role="combobox"
-                  aria-autocomplete="list"
-                  aria-expanded={productSuggestionsOpen}
-                  aria-controls="productNameOptions"
-                />
-                {productSuggestionsOpen && filteredProductNameOptions.length > 0 && (
-                  <div id="productNameOptions" className="absolute inset-x-0 top-full z-40 mt-1 max-h-72 overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
-                    {filteredProductNameOptions.map((name) => (
-                      <button
-                        key={name}
-                        type="button"
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => {
-                          setProductName(name);
-                          setProductSuggestionsOpen(false);
-                        }}
-                        className="block w-full px-3 py-2 text-left text-sm font-medium text-slate-900 hover:bg-amber-50 focus:bg-amber-50 focus:outline-none"
-                      >
-                        {name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-          </Field>
           <Field label="SKU" required={config?.requireSku}>
-            <select name="skuId" required={config?.requireSku} disabled={!selectedProductId} className={`${input} disabled:cursor-not-allowed disabled:bg-slate-50`}>
+            <select name="skuId" value={selectedSkuId} onChange={(event) => setSelectedSkuId(event.target.value)} required={config?.requireSku} disabled={!selectedProductId} className={`${input} disabled:cursor-not-allowed disabled:bg-slate-50`}>
               <option value="">选择 SKU</option>
               {selectedProduct?.skus.map((sku) => <option key={sku.id} value={sku.id}>{sku.code}</option>)}
             </select>
