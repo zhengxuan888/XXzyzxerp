@@ -2,6 +2,13 @@
 
 import { FormEvent, useState } from "react";
 
+function inventoryRequestKey() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `inventory-${crypto.randomUUID()}`;
+  }
+  return `inventory-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 export default function InventoryAdjustmentForm({
   sites,
   skus,
@@ -25,7 +32,7 @@ export default function InventoryAdjustmentForm({
         skuId: form.get("skuId"),
         quantityDelta: Number(form.get("quantityDelta")),
         reason: form.get("reason"),
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: inventoryRequestKey(),
       }),
     });
     const payload = await response.json().catch(() => null);
