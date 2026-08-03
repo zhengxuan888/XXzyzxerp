@@ -6,11 +6,12 @@ import { prisma } from "@/lib/prisma";
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   if (!body || typeof body.username !== "string" || typeof body.password !== "string") {
-    return NextResponse.json({ error: "Please provide username and password." }, { status: 400 });
+    return NextResponse.json({ error: "请输入员工账号和密码。" }, { status: 400 });
   }
 
-  const user = await prisma.user.findUnique({
-    where: { username: body.username },
+  const username = body.username.trim();
+  const user = await prisma.user.findFirst({
+    where: { username: { equals: username, mode: "insensitive" } },
     include: {
       memberships: {
         where: {
@@ -26,12 +27,12 @@ export async function POST(request: Request) {
     },
   });
   if (!user || !user.isActive) {
-    return NextResponse.json({ error: "User does not exist or is disabled." }, { status: 401 });
+    return NextResponse.json({ error: "员工账号不存在或已停用。" }, { status: 401 });
   }
 
   const passwordValid = await verifyPassword(body.password, user.passwordHash ?? null);
   if (!passwordValid) {
-    return NextResponse.json({ error: "Password is incorrect." }, { status: 401 });
+    return NextResponse.json({ error: "密码不正确。" }, { status: 401 });
   }
 
   const usableMemberships = user.memberships.filter((membership) => (
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
     : primary;
 
   if (!selected) {
-    return NextResponse.json({ error: "No usable membership found for this user." }, { status: 403 });
+    return NextResponse.json({ error: "该账号没有可用岗位，请联系管理员。" }, { status: 403 });
   }
 
   const token = await issueSessionToken({
