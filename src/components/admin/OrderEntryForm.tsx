@@ -156,7 +156,7 @@ export default function OrderEntryForm({
   };
 
   const input =
-    "h-10 w-full rounded-xl border border-rose-100 bg-white px-3 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100";
+    "h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100";
 
   function parseSmartAddress() {
     const lines = smartAddress.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
@@ -182,27 +182,23 @@ export default function OrderEntryForm({
   }
 
   return (
-    <form onSubmit={submit} className="relative space-y-4 rounded-2xl border border-violet-100 bg-[#fffaf7] p-4 shadow-sm">
+    <form onSubmit={submit} className="relative space-y-4 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-surface)] p-4 shadow-[var(--elevation-card)]">
       {celebration && <div className="absolute inset-x-4 top-4 z-20 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-center shadow-lg" role="status"><p className="text-lg font-bold text-amber-900">🎉 恭喜，订单已录入成功！</p><p className="mt-1 text-sm text-amber-800">订单号：{createdOrder?.orderNo} · 今日第 {myOrderStats.total + 1} 单</p><p className="mt-2 text-xs text-amber-700">请继续上传客户沟通凭证，再提交核单。</p></div>}
       <div className="grid gap-3 md:grid-cols-3">
         <Metric icon={<Package size={18} />} label="订单录入" value="新建订单" color="text-blue-600 bg-blue-50" />
         <Metric icon={<WalletCards size={18} />} label="预计收入" value="输入正确即可提交" color="text-emerald-600 bg-emerald-50" />
         <Metric icon={<CalendarDays size={18} />} label="录入日期" value={today} color="text-violet-600 bg-violet-50" />
       </div>
-      <div className="grid grid-cols-2 gap-2 rounded-2xl border border-violet-100 bg-white p-3 text-xs sm:grid-cols-4 lg:grid-cols-8">
-        {[['我的订单', myOrderStats.total], ['审核中', myOrderStats.submitted], ['待发货', myOrderStats.waiting_shipment], ['运输中', myOrderStats.shipped], ['已签收', myOrderStats.delivered], ['异常', myOrderStats.exception], ['已完成', myOrderStats.completed], ['草稿', myOrderStats.draft]].map(([label, value]) => <div key={String(label)} className="rounded-xl bg-slate-50 px-2 py-2"><span className="block text-slate-500">{label}</span><strong className="mt-1 block text-lg text-slate-900">{value}</strong></div>)}
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 text-xs sm:grid-cols-4 lg:grid-cols-8">
+        {[['我的订单', myOrderStats.total], ['审核中', myOrderStats.submitted], ['待发货', myOrderStats.waiting_shipment], ['运输中', myOrderStats.shipped], ['已签收', myOrderStats.delivered], ['异常', myOrderStats.exception], ['已完成', myOrderStats.completed], ['草稿', myOrderStats.draft]].map(([label, value]) => <div key={String(label)} className="bg-white px-3 py-2.5"><span className="block text-slate-500">{label}</span><strong className="mt-1 block text-lg tabular-nums text-slate-900">{value}</strong></div>)}
       </div>
 
-      <div className="flex items-center gap-2 rounded-xl border border-rose-100 bg-white px-3">
+      <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2.5 text-sm text-slate-500">
         <Search size={16} className="text-gray-400" />
-        <input
-          className="h-10 flex-1 outline-none"
-          placeholder="电商订单按本次收件信息录入，无需选择固定客户"
-          disabled
-        />
+        <span>电商订单按本次收件信息录入，无需选择固定客户</span>
       </div>
 
-      <div className="rounded-2xl border-2 border-violet-100 bg-white/70 p-4">
+      <div className="rounded-xl border border-slate-200 bg-white/76 p-4">
         <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
           <CircleHelp size={18} className="mt-0.5 shrink-0 text-amber-600" />
           <div>
@@ -210,12 +206,12 @@ export default function OrderEntryForm({
             <p className="mt-1 text-xs leading-5 text-amber-800">新客直接按本次收件信息录入；订单保存后可在当前页面上传客户聊天截图、PDF 或视频，上传完成后才能提交核单。</p>
           </div>
         </div>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-violet-100 bg-violet-50/70 px-3 py-2">
-          <span className="flex items-center gap-2 text-sm font-medium text-violet-700">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200/80 bg-amber-50/70 px-3 py-2">
+          <span className="flex items-center gap-2 text-sm font-medium text-amber-800">
             <Sparkles size={16} />
             订单模板
           </span>
-          <select className="rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-sm"
+          <select className="rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-sm"
             value={templateId}
             onChange={(e) => setTemplateId(e.target.value)}
           >
@@ -279,11 +275,11 @@ export default function OrderEntryForm({
         </Section>
 
         <Section title="收件信息">
-          <div className="md:col-span-4 rounded-xl border border-violet-100 bg-violet-50/60 p-3">
-            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-violet-800"><Sparkles size={15} />智能识别地址（请仔细核对）</div>
-            <textarea value={smartAddress} onChange={(event) => setSmartAddress(event.target.value)} className="min-h-20 w-full rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-violet-100" placeholder="粘贴客户发来的姓名、电话、地址和邮箱，每行一项" />
+          <div className="md:col-span-4 rounded-xl border border-blue-100 bg-blue-50/45 p-3">
+            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-blue-800"><Sparkles size={15} />智能识别地址（请仔细核对）</div>
+            <textarea value={smartAddress} onChange={(event) => setSmartAddress(event.target.value)} className="min-h-20 w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-100" placeholder="粘贴客户发来的姓名、电话、地址和邮箱，每行一项" />
             <div className="mt-2 flex flex-wrap items-center gap-3">
-              <button type="button" onClick={parseSmartAddress} className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-700">识别并填充</button>
+              <button type="button" onClick={parseSmartAddress} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800">识别并填充</button>
               {smartMessage && <span className="text-xs text-emerald-700">{smartMessage}</span>}
             </div>
           </div>
@@ -366,10 +362,10 @@ export default function OrderEntryForm({
         </div>
       )}
       {error && <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-      {!createdOrder && <div className="flex justify-end">
+      {!createdOrder && <div className="z-30 flex justify-end rounded-xl border border-white/90 bg-white/90 p-2 shadow-[0_12px_32px_rgba(15,23,42,0.14)] backdrop-blur-xl md:fixed md:bottom-4 md:right-5">
         <button
           disabled={!canCreate || saving}
-          className="flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-3 font-medium text-white shadow-sm hover:bg-violet-700 disabled:opacity-50"
+          className="flex min-w-40 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50"
         >
           <Check size={18} />
           {saving ? "正在保存..." : "确认订单"}
@@ -381,7 +377,7 @@ export default function OrderEntryForm({
 
 function Metric({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: string; color: string }) {
   return (
-    <div className="flex min-h-20 items-center gap-3 rounded-2xl border border-rose-100 bg-white p-4 shadow-sm">
+    <div className="flex min-h-20 items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <span className={`rounded-xl p-2 ${color}`}>{icon}</span>
       <span><small className="block text-gray-500">{label}</small><strong className="text-lg">{value}</strong></span>
     </div>
@@ -390,8 +386,8 @@ function Metric({ icon, label, value, color }: { icon: React.ReactNode; label: s
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <fieldset className="mb-5 grid gap-3 md:grid-cols-4">
-      <legend className="col-span-full mb-2 text-sm font-semibold text-violet-700">{title}</legend>
+    <fieldset className="mb-5 grid gap-3 border-t border-slate-100 pt-4 md:grid-cols-4">
+      <legend className="col-span-full mb-1 pr-3 text-sm font-semibold text-slate-800">{title}</legend>
       {children}
     </fieldset>
   );
