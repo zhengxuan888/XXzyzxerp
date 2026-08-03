@@ -2,6 +2,7 @@
   "name": "zyzxerp-v2",
   "version": "0.1.0",
   "private": true,
+  "main": "desktop/main.cjs",
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build",
@@ -24,7 +25,9 @@
     "deploy:dry-run": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deployment-dry-run.ps1",
     "backup:drill": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup-restore-drill.ps1",
     "ship24:sync": "tsx scripts/ship24-sync.ts",
-    "notifications:dispatch": "tsx scripts/dispatch-feishu-notifications.ts"
+    "notifications:dispatch": "tsx scripts/dispatch-feishu-notifications.ts",
+    "desktop:start": "electron .",
+    "desktop:build": "electron-builder --win nsis --x64"
   },
   "dependencies": {
     "@prisma/client": "^6.14.0",
@@ -55,6 +58,8 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
+    "electron": "^38.2.0",
+    "electron-builder": "^26.0.20",
     "eslint-config-next": "16.2.11",
     "lucide-react": "^0.525.0",
     "prisma": "^6.14.0",
@@ -63,5 +68,42 @@
     "tsx": "^4.20.3",
     "typescript": "^5",
     "vitest": "^3.2.4"
+  },
+  "build": {
+    "appId": "com.zeyouzhenxuan.erp",
+    "productName": "择优臻选 ERP",
+    "artifactName": "ZY-ERP-Setup-${version}-${arch}.${ext}",
+    "asar": true,
+    "directories": {
+      "output": "dist-desktop-final"
+    },
+    "files": [
+      "desktop/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "desktop/assets/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "择优臻选 ERP",
+      "uninstallDisplayName": "择优臻选 ERP",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "installerIcon": "desktop/assets/icon.ico",
+      "uninstallerIcon": "desktop/assets/icon.ico",
+      "installerHeaderIcon": "desktop/assets/icon.ico"
+    }
   }
 }

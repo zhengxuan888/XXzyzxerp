@@ -22,6 +22,9 @@
 
 # production
 /build
+/dist-desktop/
+/dist-desktop-final/
+/desktop-smoke-profile/
 
 # misc
 .DS_Store

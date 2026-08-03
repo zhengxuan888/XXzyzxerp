@@ -19,3 +19,7 @@ minimumReleaseAgeExclude:
 auditConfig:
   ignoreGhsas:
     - GHSA-mh99-v99m-4gvg
+
+allowBuilds:
+  electron: true
+  electron-winstaller: true
