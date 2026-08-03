@@ -402,6 +402,22 @@ export async function assertGrantRule(ctx: {
     return { allowed: false, reasons: ["GRANT_ACTION_DENIED"] };
   }
 
+  // Imported administrator roles predate delegation-rule records. They still
+  // must own the action and target scope, but do not require a duplicate rule.
+  const trustedAdministrator = ["platform_admin", "legacy_admin"].includes(actor.role.code);
+  if (trustedAdministrator) {
+    const grantTarget = await checkPermission({
+      userId: ctx.actorUserId,
+      membershipId: actor.id,
+      actionKey: ctx.actionKey,
+      targetBusinessUnitId: ctx.target.businessUnitId,
+      targetDepartmentId: ctx.target.departmentId ?? null,
+      targetSiteId: ctx.target.siteId ?? null,
+    });
+    if (!grantTarget.allowed) return { allowed: false, reasons: ["REQUEST_TARGET_OUT_OF_SCOPE"] };
+    return { allowed: true, reasons: ["ADMINISTRATOR_DELEGATION"] };
+  }
+
   const roleLevelRule = await prisma.delegationRule.findUnique({
     where: { roleId_actionKey: { roleId: actor.roleId, actionKey: ctx.actionKey } },
   });

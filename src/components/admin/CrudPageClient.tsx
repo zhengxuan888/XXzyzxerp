@@ -13,7 +13,7 @@ export type DataRow = Record<string, DataCellValue>;
 export type FieldSpec = {
   key: string;
   label: string;
-  type?: "text" | "number" | "email" | "password" | "select" | "checkbox";
+  type?: "text" | "number" | "email" | "password" | "select" | "checkbox" | "date" | "datetime-local";
   options?: { value: string; label: string }[];
   placeholder?: string;
   required?: boolean;
@@ -65,6 +65,17 @@ function displayValue(value: DataCellValue) {
   if (typeof value === "boolean") return value ? "是" : "否";
   if (typeof value === "object" && value !== null) return JSON.stringify(value);
   return zh(String(value ?? ""));
+}
+
+function fieldDefaultValue(value: DataCellValue, type?: FieldSpec["type"]) {
+  if ((value instanceof Date || typeof value === "string") && type === "datetime-local" && value) {
+    const parsed = value instanceof Date ? value : new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      const offset = parsed.getTimezoneOffset() * 60_000;
+      return new Date(parsed.getTime() - offset).toISOString().slice(0, 16);
+    }
+  }
+  return String(value ?? "");
 }
 
 function StatusPill({ value }: { value: DataCellValue }) {
@@ -444,7 +455,7 @@ export default function CrudPage({
                     {(field.options ?? []).map((option) => <option key={option.value} value={option.value}>{zh(option.label)}</option>)}
                   </select>
                 ) : (
-                  <input name={field.key} type={field.type ?? "text"} required={field.required} className={inputClass} defaultValue={String(editingRow[field.key] ?? "")} />
+                  <input name={field.key} type={field.type ?? "text"} required={field.required} className={inputClass} defaultValue={fieldDefaultValue(editingRow[field.key], field.type)} />
                 )}
               </label>
             ))}

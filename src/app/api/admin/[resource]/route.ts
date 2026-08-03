@@ -590,7 +590,7 @@ export async function POST(request: NextRequest, props: RouteParams) {
     let expiresAt: Date | null = null;
     if (typeof body.expiresAt === "string") {
       expiresAt = new Date(body.expiresAt);
-      if (Number.isNaN(expiresAt.getTime()) || expiresAt <= new Date()) return invalidBody("expiresAt must be a valid future time.");
+      if (Number.isNaN(expiresAt.getTime()) || expiresAt <= new Date()) return invalidBody("到期时间必须是未来的有效日期和时间。");
     }
     const canDelegate = await assertGrantRule({
       actorMembershipId: auth.membership.id,

@@ -132,8 +132,8 @@ export default async function AccessGrantsPage() {
         {
           key: "expiresAt",
           label: "到期时间",
-          type: "text",
-          placeholder: "YYYY-MM-DDTHH:mm:ssZ",
+          type: "datetime-local",
+          placeholder: "请选择到期日期和时间",
         },
       ]}
       dataColumns={[
