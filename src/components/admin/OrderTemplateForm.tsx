@@ -135,7 +135,7 @@ export default function OrderTemplateForm({ canManage, initial }: { canManage: b
         />
       </label>
       <div className="flex flex-wrap gap-4 text-sm md:col-span-3">
-        <Check name="requireSku" label="SKU 必填" defaultChecked={initial?.configuration.requireSku ?? true} />
+        <Check name="requireSku" label="SKU 必填" defaultChecked={initial?.configuration.requireSku ?? false} />
         <Check name="requireCodAmount" label="COD 金额必填" defaultChecked={initial?.configuration.requireCodAmount ?? true} />
         <Check name="requireShopId" label="店铺 ID 必填" defaultChecked={initial?.configuration.requireShopId} />
         <Check name="requireRecipientPhone" label="电话必填" defaultChecked={initial?.configuration.requireRecipientPhone ?? true} />

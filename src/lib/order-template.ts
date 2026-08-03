@@ -82,7 +82,7 @@ export function parseOrderTemplateConfiguration(raw: unknown): OrderTemplateConf
   requireShopId: bool((value as Record<string, unknown>).requireShopId, false),
   requireRecipientAddress: value.requireRecipientAddress !== false,
   requireRecipientEmail: bool((value as Record<string, unknown>).requireRecipientEmail, false),
-  requireSku: value.requireSku !== false,
+  requireSku: bool((value as Record<string, unknown>).requireSku, false),
     requireRecipientCountryCode: bool((value as Record<string, unknown>).requireRecipientCountryCode, false),
     requireRecipientPostalCode: bool((value as Record<string, unknown>).requireRecipientPostalCode, false),
     requireRecipientRegion: bool((value as Record<string, unknown>).requireRecipientRegion, false),

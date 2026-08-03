@@ -10,6 +10,7 @@ describe("order templates", () => {
     });
     expect(config.currency).toBe("EUR");
     expect(config.defaultShippingFeeCents).toBe(0);
+    expect(config.requireSku).toBe(false);
     expect(config.customFields).toHaveLength(1);
   });
 

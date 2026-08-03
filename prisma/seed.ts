@@ -1909,7 +1909,7 @@ async function main() {
         requireRecipientPhone: true,
         requireRecipientEmail: true,
         requireRecipientAddress: true,
-        requireSku: true,
+        requireSku: false,
         customFields: [
           { key: "salesChannel", label: "销售渠道", type: "text", required: false },
           { key: "customerRemark", label: "客户要求", type: "text", required: false },
@@ -1932,7 +1932,7 @@ async function main() {
         requireRecipientPhone: true,
         requireRecipientEmail: true,
         requireRecipientAddress: true,
-        requireSku: true,
+        requireSku: false,
         customFields: [
           { key: "salesChannel", label: "销售渠道", type: "text", required: false },
           { key: "customerRemark", label: "客户要求", type: "text", required: false },
