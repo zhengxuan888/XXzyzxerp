@@ -22,9 +22,12 @@ export default async function UsersPage() {
   ]);
   if (!canRead.allowed) redirect("/admin");
   const rows = await prisma.user.findMany({
-    where: canRead.reasons.includes("SCOPE_ALL")
-      ? {}
-      : { memberships: { some: { businessUnitId: membership.businessUnitId } } },
+    where: {
+      isActive: true,
+      ...(canRead.reasons.includes("SCOPE_ALL")
+        ? {}
+        : { memberships: { some: { businessUnitId: membership.businessUnitId, isActive: true } } }),
+    },
     orderBy: { createdAt: "desc" },
     include: { memberships: { include: { businessUnit: true, role: true, department: true } } },
   });

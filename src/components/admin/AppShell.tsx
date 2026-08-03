@@ -30,6 +30,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { zh } from "@/lib/i18n";
+import DailyGoalGate from "@/components/admin/DailyGoalGate";
 
 type MenuItem = {
   id: string;
@@ -50,6 +51,7 @@ type AppShellProps = {
   userName?: string;
   memberships?: MembershipOption[];
   activeMembershipId?: string | null;
+  roleCode?: string | null;
   currentPath?: string;
   children: React.ReactNode;
 };
@@ -98,6 +100,7 @@ export default function AppShell({
   userName,
   memberships = [],
   activeMembershipId,
+  roleCode,
   children,
 }: AppShellProps) {
   const pathname = usePathname();
@@ -187,6 +190,7 @@ export default function AppShell({
 
   return (
     <div className="min-h-screen bg-[var(--surface-muted)] text-slate-900">
+      <DailyGoalGate roleCode={roleCode} />
       <header className="fixed inset-x-0 top-0 z-40 h-14 border-b border-white/80 bg-white/82 shadow-[0_1px_3px_rgba(15,23,42,0.04)] backdrop-blur-xl">
         <div className="flex h-full items-center gap-3 px-3 lg:px-5">
           <button

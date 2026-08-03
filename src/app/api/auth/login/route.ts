@@ -51,6 +51,34 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "该账号没有可用岗位，请联系管理员。" }, { status: 403 });
   }
 
+  const shanghaiDate = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  await prisma.attendance.upsert({
+    where: {
+      businessUnitId_userId_attendanceDate_recordType: {
+        businessUnitId: selected.businessUnitId,
+        userId: user.id,
+        attendanceDate: new Date(`${shanghaiDate}T00:00:00.000Z`),
+        recordType: "CHECK_IN",
+      },
+    },
+    update: {},
+    create: {
+      legalEntityId: selected.legalEntityId,
+      businessUnitId: selected.businessUnitId,
+      userId: user.id,
+      membershipId: selected.id,
+      siteId: selected.siteId,
+      attendanceDate: new Date(`${shanghaiDate}T00:00:00.000Z`),
+      recordType: "CHECK_IN",
+      memo: "登录系统自动打卡",
+    },
+  });
+
   const token = await issueSessionToken({
     userId: user.id,
     username: user.username,

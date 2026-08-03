@@ -39,6 +39,7 @@ export default function OrderEntryForm({
   const [saving, setSaving] = useState(false);
   const [createdOrder, setCreatedOrder] = useState<{ id: string; orderNo: string } | null>(null);
   const [celebration, setCelebration] = useState(false);
+  const [celebrationStats, setCelebrationStats] = useState<{ today: number; week: number; month: number } | null>(null);
   const [submittingReview, setSubmittingReview] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState("");
   const [smartAddress, setSmartAddress] = useState("");
@@ -141,8 +142,10 @@ export default function OrderEntryForm({
       return;
     }
     setCreatedOrder({ id: result.data.id, orderNo: result.data.orderNo });
+    const statsResponse = await fetch("/api/mvp/orders/success-stats", { cache: "no-store" });
+    if (statsResponse.ok) setCelebrationStats(await statsResponse.json());
     setCelebration(true);
-    window.setTimeout(() => setCelebration(false), 6000);
+    window.setTimeout(() => setCelebration(false), 10000);
     setSaving(false);
   }
 
@@ -200,7 +203,20 @@ export default function OrderEntryForm({
 
   return (
     <form onSubmit={submit} className="relative space-y-4 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-surface)] p-4 shadow-[var(--elevation-card)]">
-      {celebration && <div className="absolute inset-x-4 top-4 z-20 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-center shadow-lg" role="status"><p className="text-lg font-bold text-amber-900">🎉 恭喜，订单已录入成功！</p><p className="mt-1 text-sm text-amber-800">订单号：{createdOrder?.orderNo} · 今日第 {myOrderStats.total + 1} 单</p><p className="mt-2 text-xs text-amber-700">请继续上传客户沟通凭证，再提交核单。</p></div>}
+      {celebration && <div className="fixed inset-0 z-[90] grid place-items-center overflow-hidden bg-slate-950/35 p-4 backdrop-blur-sm" role="status">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_25%_25%,rgba(251,191,36,.35),transparent_20%),radial-gradient(circle_at_75%_20%,rgba(59,130,246,.28),transparent_18%),radial-gradient(circle_at_50%_80%,rgba(16,185,129,.26),transparent_20%)] animate-pulse" />
+        <div className="relative w-full max-w-xl rounded-3xl border border-amber-200 bg-white p-8 text-center shadow-2xl">
+          <div className="mx-auto grid size-16 place-items-center rounded-2xl bg-amber-100 text-3xl">🎉</div>
+          <p className="mt-5 text-3xl font-bold text-slate-950">恭喜开单！</p>
+          <p className="mt-2 text-sm text-slate-500">订单号：{createdOrder?.orderNo}</p>
+          <div className="mt-6 grid grid-cols-3 gap-3">
+            <div className="rounded-2xl bg-amber-50 p-4"><strong className="block text-2xl tabular-nums text-amber-800">{String(celebrationStats?.today ?? 1).padStart(2, "0")}</strong><span className="mt-1 block text-xs text-amber-700">今日第几单</span></div>
+            <div className="rounded-2xl bg-blue-50 p-4"><strong className="block text-2xl tabular-nums text-blue-800">{celebrationStats?.week ?? "-"}</strong><span className="mt-1 block text-xs text-blue-700">本周累计</span></div>
+            <div className="rounded-2xl bg-emerald-50 p-4"><strong className="block text-2xl tabular-nums text-emerald-800">{celebrationStats?.month ?? "-"}</strong><span className="mt-1 block text-xs text-emerald-700">本月累计</span></div>
+          </div>
+          <p className="mt-5 text-sm text-slate-500">10 秒后自动关闭，请继续上传客户沟通凭证。</p>
+        </div>
+      </div>}
       <div className="grid gap-3 md:grid-cols-3">
         <Metric icon={<Package size={18} />} label="订单录入" value="新建订单" color="text-blue-600 bg-blue-50" />
         <Metric icon={<WalletCards size={18} />} label="预计收入" value="输入正确即可提交" color="text-emerald-600 bg-emerald-50" />

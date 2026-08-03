@@ -455,7 +455,16 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ re
   }
 
   if (params.resource === "users") {
-    const row = await prisma.user.update({ where: { id: params.id }, data: { isActive: false } });
+    if (params.id === auth.userId) {
+      return NextResponse.json({ error: "不能删除当前正在使用的账号。" }, { status: 409 });
+    }
+    const row = await prisma.$transaction(async (tx) => {
+      await tx.membership.updateMany({
+        where: { userId: params.id, isActive: true },
+        data: { isActive: false, isPrimary: false, endedAt: new Date() },
+      });
+      return tx.user.update({ where: { id: params.id }, data: { isActive: false } });
+    });
     await writeAuditLog({
       actorUserId: auth.userId,
       actorMembershipId: auth.membership.id,
@@ -465,7 +474,7 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ re
       targetId: row.id,
       roleId: auth.membership.roleId,
     });
-    return NextResponse.json({ ok: true, deleted: row.id });
+    return NextResponse.json({ ok: true, deleted: row.id, deactivated: true });
   }
 
   if (params.resource === "memberships") {

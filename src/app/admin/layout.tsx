@@ -17,21 +17,16 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
   const rootItems = buildTree(null);
   const availableMemberships = await prisma.membership.findMany({
     where: { userId: session.userId, isActive: true, OR: [{ endedAt: null }, { endedAt: { gt: new Date() } }] },
-    include: {
-      businessUnit: { include: { legalEntity: true } },
-      legalEntity: true,
-      role: true,
-      department: true,
-      site: true,
-    },
+    include: { businessUnit: { include: { legalEntity: true } }, legalEntity: true, role: true, department: true, site: true },
     orderBy: { isPrimary: "desc" },
   });
   const usableMemberships = availableMemberships.filter((item) => (
-    item.legalEntity.isActive
-    && item.businessUnit.isActive
-    && item.businessUnit.legalEntity.isActive
+    item.legalEntity.isActive && item.businessUnit.isActive && item.businessUnit.legalEntity.isActive
     && item.businessUnit.legalEntityId === item.legalEntityId
   ));
-  const membershipOptions = usableMemberships.map((item) => ({ id: item.id, label: `${item.businessUnit?.name || item.businessUnitId} / ${item.role?.name || "未命名角色"}${item.department?.name ? ` / ${item.department.name}` : ""}` }));
-  return <AppShell menuItems={rootItems} brand="择优臻选 ERP" userName={`${session.username} · ${membership.role?.name ?? "未分配角色"}`} memberships={membershipOptions} activeMembershipId={membership.id} currentPath="">{children}</AppShell>;
+  const membershipOptions = usableMemberships.map((item) => ({
+    id: item.id,
+    label: `${item.businessUnit?.name || item.businessUnitId} / ${item.role?.name || "未命名角色"}${item.department?.name ? ` / ${item.department.name}` : ""}`,
+  }));
+  return <AppShell menuItems={rootItems} brand="择优臻选 ERP" userName={`${session.username} · ${membership.role?.name ?? "未分配角色"}`} memberships={membershipOptions} activeMembershipId={membership.id} roleCode={membership.role?.code} currentPath="">{children}</AppShell>;
 }
