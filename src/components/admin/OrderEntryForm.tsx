@@ -9,6 +9,32 @@ type Option = { id: string; code: string; name: string };
 type ProductOption = Option & { skus: { id: string; code: string }[] };
 type TemplateOption = Option & { configuration: OrderTemplateConfiguration; isDefault: boolean };
 
+type PhoneSpecification = { colors: string[]; capacities: string[] };
+
+const PHONE_SPECIFICATIONS: Record<string, PhoneSpecification> = {
+  samsungs23ultra: { colors: ["黑色", "绿色", "奶油色", "紫色", "石墨色", "青柠色", "红色", "天蓝色"], capacities: ["256GB", "512GB", "1TB"] },
+  samsungs24ultra: { colors: ["钛灰色", "钛黑色", "钛紫色", "钛黄色", "钛蓝色", "钛绿色", "钛橙色"], capacities: ["256GB", "512GB", "1TB"] },
+  iphone13: { colors: ["红色", "星光色", "午夜色", "蓝色", "粉色", "绿色"], capacities: ["128GB", "256GB", "512GB"] },
+  iphone13pro: { colors: ["石墨色", "金色", "银色", "远峰蓝色", "苍岭绿色"], capacities: ["128GB", "256GB", "512GB", "1TB"] },
+  iphone13promax: { colors: ["石墨色", "金色", "银色", "远峰蓝色", "苍岭绿色"], capacities: ["128GB", "256GB", "512GB", "1TB"] },
+  iphone14: { colors: ["午夜色", "蓝色", "星光色", "紫色", "红色", "黄色"], capacities: ["128GB", "256GB", "512GB"] },
+  iphone14plus: { colors: ["午夜色", "蓝色", "星光色", "紫色", "红色", "黄色"], capacities: ["128GB", "256GB", "512GB"] },
+  iphone14pro: { colors: ["深空黑色", "银色", "金色", "暗紫色"], capacities: ["128GB", "256GB", "512GB", "1TB"] },
+  iphone14promax: { colors: ["深空黑色", "银色", "金色", "暗紫色"], capacities: ["128GB", "256GB", "512GB", "1TB"] },
+  iphone15: { colors: ["黑色", "蓝色", "绿色", "黄色", "粉色"], capacities: ["128GB", "256GB", "512GB"] },
+  iphone15plus: { colors: ["黑色", "蓝色", "绿色", "黄色", "粉色"], capacities: ["128GB", "256GB", "512GB"] },
+  iphone15pro: { colors: ["黑色钛金属", "白色钛金属", "蓝色钛金属", "原色钛金属"], capacities: ["128GB", "256GB", "512GB", "1TB"] },
+  iphone15promax: { colors: ["黑色钛金属", "白色钛金属", "蓝色钛金属", "原色钛金属"], capacities: ["256GB", "512GB", "1TB"] },
+  iphone16: { colors: ["黑色", "白色", "粉色", "深青色", "群青色"], capacities: ["128GB", "256GB", "512GB"] },
+  iphone16plus: { colors: ["黑色", "白色", "粉色", "深青色", "群青色"], capacities: ["128GB", "256GB", "512GB"] },
+  iphone16pro: { colors: ["黑色钛金属", "白色钛金属", "原色钛金属", "沙漠色钛金属"], capacities: ["128GB", "256GB", "512GB", "1TB"] },
+  iphone16promax: { colors: ["黑色钛金属", "白色钛金属", "原色钛金属", "沙漠色钛金属"], capacities: ["256GB", "512GB", "1TB"] },
+};
+
+function normalizePhoneModel(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 export default function OrderEntryForm({
   products,
   templates,
@@ -52,6 +78,21 @@ export default function OrderEntryForm({
       `${item.code} ${item.name}`.toLowerCase().includes(keyword)
     );
   }, [products, searchKeyword]);
+
+  const productNameOptions = useMemo(() => {
+    const options = new Set<string>();
+    for (const product of products) {
+      options.add(product.name);
+      const specification = PHONE_SPECIFICATIONS[normalizePhoneModel(product.name)];
+      if (!specification) continue;
+      for (const color of specification.colors) {
+        for (const capacity of specification.capacities) {
+          options.add(`${product.name} ${color} ${capacity}`);
+        }
+      }
+    }
+    return Array.from(options);
+  }, [products]);
 
   const defaultValues = useMemo(() => ({
     currency: config?.currency ?? "CNY",
@@ -255,7 +296,7 @@ export default function OrderEntryForm({
                 placeholder="可直接手打商品名称"
             />
             <datalist id="productNameOptions">
-              {products.map((item) => <option key={`${item.id}-name`} value={item.name} />)}
+              {productNameOptions.map((name) => <option key={name} value={name} />)}
             </datalist>
           </Field>
           <Field label="SKU" required={config?.requireSku}>
