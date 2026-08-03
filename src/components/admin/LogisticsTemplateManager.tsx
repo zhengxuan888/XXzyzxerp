@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Download, LoaderCircle, Pencil, Plus, X } from "lucide-react";
+import { Check, Download, LoaderCircle, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 
 import {
@@ -132,6 +132,20 @@ export default function LogisticsTemplateManager({
     window.setTimeout(() => window.location.reload(), 1200);
   }
 
+  async function deleteTemplate(template: Template) {
+    if (!window.confirm(`确定删除物流商模板“${template.name}”吗？删除后不能恢复。`)) return;
+    setLoading(true);
+    setMessage("");
+    const response = await fetch(`/api/mvp/logistics-templates/${template.id}`, { method: "DELETE" });
+    const payload = await response.json().catch(() => null);
+    setLoading(false);
+    if (!response.ok) {
+      setMessage(payload?.error?.message ?? "删除失败。已用于历史导出批次的模板请改为停用。");
+      return;
+    }
+    window.location.reload();
+  }
+
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -232,6 +246,7 @@ export default function LogisticsTemplateManager({
               </button>
             )}
             {canManage && <button type="button" onClick={() => setEditingId(editingId === template.id ? null : template.id)} className="ml-2 mt-3 inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Pencil size={15} />编辑</button>}
+            {canManage && <button type="button" disabled={loading} onClick={() => deleteTemplate(template)} className="ml-2 mt-3 inline-flex items-center gap-2 rounded-lg border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"><Trash2 size={15} />删除</button>}
             {canManage && editingId === template.id && (() => {
               const config = parseLogisticsTemplateConfiguration(template.configuration);
               return <form onSubmit={(event) => saveTemplate(event, template.id)} className="mt-4 grid gap-3 border-t border-slate-100 pt-4">

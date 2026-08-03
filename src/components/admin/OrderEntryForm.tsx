@@ -265,7 +265,7 @@ export default function OrderEntryForm({
             </select>
           </Field>
           <Field label="数量" required><input name="quantity" type="number" min="1" defaultValue="1" required className={input} /></Field>
-          <Field label="商品金额"><input name="unitPrice" type="number" min="0" step="0.01" defaultValue="0.00" required className={input} /></Field>
+          <Field label="申报金额"><input name="unitPrice" type="number" min="0" step="0.01" defaultValue="0.00" required className={input} /></Field>
           <Field label="COD 币种">
             <select name="currency" defaultValue={defaultValues.currency} key={`${templateId}-currency`} className={input}>
               {[["EUR", "EUR 欧元"], ["CNY", "CNY 人民币"], ["USD", "USD 美元"], ["GBP", "GBP 英镑"], ["PLN", "PLN 波兰兹罗提"], ["CZK", "CZK 捷克克朗"], ["HUF", "HUF 匈牙利福林"], ["RON", "RON 罗马尼亚列伊"], ["BGN", "BGN 保加利亚列弗"], ["SEK", "SEK 瑞典克朗"], ["DKK", "DKK 丹麦克朗"], ["NOK", "NOK 挪威克朗"], ["CHF", "CHF 瑞士法郎"]].map(([value, label]) => <option key={value} value={value}>{label}</option>)}

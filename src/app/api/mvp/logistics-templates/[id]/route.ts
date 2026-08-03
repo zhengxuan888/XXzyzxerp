@@ -48,3 +48,39 @@ export async function PATCH(request: NextRequest, props: RouteContext<"/api/mvp/
   await writeAuditLog({ actorUserId: auth.userId, actorMembershipId: auth.membership.id, module: "logistics.templates", action: "logistics_template.update", targetType: "logistics_provider_template", targetId: id, businessUnitId: auth.membership.businessUnitId, roleId: auth.membership.roleId, details: { previous: { code: current.code, name: current.name, isActive: current.isActive, version: current.version }, next: { code, name, isActive: updated.isActive, version: updated.version } } });
   return ok(updated);
 }
+
+export async function DELETE(request: NextRequest, props: RouteContext<"/api/mvp/logistics-templates/[id]">) {
+  const auth = await requireAuthContext(request);
+  if (!auth) return fail("UNAUTHENTICATED", "请先登录。", 401);
+  const permission = await checkPermission({
+    userId: auth.userId,
+    membershipId: auth.membership.id,
+    actionKey: "logistics_template.manage",
+    targetBusinessUnitId: auth.membership.businessUnitId,
+  });
+  if (!permission.allowed) return fail("FORBIDDEN", "无权删除物流商模板。", 403);
+
+  const { id } = await props.params;
+  const current = await prisma.logisticsProviderTemplate.findFirst({
+    where: { id, businessUnitId: auth.membership.businessUnitId },
+    include: { _count: { select: { exportBatches: true } } },
+  });
+  if (!current) return fail("NOT_FOUND", "物流商模板不存在。", 404);
+  if (current._count.exportBatches > 0) {
+    return fail("TEMPLATE_IN_USE", "该模板已有历史导出批次，不能删除。请编辑模板并将其停用。", 409);
+  }
+
+  await prisma.logisticsProviderTemplate.delete({ where: { id } });
+  await writeAuditLog({
+    actorUserId: auth.userId,
+    actorMembershipId: auth.membership.id,
+    module: "logistics.templates",
+    action: "logistics_template.delete",
+    targetType: "logistics_provider_template",
+    targetId: id,
+    businessUnitId: auth.membership.businessUnitId,
+    roleId: auth.membership.roleId,
+    details: { code: current.code, name: current.name, version: current.version },
+  });
+  return ok({ id, deleted: true });
+}

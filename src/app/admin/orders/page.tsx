@@ -246,7 +246,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           },
           { key: "productName", label: "商品名称", required: true },
           { key: "quantity", label: "数量", type: "number", required: true },
-          { key: "unitPriceCents", label: "商品金额（分）", type: "number", required: true },
+          { key: "unitPriceCents", label: "申报金额（分）", type: "number", required: true },
           { key: "codAmountCents", label: "货到付款金额（分）", type: "number", required: false },
           { key: "shippingFeeCents", label: "运费（分）", type: "number", required: false },
           { key: "note", label: "订单备注", required: false },

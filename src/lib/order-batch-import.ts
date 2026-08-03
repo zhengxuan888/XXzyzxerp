@@ -173,7 +173,7 @@ export function validateOrderImportRows(
       && Number.isSafeInteger(row.unitPriceCents)
       && !Number.isSafeInteger(row.quantity * row.unitPriceCents)
     ) {
-      errors.push("商品金额超过安全范围");
+      errors.push("申报金额超过安全范围");
     }
     if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) errors.push("邮箱格式不正确");
     if (!/^[A-Z]{3}$/.test(row.currency)) errors.push("币种必须为 3 位字母代码");
