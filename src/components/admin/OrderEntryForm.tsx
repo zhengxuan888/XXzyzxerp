@@ -1,13 +1,25 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { CalendarDays, Check, CircleCheck, CircleHelp, CircleX, LoaderCircle, MailCheck, Package, Search, Sparkles, WalletCards } from "lucide-react";
+import { CalendarDays, Check, ChevronDown, CircleCheck, CircleHelp, CircleX, LoaderCircle, MailCheck, Package, Search, Sparkles, WalletCards } from "lucide-react";
 import type { OrderTemplateConfiguration } from "@/lib/order-template";
 import AttachmentPanel from "@/components/admin/AttachmentPanel";
 
 type Option = { id: string; code: string; name: string };
 type ProductOption = Option & { skus: { id: string; code: string }[] };
 type TemplateOption = Option & { configuration: OrderTemplateConfiguration; isDefault: boolean };
+
+const SKU_COLORS: Array<[string, string]> = [
+  ["深蓝色", "#1e3a8a"], ["群青色", "#4338ca"], ["天蓝色", "#38bdf8"], ["蓝色", "#3b82f6"],
+  ["粉色", "#ec4899"], ["绿色", "#22c55e"], ["黄色", "#eab308"], ["紫色", "#8b5cf6"],
+  ["红色", "#ef4444"], ["橙色", "#f97316"], ["黑色", "#111827"], ["白色", "#ffffff"],
+  ["灰色", "#94a3b8"], ["银色", "#cbd5e1"], ["金色", "#d4a72c"],
+  ["原色钛金属", "#b7aa96"], ["黑色钛金属", "#343434"], ["白色钛金属", "#e7e5e4"], ["蓝色钛金属", "#64748b"],
+];
+
+function skuColor(name: string) {
+  return SKU_COLORS.find(([label]) => name.includes(label))?.[1] ?? "#cbd5e1";
+}
 
 export default function OrderEntryForm({
   products,
@@ -33,6 +45,7 @@ export default function OrderEntryForm({
   const [selectedProductId, setSelectedProductId] = useState("");
   const selectedProduct = products.find((item) => item.id === selectedProductId);
   const [selectedSkuId, setSelectedSkuId] = useState("");
+  const [skuOpen, setSkuOpen] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [createdOrder, setCreatedOrder] = useState<{ id: string; orderNo: string } | null>(null);
@@ -73,7 +86,7 @@ export default function OrderEntryForm({
       setError("请填写商品名称。");
       return;
     }
-    if (config?.requireSku && !selectedProductId) {
+    if (config?.requireSku && (!selectedProductId || !selectedSkuId)) {
       setError("当前订单模板要求选择关联库存商品和 SKU。");
       return;
     }
@@ -261,10 +274,23 @@ export default function OrderEntryForm({
             </select>
           </Field>
           <Field label="SKU" required={config?.requireSku}>
-            <select name="skuId" value={selectedSkuId} onChange={(event) => setSelectedSkuId(event.target.value)} required={config?.requireSku} disabled={!selectedProductId} className={`${input} disabled:cursor-not-allowed disabled:bg-slate-50`}>
-              <option value="">选择 SKU</option>
-              {selectedProduct?.skus.map((sku) => <option key={sku.id} value={sku.id}>{sku.code}</option>)}
-            </select>
+            <div className="relative" onBlur={() => window.setTimeout(() => setSkuOpen(false), 100)}>
+              <input type="hidden" name="skuId" value={selectedSkuId} />
+              <button type="button" disabled={!selectedProductId} onClick={() => setSkuOpen((value) => !value)} className={`${input} flex items-center justify-between disabled:cursor-not-allowed disabled:bg-slate-50`}>
+                <span className="flex min-w-0 items-center gap-2">
+                  {selectedSkuName && <span className="size-4 shrink-0 rounded-full border border-slate-300 shadow-sm" style={{ backgroundColor: skuColor(selectedSkuName) }} />}
+                  <span className="truncate">{selectedSkuName || "选择 SKU"}</span>
+                </span>
+                <ChevronDown size={16} className={`shrink-0 text-slate-400 transition ${skuOpen ? "rotate-180" : ""}`} />
+              </button>
+              {skuOpen && selectedProduct && <div className="absolute inset-x-0 top-full z-50 mt-1 max-h-72 overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
+                {selectedProduct.skus.map((sku) => <button key={sku.id} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { setSelectedSkuId(sku.id); setSkuOpen(false); }} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm hover:bg-slate-50 ${selectedSkuId === sku.id ? "bg-amber-50 font-semibold text-amber-900" : "text-slate-800"}`}>
+                  <span className="size-4 shrink-0 rounded-full border border-slate-300 shadow-sm" style={{ backgroundColor: skuColor(sku.code) }} />
+                  <span>{sku.code}</span>
+                  {selectedSkuId === sku.id && <Check size={15} className="ml-auto text-amber-600" />}
+                </button>)}
+              </div>}
+            </div>
           </Field>
           <Field label="数量" required><input name="quantity" type="number" min="1" defaultValue="1" required className={input} /></Field>
           <Field label="申报金额"><input name="unitPrice" type="number" min="0" step="0.01" defaultValue="0.00" required className={input} /></Field>
