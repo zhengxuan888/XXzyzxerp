@@ -81,7 +81,7 @@ export default function RolePermissionManager({ roles, actions, canCreate, canUp
 
       <section className="grid gap-4 lg:grid-cols-2">
         {roles.map((role) => (
-          <article key={role.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <article key={role.id} className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${editingId === role.id ? "lg:col-span-2" : ""}`}>
             <div className="flex items-start justify-between gap-3">
               <div><h3 className="font-bold text-slate-950">{role.name}</h3><p className="text-xs text-slate-500">{role.code}{role.isSystem ? " · 系统角色" : ""}</p></div>
               {canUpdate && <button type="button" onClick={() => setEditingId(editingId === role.id ? null : role.id)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold"><Pencil size={14} />配置</button>}
@@ -117,11 +117,14 @@ function RoleForm({ role, actions, busy, onSubmit, onCancel }: {
         {groups.map((namespace) => (
           <fieldset key={namespace} className="rounded-xl border border-slate-200 bg-white p-3">
             <legend className="px-2 text-xs font-bold text-violet-700">{namespaceLabel(namespace)}</legend>
-            <div className="grid gap-2 xl:grid-cols-2">
+            <div className="grid gap-2 2xl:grid-cols-2">
               {actions.filter((action) => action.namespace === namespace).map((action) => (
-                <div key={action.key} className="grid grid-cols-[1fr_9rem] items-center gap-2 rounded-lg border border-slate-100 p-2">
-                  <label className="flex min-w-0 items-start gap-2 text-xs"><input type="checkbox" name={`allowed:${action.key}`} defaultChecked={permissionMap.has(action.key)} /><span className="min-w-0"><strong className="block truncate">{actionLabel(action.key)}</strong></span></label>
-                  <select name={`scope:${action.key}`} defaultValue={permissionMap.get(action.key) ?? action.defaultScope} className="h-8 rounded-lg border border-slate-200 px-2 text-xs">{scopes.map((scope) => <option key={scope.value} value={scope.value}>{scope.label}</option>)}</select>
+                <div key={action.key} className="grid gap-2 rounded-lg border border-slate-100 p-3 sm:grid-cols-[minmax(12rem,1fr)_11rem] sm:items-center">
+                  <label className="flex min-w-0 items-start gap-2 text-sm">
+                    <input className="mt-0.5 shrink-0" type="checkbox" name={`allowed:${action.key}`} defaultChecked={permissionMap.has(action.key)} />
+                    <span className="min-w-0"><strong className="block leading-5 text-slate-800">{actionLabel(action.key)}</strong><span className="block break-all text-[11px] leading-4 text-slate-400">{action.key}</span></span>
+                  </label>
+                  <select aria-label={`${actionLabel(action.key)}的数据范围`} name={`scope:${action.key}`} defaultValue={permissionMap.get(action.key) ?? action.defaultScope} className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs">{scopes.map((scope) => <option key={scope.value} value={scope.value}>{scope.label}</option>)}</select>
                 </div>
               ))}
             </div>
