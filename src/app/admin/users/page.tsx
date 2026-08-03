@@ -44,9 +44,9 @@ export default async function UsersPage() {
           { key: "isActive", label: "启用账号", type: "checkbox" },
         ]}
         dataColumns={[
-          { key: "username", label: "员工账号" },
+          { key: "username", label: "员工账号", linkPath: "/admin/users/{id}/permissions" },
           { key: "email", label: "邮箱" },
-          { key: "fullName", label: "姓名" },
+          { key: "fullName", label: "姓名", linkPath: "/admin/users/{id}/permissions" },
           { key: "isActive", label: "状态", render: (row) => row.isActive ? "启用" : "待激活/停用" },
         ]}
       />

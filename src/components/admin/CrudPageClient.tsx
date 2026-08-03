@@ -22,6 +22,7 @@ export type DataCell = {
   key: string;
   label: string;
   render?: (row: DataRow) => string;
+  linkPath?: string;
 };
 
 export type CrudPageProps = {
@@ -338,7 +339,11 @@ export default function CrudPage({
                     <tr key={id} className={`group hover:bg-violet-50/30 ${highlightClass}`}>
                       {dataColumns.map((column) => (
                         <td key={`${id}-${column.key}`} className="max-w-80 whitespace-nowrap px-4 py-3 text-slate-700">
-                          {column.render ? <span className="block truncate">{column.render(row) || "-"}</span> : /status/i.test(column.key) ? <StatusPill value={row[column.key]} /> : <span className="block truncate">{displayValue(row[column.key]) || "-"}</span>}
+                          {column.linkPath ? (
+                            <Link className="block truncate font-semibold text-violet-700 hover:text-violet-900 hover:underline" href={column.linkPath.replace("{id}", id)}>
+                              {column.render ? column.render(row) || "-" : displayValue(row[column.key]) || "-"}
+                            </Link>
+                          ) : column.render ? <span className="block truncate">{column.render(row) || "-"}</span> : /status/i.test(column.key) ? <StatusPill value={row[column.key]} /> : <span className="block truncate">{displayValue(row[column.key]) || "-"}</span>}
                         </td>
                       ))}
                       <td className="sticky right-0 whitespace-nowrap bg-white px-4 py-3 text-right group-hover:bg-[#fbfaff]">
