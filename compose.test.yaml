@@ -11,9 +11,11 @@ services:
     ports:
       - "127.0.0.1:3100:3000"
     volumes:
-      - ./data/storage:/app/.local-storage
+      - attachment-storage:/app/.local-storage
     depends_on:
       migrate:
+        condition: service_completed_successfully
+      storage-init:
         condition: service_completed_successfully
     restart: unless-stopped
     cpus: 1.5
@@ -55,6 +57,13 @@ services:
         max-file: "2"
     networks:
       - erp-internal
+
+  storage-init:
+    image: alpine:3.20
+    command: ["sh", "-c", "chown -R 1001:1001 /storage"]
+    volumes:
+      - attachment-storage:/storage
+    restart: "no"
 
   postgres:
     image: postgres:16-alpine
@@ -104,6 +113,7 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  attachment-storage:
 
 networks:
   erp-internal:
