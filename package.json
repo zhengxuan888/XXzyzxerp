@@ -20,6 +20,7 @@
     "prisma:diff": "prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script --output prisma/migrations/202607230001_initial/migration.sql",
     "prisma:migrate:dev": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
+    "db:sync-phone-skus": "tsx scripts/sync-phone-variant-skus.ts",
     "config:check:local": "node scripts/validate-config.mjs --mode=local --file=.env",
     "config:check:staging": "node scripts/validate-config.mjs --mode=staging --file=.env.staging",
     "deploy:dry-run": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deployment-dry-run.ps1",
