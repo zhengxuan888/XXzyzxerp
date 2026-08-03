@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   if (!auth) return fail("UNAUTHENTICATED", "请先登录。", 401);
   if (!(await allowed(auth, "logistics_template.read")).allowed) return fail("FORBIDDEN", "无权查看物流商模板。", 403);
   const rows = await prisma.logisticsProviderTemplate.findMany({
-    where: { businessUnitId: auth.membership.businessUnitId },
+    where: { businessUnitId: auth.membership.businessUnitId, archivedAt: null },
     orderBy: [{ isActive: "desc" }, { name: "asc" }, { id: "asc" }],
   });
   return ok(rows);

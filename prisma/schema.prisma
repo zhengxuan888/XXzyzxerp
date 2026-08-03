@@ -1011,6 +1011,7 @@ model LogisticsProviderTemplate {
   configuration  Json
   version        Int      @default(1)
   isActive       Boolean  @default(true)
+  archivedAt     DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -1019,7 +1020,7 @@ model LogisticsProviderTemplate {
   exportBatches LogisticsExportBatch[]
 
   @@unique([businessUnitId, code])
-  @@index([businessUnitId, isActive])
+  @@index([businessUnitId, archivedAt, isActive])
 }
 
 model LogisticsExportBatch {

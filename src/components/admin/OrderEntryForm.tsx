@@ -34,6 +34,7 @@ export default function OrderEntryForm({
   const [selectedProductId, setSelectedProductId] = useState("");
   const selectedProduct = products.find((item) => item.id === selectedProductId);
   const [productName, setProductName] = useState(selectedProduct?.name ?? "");
+  const [productSuggestionsOpen, setProductSuggestionsOpen] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [createdOrder, setCreatedOrder] = useState<{ id: string; orderNo: string } | null>(null);
@@ -62,6 +63,12 @@ export default function OrderEntryForm({
     }
     return Array.from(options);
   }, [products]);
+
+  const filteredProductNameOptions = useMemo(() => {
+    const keyword = productName.trim().toLowerCase();
+    if (!keyword) return productNameOptions;
+    return productNameOptions.filter((name) => name.toLowerCase().includes(keyword));
+  }, [productName, productNameOptions]);
 
   const defaultValues = useMemo(() => ({
     currency: config?.currency ?? "CNY",
@@ -255,18 +262,44 @@ export default function OrderEntryForm({
             </select>
           </Field>
             <Field label="商品名称（可手打）" required={config?.requireProductName !== false}>
-              <input
-                name="productName"
-                required={config?.requireProductName !== false}
-                value={productName}
-                onChange={(event) => setProductName(event.target.value)}
-                className={input}
-                list="productNameOptions"
-                placeholder="可直接手打商品名称"
-            />
-            <datalist id="productNameOptions">
-              {productNameOptions.map((name) => <option key={name} value={name} />)}
-            </datalist>
+              <div className="relative">
+                <input
+                  name="productName"
+                  required={config?.requireProductName !== false}
+                  value={productName}
+                  onFocus={() => setProductSuggestionsOpen(true)}
+                  onBlur={() => window.setTimeout(() => setProductSuggestionsOpen(false), 120)}
+                  onChange={(event) => {
+                    setProductName(event.target.value);
+                    setProductSuggestionsOpen(true);
+                  }}
+                  className={input}
+                  autoComplete="off"
+                  placeholder="输入型号、颜色或容量筛选"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-expanded={productSuggestionsOpen}
+                  aria-controls="productNameOptions"
+                />
+                {productSuggestionsOpen && filteredProductNameOptions.length > 0 && (
+                  <div id="productNameOptions" className="absolute inset-x-0 top-full z-40 mt-1 max-h-72 overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
+                    {filteredProductNameOptions.map((name) => (
+                      <button
+                        key={name}
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => {
+                          setProductName(name);
+                          setProductSuggestionsOpen(false);
+                        }}
+                        className="block w-full px-3 py-2 text-left text-sm font-medium text-slate-900 hover:bg-amber-50 focus:bg-amber-50 focus:outline-none"
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
           </Field>
           <Field label="SKU" required={config?.requireSku}>
             <select name="skuId" required={config?.requireSku} disabled={!selectedProductId} className={`${input} disabled:cursor-not-allowed disabled:bg-slate-50`}>

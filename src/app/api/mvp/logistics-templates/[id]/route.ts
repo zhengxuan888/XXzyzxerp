@@ -67,7 +67,27 @@ export async function DELETE(request: NextRequest, props: RouteContext<"/api/mvp
   });
   if (!current) return fail("NOT_FOUND", "物流商模板不存在。", 404);
   if (current._count.exportBatches > 0) {
-    return fail("TEMPLATE_IN_USE", "该模板已有历史导出批次，不能删除。请编辑模板并将其停用。", 409);
+    const archivedAt = new Date();
+    await prisma.logisticsProviderTemplate.update({
+      where: { id },
+      data: {
+        archivedAt,
+        isActive: false,
+        code: `${current.code.slice(0, 29)}__ARCHIVED__${archivedAt.getTime()}`.slice(0, 50),
+      },
+    });
+    await writeAuditLog({
+      actorUserId: auth.userId,
+      actorMembershipId: auth.membership.id,
+      module: "logistics.templates",
+      action: "logistics_template.archive",
+      targetType: "logistics_provider_template",
+      targetId: id,
+      businessUnitId: auth.membership.businessUnitId,
+      roleId: auth.membership.roleId,
+      details: { code: current.code, name: current.name, version: current.version, exportBatchCount: current._count.exportBatches },
+    });
+    return ok({ id, deleted: true, archived: true });
   }
 
   await prisma.logisticsProviderTemplate.delete({ where: { id } });

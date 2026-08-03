@@ -62,7 +62,7 @@ export default async function ShippingWorkbenchPage() {
       },
     }),
     prisma.logisticsProviderTemplate.findMany({
-      where: { businessUnitId: membership.businessUnitId },
+      where: { businessUnitId: membership.businessUnitId, archivedAt: null },
       orderBy: [{ isActive: "desc" }, { name: "asc" }, { id: "asc" }],
       select: { id: true, code: true, name: true, carrierName: true, version: true, isActive: true, configuration: true },
     }),
