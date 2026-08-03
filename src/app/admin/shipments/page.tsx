@@ -460,7 +460,6 @@ export default async function ShipmentsPage({
 
   return (
     <div className="space-y-4">
-    <AfterSalesDailyReport />
     {canConfigure.allowed && <>
       <LogisticsWorkbenchSettings initial={workbenchConfig} />
     </>}
@@ -476,6 +475,7 @@ export default async function ShipmentsPage({
       filterOptions={{ departments, managers, creators, statuses, carriers, destinations }}
       rows={presentationRows}
     />
+    <AfterSalesDailyReport />
     </div>
   );
 }
