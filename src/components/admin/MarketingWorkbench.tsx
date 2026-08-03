@@ -75,17 +75,19 @@ export default function MarketingWorkbench() {
   const grouped = (zone: WorkbenchCard["zone"]) => data?.cards.filter((card) => card.zone === zone) ?? [];
   return (
     <div className="space-y-5">
-      <header className="overflow-hidden rounded-2xl border border-amber-200 bg-gradient-to-r from-slate-950 via-[#3a2b08] to-amber-800 p-6 text-white shadow-lg shadow-amber-100">
+      <header className="relative overflow-hidden rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-surface)] p-6 shadow-[var(--elevation-card)] backdrop-blur-xl">
+        <div className="pointer-events-none absolute -right-16 -top-20 size-64 rounded-full border-[44px] border-amber-100/60" />
+        <div className="pointer-events-none absolute -bottom-24 right-40 size-56 rounded-full border-[38px] border-blue-100/45" />
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold tracking-[0.16em] text-amber-200">投放运营</p>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight">我的投放工作台</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-amber-50/85">日报、目标和素材在一个入口协同；显示什么、排在哪里、谁能看，全部由配置和当前权限范围决定。</p>
+          <div className="relative">
+            <p className="text-xs font-semibold tracking-[0.14em] text-amber-700">投放运营</p>
+            <h1 className="mt-2 text-3xl font-bold tracking-[-0.03em] text-slate-950">我的投放工作台</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">日报、目标和素材在一个入口协同；显示什么、排在哪里、谁能看，全部由配置和当前权限范围决定。</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 rounded-xl bg-white/10 p-1.5 backdrop-blur">
-            {(data?.currencyChoices.length ?? 0) > 1 && <select aria-label="统计币种" value={currency} onChange={(event) => setCurrency(event.target.value)} className="h-9 rounded-lg border border-white/20 bg-white/10 px-2 text-sm text-white"><option value="">选择币种</option>{data?.currencyChoices.map((item) => <option key={item} value={item} className="text-slate-900">{item}</option>)}</select>}
-            <input aria-label="工作台日期" type="date" value={date} onChange={(event) => setDate(event.target.value)} className="h-9 rounded-lg border border-white/20 bg-white/10 px-2 text-sm text-white [color-scheme:dark]" />
-            <button type="button" onClick={() => void load()} disabled={loading} className="inline-flex size-9 items-center justify-center rounded-lg text-amber-100 hover:bg-white/15 disabled:opacity-50" aria-label="刷新工作台"><RefreshCw size={16} className={loading ? "animate-spin" : ""} /></button>
+          <div className="relative flex flex-wrap items-center gap-2 rounded-xl border border-white bg-white/72 p-1.5 shadow-sm backdrop-blur">
+            {(data?.currencyChoices.length ?? 0) > 1 && <select aria-label="统计币种" value={currency} onChange={(event) => setCurrency(event.target.value)} className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-700"><option value="">选择币种</option>{data?.currencyChoices.map((item) => <option key={item} value={item}>{item}</option>)}</select>}
+            <input aria-label="工作台日期" type="date" value={date} onChange={(event) => setDate(event.target.value)} className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-700" />
+            <button type="button" onClick={() => void load()} disabled={loading} className="inline-flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-amber-50 hover:text-amber-800 disabled:opacity-50" aria-label="刷新工作台"><RefreshCw size={16} className={loading ? "animate-spin" : ""} /></button>
           </div>
         </div>
       </header>
@@ -100,7 +102,7 @@ export default function MarketingWorkbench() {
           if (!cards.length) return null;
           const info = zoneTitle(zone);
           return (
-            <section key={zone} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <section key={zone} className="rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-surface)] p-5 shadow-[var(--elevation-card)] backdrop-blur-xl">
               <div className="mb-4 flex items-start justify-between gap-3"><div><p className="text-xs font-semibold text-amber-700">{zone === "FOCUS" ? "待办优先级" : zone === "OVERVIEW" ? "可配置指标" : "快捷操作"}</p><h2 className="mt-1 text-lg font-bold text-slate-950">{info.title}</h2><p className="mt-1 text-xs text-slate-500">{info.description}</p></div>{zone === "FOCUS" && <Target className="text-amber-600" size={21} />}{zone === "OVERVIEW" && <BarChart3 className="text-amber-600" size={21} />}{zone === "QUICK" && <ClipboardPenLine className="text-amber-600" size={21} />}</div>
               {zone === "OVERVIEW" && data && data.currencyChoices.length > 1 && !data.currency && <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">当前范围含多种币种。请选择币种后再查看金额和比率，系统不会混合不同币种计算。</p>}
               <div className={`grid gap-3 ${zone === "QUICK" ? "sm:grid-cols-2 xl:grid-cols-3" : "sm:grid-cols-2 xl:grid-cols-4"}`}>
@@ -109,7 +111,7 @@ export default function MarketingWorkbench() {
                     <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-bold text-slate-950">{card.label}</p><p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{card.description}</p></div>{card.kind !== "QUICK_ACTION" && <span className="shrink-0 text-2xl font-black tabular-nums text-amber-800">{displayValue(card)}</span>}{card.kind === "QUICK_ACTION" && <ChevronRight className="shrink-0 text-amber-700" size={18} />}</div>
                     {card.isDerived && <p className="mt-3 text-[11px] font-medium text-slate-400">系统按原始数据计算</p>}
                   </>;
-                  return card.href ? <Link key={card.key} href={card.href} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 transition hover:-translate-y-0.5 hover:border-amber-300 hover:bg-amber-50 hover:shadow-sm">{content}</Link> : <article key={card.key} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">{content}</article>;
+                  return card.href ? <Link key={card.key} href={card.href} className="rounded-xl border border-slate-200/80 bg-white/76 p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-amber-200 hover:bg-white hover:shadow-md">{content}</Link> : <article key={card.key} className="rounded-xl border border-slate-200/80 bg-white/76 p-4 shadow-sm">{content}</article>;
                 })}
               </div>
             </section>
