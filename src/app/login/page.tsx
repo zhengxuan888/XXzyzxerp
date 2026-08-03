@@ -94,7 +94,7 @@ export default function LoginPage() {
             <header className="mb-8">
               <p className="text-xs font-semibold tracking-[0.14em] text-amber-700">欢迎回来</p>
               <h2 className="mt-3 text-[32px] font-bold tracking-[-0.035em] text-slate-950">登录工作台</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-500">使用管理员分配的员工账号登录</p>
+              <p className="mt-2 text-sm leading-6 text-slate-500">员工账号登录</p>
             </header>
 
             <form className="space-y-5" onSubmit={onSubmit}>
@@ -129,7 +129,6 @@ export default function LoginPage() {
               </button>
             </form>
 
-            <p className="mt-7 flex items-center justify-center gap-1.5 text-center text-xs leading-5 text-slate-400"><ShieldCheck size={13} />请仅在获授权的业务范围内使用系统</p>
           </div>
         </section>
       </div>

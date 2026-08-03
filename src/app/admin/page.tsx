@@ -214,7 +214,7 @@ export default async function AdminHomePage() {
   return (
     <div className="space-y-5">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div><h1 className="text-2xl font-bold tracking-[-0.02em] text-slate-950">经营驾驶舱</h1><p className="mt-1.5 text-sm text-slate-500">聚合当前岗位的关键任务与业务状态，所有数据严格遵循你的权限范围。</p></div>
+        <div><h1 className="text-2xl font-bold tracking-[-0.02em] text-slate-950">经营驾驶舱</h1><p className="mt-1.5 text-sm text-slate-500">业务概况与待办</p></div>
         <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600"><span className="rounded-md border border-amber-200/70 bg-amber-50/80 px-2.5 py-1 font-medium text-amber-800">{membership.businessUnit?.name ?? "当前业务板块"}</span><span className="inline-flex items-center gap-1.5"><span className="size-1.5 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(34,197,94,0.12)]" />数据实时更新</span></div>
       </header>
 
@@ -230,7 +230,7 @@ export default async function AdminHomePage() {
       </section>
 
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
-        <WorkbenchSection title="今日重点" description="按优先级处理当前岗位最重要的业务闭环。" items={coreWorkbench} />
+        <WorkbenchSection title="今日重点" description="按优先级处理" items={coreWorkbench} />
         <WorkbenchSection title="业务概览" description="由管理员按角色、部门或员工配置展示。" items={overviewWorkbench} />
       </div>
       {workbench.length === 0 && <p className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-sm">当前岗位暂未配置可见工作台卡片，请联系拥有工作台配置权限的管理员。</p>}
