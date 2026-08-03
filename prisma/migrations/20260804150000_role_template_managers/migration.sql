@@ -1,6 +1,6 @@
 -- 独立的角色模板维护能力，避免误用临时转授权规则或开放其他系统配置。
-INSERT INTO "Action" (key, name, namespace, description, "createdAt", "updatedAt")
-VALUES ('role.template.manage', '管理角色模板', 'ERP', '维护角色模板、权限项与对应菜单可见性。', NOW(), NOW())
+INSERT INTO "Action" (id, key, name, namespace, description, "createdAt", "updatedAt")
+VALUES (gen_random_uuid(), 'role.template.manage', '管理角色模板', 'ERP', '维护角色模板、权限项与对应菜单可见性。', NOW(), NOW())
 ON CONFLICT (key) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, "updatedAt" = NOW();
 
 -- 系统管理员与总负责人直接拥有角色模板管理能力。
