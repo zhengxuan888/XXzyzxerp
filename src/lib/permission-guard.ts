@@ -64,6 +64,7 @@ export async function getMembershipAwareMenus(opts: {
       isActive: true,
       OR: [{ endedAt: null }, { endedAt: { gt: now } }],
     },
+    include: { role: { select: { code: true } } },
   });
   if (!membership) return new Map<string | null, PermissionSource[]>();
 
@@ -72,6 +73,7 @@ export async function getMembershipAwareMenus(opts: {
     membershipId: opts.membershipId,
   });
   const allowed = new Set(permissionSet);
+  const trustedAdministrator = ["platform_admin", "legacy_admin"].includes(membership.role.code);
 
   const menuPermissions = await prisma.menuPermission.findMany({
     where: { roleId: membership.roleId, isEnabled: true },
@@ -118,7 +120,7 @@ export async function getMembershipAwareMenus(opts: {
       (item) =>
         !parentMenuIds.has(item.id) &&
         hasNoBlockingCondition(item.requiredCondition) &&
-        (roleMenuIds.has(item.id) || Boolean(item.requiredActionKey && grantActions.has(item.requiredActionKey))) &&
+        (trustedAdministrator || roleMenuIds.has(item.id) || Boolean(item.requiredActionKey && grantActions.has(item.requiredActionKey))) &&
         (!item.requiredActionKey || allowed.has(item.requiredActionKey)),
     )
     .map((item) => ({
