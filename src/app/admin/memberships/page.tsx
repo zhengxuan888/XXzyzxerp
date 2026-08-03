@@ -68,7 +68,7 @@ export default async function MembershipsPage() {
     <ReportingLineManager rows={reportingRows} canManage={canManageReportingLine.allowed} />
     <CrudPage
       resource="memberships"
-      listTitle="Memberships"
+      listTitle="员工岗位"
       canCreate={canCreate.allowed}
       canUpdate={canUpdate.allowed}
       canDelete={canDelete.allowed}
@@ -77,41 +77,41 @@ export default async function MembershipsPage() {
       createFields={[
         {
           key: "userId",
-          label: "User",
+          label: "员工账号",
           type: "select",
           required: true,
           options: users.map((user) => ({ value: user.id, label: `${user.username} (${user.fullName})` })),
         },
         {
           key: "legalEntityId",
-          label: "Legal Entity",
+          label: "法人主体",
           type: "select",
           required: true,
           options: legalEntities.map((entity) => ({ value: entity.id, label: entity.name })),
         },
         {
           key: "businessUnitId",
-          label: "Business Unit",
+          label: "业务板块",
           type: "select",
           required: true,
           options: businessUnits.map((unit) => ({ value: unit.id, label: unit.name })),
         },
         {
           key: "roleId",
-          label: "Role",
+          label: "角色",
           type: "select",
           required: true,
           options: roles.map((role) => ({ value: role.id, label: role.name })),
         },
         {
           key: "departmentId",
-          label: "Department (optional)",
+          label: "部门（可选）",
           type: "select",
           options: departments.map((department) => ({ value: department.id, label: `${department.code} - ${department.name}` })),
         },
         {
           key: "siteId",
-          label: "Site (optional)",
+          label: "站点（可选）",
           type: "select",
           options: sites.map((site) => ({ value: site.id, label: site.name })),
         },
@@ -139,22 +139,22 @@ export default async function MembershipsPage() {
       dataColumns={[
         {
           key: "user",
-          label: "User",
+          label: "员工账号",
           render: (row) => ((row.user as { username?: string } | undefined)?.username ?? "-"),
         },
         {
           key: "businessUnit",
-          label: "Business Unit",
+          label: "业务板块",
           render: (row) => ((row.businessUnit as { name?: string } | undefined)?.name ?? "-"),
         },
-        { key: "role", label: "Role", render: (row) => ((row.role as { name?: string } | undefined)?.name ?? "-") },
+        { key: "role", label: "角色", render: (row) => ((row.role as { name?: string } | undefined)?.name ?? "-") },
         { key: "managerMembership", label: "直属上级", render: (row) => ((row.managerMembership as { user?: { fullName?: string } } | undefined)?.user?.fullName ?? "-") },
         {
           key: "department",
-          label: "Department",
+          label: "部门",
           render: (row) => ((row.department as { name?: string } | undefined)?.name ?? "-"),
         },
-        { key: "scope", label: "Scope" },
+        { key: "scope", label: "数据范围" },
       ]}
     />
   </>);

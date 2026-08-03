@@ -52,18 +52,18 @@ export default async function DepartmentsPage() {
   return (
     <CrudPage
       resource="departments"
-      listTitle="Departments"
+      listTitle="部门管理"
       canCreate={canCreate.allowed}
       canUpdate={canUpdate.allowed}
       canDelete={canDelete.allowed}
       deleteConfirmation="确定停用该部门吗？员工和历史业务数据不会被删除。"
       rows={rows}
       createFields={[
-        { key: "code", label: "Code", required: true },
-        { key: "name", label: "Name", required: true },
+        { key: "code", label: "编号", required: true },
+        { key: "name", label: "名称", required: true },
         {
           key: "businessUnitId",
-          label: "Business Unit",
+          label: "业务板块",
           type: "select",
           required: true,
           options: businessUnits.map((unit) => ({ value: unit.id, label: unit.name })),
@@ -71,12 +71,12 @@ export default async function DepartmentsPage() {
         { key: "isActive", label: "启用", type: "checkbox" },
       ]}
       dataColumns={[
-        { key: "code", label: "Code" },
-        { key: "name", label: "Name" },
+        { key: "code", label: "编号" },
+        { key: "name", label: "名称" },
         { key: "isActive", label: "状态", render: (row) => row.isActive ? "启用" : "停用" },
         {
           key: "businessUnit",
-          label: "Business Unit",
+          label: "业务板块",
           render: (row) => ((row.businessUnit as { name?: string } | undefined)?.name ?? "-"),
         },
       ]}

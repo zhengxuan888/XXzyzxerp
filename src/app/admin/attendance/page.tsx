@@ -48,38 +48,38 @@ export default async function AttendancePage() {
     <CrudPage
       apiBase="/api/mvp"
       resource="attendance"
-      listTitle="Attendance"
+      listTitle="考勤管理"
       canCreate={canCreate.allowed}
       canDelete={canDelete.allowed}
       rows={rows}
       createFields={[
-        { key: "attendanceDate", label: "Date (YYYY-MM-DD)", required: true },
+        { key: "attendanceDate", label: "日期（年-月-日）", required: true },
         {
           key: "recordType",
-          label: "Type",
+          label: "类型",
           required: true,
           type: "select",
           options: [
-            { value: "CHECK_IN", label: "Check In" },
-            { value: "CHECK_OUT", label: "Check Out" },
+            { value: "CHECK_IN", label: "签到" },
+            { value: "CHECK_OUT", label: "签退" },
           ],
         },
-        { key: "locationCode", label: "Location Code" },
-        { key: "memo", label: "Memo" },
+        { key: "locationCode", label: "地点编码" },
+        { key: "memo", label: "备注" },
       ]}
       dataColumns={[
-        { key: "attendanceDate", label: "Date" },
-        { key: "recordType", label: "Type" },
+        { key: "attendanceDate", label: "日期" },
+        { key: "recordType", label: "类型" },
         {
           key: "user",
-          label: "User",
+          label: "员工账号",
           render: (row) => {
             const user = row.user as { username?: string } | undefined;
             return user?.username || "-";
           },
         },
-        { key: "locationCode", label: "Location" },
-        { key: "memo", label: "Memo" },
+        { key: "locationCode", label: "地点" },
+        { key: "memo", label: "备注" },
       ]}
     />
   );

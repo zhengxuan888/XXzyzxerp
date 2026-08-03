@@ -193,7 +193,7 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1180px] text-left text-sm">
-            <thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-4 py-3">订单号</th><th className="px-4 py-3">状态</th><th className="px-4 py-3">录单人</th><th className="px-4 py-3">收件人</th><th className="px-4 py-3">商品</th><th className="px-4 py-3">国家</th><th className="px-4 py-3">COD</th><th className="px-4 py-3">提交时间</th><th className="px-4 py-3">操作</th></tr></thead>
+            <thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-4 py-3">订单号</th><th className="px-4 py-3">状态</th><th className="px-4 py-3">录单人</th><th className="px-4 py-3">收件人</th><th className="px-4 py-3">商品</th><th className="px-4 py-3">国家</th><th className="px-4 py-3">货到付款金额</th><th className="px-4 py-3">提交时间</th><th className="px-4 py-3">操作</th></tr></thead>
             <tbody>{rows.map((order) => <tr key={order.id} className="border-t border-slate-100">
               <td className="px-4 py-3 font-semibold text-amber-800">{order.orderNo}</td>
               <td className="px-4 py-3">{order.reviewClaimedBy ? <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">审核中 · {order.reviewClaimedBy.user.fullName || order.reviewClaimedBy.user.username}</span> : <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">待核单</span>}</td>

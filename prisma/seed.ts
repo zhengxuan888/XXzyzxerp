@@ -475,7 +475,7 @@ const menuDefs = [
   },
   {
     key: "marketing-kpis",
-    label: "投放 KPI",
+    label: "投放绩效指标",
     path: "/admin/marketing/kpis",
     requiredActionKey: "marketing.kpi.read",
     sortOrder: 154,

@@ -46,24 +46,24 @@ export default async function AnnouncementsPage() {
     <CrudPage
       apiBase="/api/mvp"
       resource="announcements"
-      listTitle="Announcements"
+      listTitle="公告管理"
       canCreate={canCreate.allowed}
       canDelete={canDelete.allowed}
       rows={rows}
       createFields={[
-        { key: "title", label: "Title", required: true },
-        { key: "content", label: "Content", required: true },
-        { key: "publishedAt", label: "Publish Time (YYYY-MM-DD)", required: false },
-        { key: "expiredAt", label: "Expired Time (YYYY-MM-DD)", required: false },
-        { key: "isActive", label: "Is Active", type: "text", required: false },
+        { key: "title", label: "标题", required: true },
+        { key: "content", label: "内容", required: true },
+        { key: "publishedAt", label: "发布时间（年-月-日）", required: false },
+        { key: "expiredAt", label: "失效时间（年-月-日）", required: false },
+        { key: "isActive", label: "是否启用", type: "text", required: false },
       ]}
       dataColumns={[
-        { key: "title", label: "Title" },
-        { key: "content", label: "Content" },
-        { key: "isActive", label: "Active" },
+        { key: "title", label: "标题" },
+        { key: "content", label: "内容" },
+        { key: "isActive", label: "启用状态" },
         {
           key: "publishedAt",
-          label: "Published At",
+          label: "发布时间",
           render: (row) => (row.publishedAt ? new Date(String(row.publishedAt)).toLocaleString() : "-"),
         },
       ]}

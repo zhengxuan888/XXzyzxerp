@@ -52,18 +52,18 @@ export default async function BusinessUnitsPage() {
   return (
     <CrudPage
       resource="business-units"
-      listTitle="Business Units"
+      listTitle="业务板块"
       canCreate={canCreate.allowed}
       canUpdate={canUpdate.allowed}
       canDelete={canDelete.allowed}
       deleteConfirmation="确定停用该业务板块吗？历史业务数据会保留，可通过编辑重新启用。"
       rows={rows}
       createFields={[
-        { key: "code", label: "Code", required: true },
-        { key: "name", label: "Name", required: true },
+        { key: "code", label: "编号", required: true },
+        { key: "name", label: "名称", required: true },
         {
           key: "legalEntityId",
-          label: "Legal entity",
+          label: "法人主体",
           type: "select",
           required: true,
           options: legalEntities.map((legal) => ({ value: legal.id, label: legal.name })),
@@ -71,12 +71,12 @@ export default async function BusinessUnitsPage() {
         { key: "isActive", label: "启用", type: "checkbox" },
       ]}
       dataColumns={[
-        { key: "code", label: "Code" },
-        { key: "name", label: "Name" },
+        { key: "code", label: "编号" },
+        { key: "name", label: "名称" },
         { key: "isActive", label: "状态", render: (row) => row.isActive ? "启用" : "停用" },
         {
           key: "legalEntity",
-          label: "Legal entity",
+          label: "法人主体",
           render: (row) => ((row.legalEntity as { name?: string } | undefined)?.name ?? "-"),
         },
       ]}

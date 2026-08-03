@@ -47,24 +47,24 @@ export default async function ApprovalsPage() {
     <CrudPage
       apiBase="/api/mvp"
       resource="approvals"
-      listTitle="Approvals"
+      listTitle="审批管理"
       canCreate={canCreate.allowed}
       canDelete={canDelete.allowed}
       rows={rows}
       createFields={[
-        { key: "targetType", label: "Target Type", required: true },
-        { key: "targetId", label: "Target ID", required: true },
-        { key: "action", label: "Action", required: true },
-        { key: "reason", label: "Reason" },
+        { key: "targetType", label: "目标类型", required: true },
+        { key: "targetId", label: "目标编号", required: true },
+        { key: "action", label: "操作", required: true },
+        { key: "reason", label: "原因" },
       ]}
       dataColumns={[
-        { key: "targetType", label: "Target Type" },
-        { key: "targetId", label: "Target ID" },
-        { key: "action", label: "Action" },
-        { key: "status", label: "Status" },
+        { key: "targetType", label: "目标类型" },
+        { key: "targetId", label: "目标编号" },
+        { key: "action", label: "操作" },
+        { key: "status", label: "状态" },
         {
           key: "submittedBy",
-          label: "Submitted By",
+          label: "提交人",
           render: (row) => {
             const submittedBy = row.submittedBy as { userId?: string } | undefined;
             return submittedBy?.userId || "Unknown";

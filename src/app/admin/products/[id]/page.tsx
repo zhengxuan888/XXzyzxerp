@@ -33,7 +33,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     <main className="space-y-5">
       <Link href="/admin/products" className="text-sm font-semibold text-violet-700">← 返回商品管理</Link>
       <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-violet-600">Product asset</p>
+        <p className="text-xs font-semibold tracking-[0.16em] text-violet-600">商品资料</p>
         <h1 className="mt-2 text-2xl font-black text-slate-950">{product.name}</h1>
         <p className="mt-1 text-sm text-slate-500">{product.code} · {product.category ?? "未分类"} · {product.skus.length} 个 SKU</p>
       </header>

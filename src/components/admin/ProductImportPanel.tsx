@@ -174,7 +174,7 @@ export default function ProductImportPanel({ canExport }: { canExport: boolean }
         <div className="mt-4 max-h-80 overflow-auto rounded-xl border border-slate-200">
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="sticky top-0 bg-slate-50 text-slate-500">
-              <tr><th className="p-3">行</th><th>商品编码</th><th>商品名称</th><th>SKU</th><th>分类</th><th>结果</th></tr>
+              <tr><th className="p-3">行</th><th>商品编码</th><th>商品名称</th><th>商品规格</th><th>分类</th><th>结果</th></tr>
             </thead>
             <tbody>
               {rows.map((row) => (

@@ -224,17 +224,17 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             type: "select",
             options: [],
           },
-          { key: "currency", label: "Currency", required: false },
+          { key: "currency", label: "币种", required: false },
           {
             key: "productId",
-            label: "Product",
+            label: "商品",
             required: true,
             type: "select",
             options: products.map((product) => ({ value: product.id, label: `${product.code} ${product.name}` })),
           },
           {
             key: "skuId",
-            label: "SKU",
+            label: "商品规格",
             required: true,
             type: "select",
             options: products.flatMap((product) =>
@@ -247,7 +247,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           { key: "productName", label: "商品名称", required: true },
           { key: "quantity", label: "数量", type: "number", required: true },
           { key: "unitPriceCents", label: "商品金额（分）", type: "number", required: true },
-          { key: "codAmountCents", label: "COD 金额（分）", type: "number", required: false },
+          { key: "codAmountCents", label: "货到付款金额（分）", type: "number", required: false },
           { key: "shippingFeeCents", label: "运费（分）", type: "number", required: false },
           { key: "note", label: "订单备注", required: false },
         ]}
