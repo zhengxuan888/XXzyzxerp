@@ -34,7 +34,12 @@ export default function RolePermissionManager({ roles, actions, canCreate, canUp
         body: JSON.stringify(roleId ? payload : { ...payload, actionKeys: payload.permissions.map((item) => item.actionKey) }),
       });
       const result = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(result?.error?.message ?? result?.error ?? "保存失败");
+      if (!response.ok) {
+        const message = result?.error === "ROLE_PERMISSION_EXCEEDS_AUTHORITY"
+          ? `不能授予当前管理员未拥有的权限${result?.actionKey ? `：${actionLabel(result.actionKey)}` : ""}`
+          : result?.error?.message ?? result?.error ?? "保存失败";
+        throw new Error(message);
+      }
       window.location.reload();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "保存失败");

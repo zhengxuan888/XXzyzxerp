@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
 import { checkPermission } from "@/lib/permission";
-import { getSystemConfigurationPermission } from "@/lib/system-configuration";
+import { getRoleTemplateManagementPermission } from "@/lib/role-template-management";
 
 export default async function RolesPage() {
   const session = await getSessionFromCookie();
@@ -13,26 +13,14 @@ export default async function RolesPage() {
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
 
-  const [canRead, canCreate, canUpdate, canManageGlobalRegistry] = await Promise.all([
+  const [canRead, canManageTemplates] = await Promise.all([
     checkPermission({
       userId: session.userId,
       membershipId: membership.id,
       actionKey: "role.read",
       targetBusinessUnitId: membership.businessUnitId,
     }),
-    checkPermission({
-      userId: session.userId,
-      membershipId: membership.id,
-      actionKey: "role.create",
-      targetBusinessUnitId: membership.businessUnitId,
-    }),
-    checkPermission({
-      userId: session.userId,
-      membershipId: membership.id,
-      actionKey: "role.update",
-      targetBusinessUnitId: membership.businessUnitId,
-    }),
-    getSystemConfigurationPermission({ userId: session.userId, membership }),
+    getRoleTemplateManagementPermission({ userId: session.userId, membership }),
   ]);
   if (!canRead.allowed) redirect("/admin");
 
@@ -43,8 +31,8 @@ export default async function RolesPage() {
 
   return (
     <RolePermissionManager
-      canCreate={canCreate.allowed && canManageGlobalRegistry.allowed}
-      canUpdate={canUpdate.allowed && canManageGlobalRegistry.allowed}
+      canCreate={canManageTemplates.allowed}
+      canUpdate={canManageTemplates.allowed}
       roles={rows.map((role) => ({ id: role.id, code: role.code, name: role.name, description: role.description, isSystem: role.isSystem, permissions: role.rolePermissions.map((permission) => ({ actionKey: permission.actionKey, scope: permission.scope })) }))}
       actions={actions.map((action) => ({ key: action.key, name: action.name, namespace: action.namespace, defaultScope: "BUSINESS_UNIT" }))}
     />

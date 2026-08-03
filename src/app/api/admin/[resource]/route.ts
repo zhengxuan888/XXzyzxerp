@@ -7,6 +7,7 @@ import { assertGrantRule, type PermissionScope, checkPermission } from "@/lib/pe
 import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { getSystemConfigurationPermission } from "@/lib/system-configuration";
+import { getRoleTemplateManagementPermission } from "@/lib/role-template-management";
 
 type RouteParams = {
   params: Promise<{ resource: string }>;
@@ -460,10 +461,8 @@ export async function POST(request: NextRequest, props: RouteParams) {
   }
 
   if (resource === "roles") {
-    const systemConfiguration = await getSystemConfigurationPermission(auth);
-    if (!systemConfiguration.allowed) {
-      return NextResponse.json({ error: "FORBIDDEN", reasons: systemConfiguration.reasons }, { status: 403 });
-    }
+    const templateManagement = await getRoleTemplateManagementPermission(auth);
+    if (!templateManagement.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: templateManagement.reasons }, { status: 403 });
     if (typeof body.code !== "string" || typeof body.name !== "string") {
       return invalidBody("code and name are required.");
     }
@@ -480,25 +479,6 @@ export async function POST(request: NextRequest, props: RouteParams) {
     if (new Set(requested.map((item) => item.actionKey)).size !== requested.length) return invalidBody("permission actions must be unique.");
     const actionCount = await prisma.action.count({ where: { key: { in: requested.map((item) => item.actionKey) } } });
     if (actionCount !== requested.length) return invalidBody("permission list contains unknown action.");
-    for (const permission of requested) {
-      const delegation = await assertGrantRule({
-        actorMembershipId: auth.membership.id,
-        actorUserId: auth.userId,
-        actionKey: permission.actionKey,
-        requestedScope: permission.scope,
-        target: {
-          businessUnitId: auth.membership.businessUnitId,
-          departmentId: auth.membership.departmentId,
-          siteId: auth.membership.siteId,
-        },
-      });
-      if (!delegation.allowed) {
-        return NextResponse.json(
-          { error: "ROLE_PERMISSION_EXCEEDS_AUTHORITY", actionKey: permission.actionKey, reasons: delegation.reasons },
-          { status: 403 },
-        );
-      }
-    }
     const code = body.code.trim();
     const name = body.name.trim();
     if (!code || !name) return invalidBody("code and name cannot be empty.");

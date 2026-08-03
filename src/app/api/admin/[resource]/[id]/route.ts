@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { ADMIN_RESOURCE_MAP, type AdminResource } from "@/lib/admin-rules";
 import { requireAuthContext } from "@/lib/api-auth";
-import { assertGrantRule, normalizeScope, checkPermission, type PermissionScope } from "@/lib/permission";
+import { assertGrantRule, normalizeScope, checkPermission } from "@/lib/permission";
 import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { getSystemConfigurationPermission } from "@/lib/system-configuration";
+import { getRoleTemplateManagementPermission } from "@/lib/role-template-management";
 
 function isSupportedResource(resource: string): resource is AdminResource {
   return (Object.keys(ADMIN_RESOURCE_MAP) as string[]).includes(resource);
@@ -262,15 +263,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ res
   }
 
   if (params.resource === "roles") {
-    const systemConfiguration = await getSystemConfigurationPermission(auth);
-    if (!systemConfiguration.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: systemConfiguration.reasons }, { status: 403 });
-    const canUpdateRole = await checkPermission({
-      userId: auth.userId,
-      membershipId: auth.membership.id,
-      actionKey: "role.update",
-      targetBusinessUnitId: auth.membership.businessUnitId,
-    });
-    if (!canUpdateRole.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: canUpdateRole.reasons }, { status: 403 });
+    const templateManagement = await getRoleTemplateManagementPermission(auth);
+    if (!templateManagement.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: templateManagement.reasons }, { status: 403 });
     const role = await prisma.role.findUnique({ where: { id: params.id }, include: { rolePermissions: true } });
     if (!role) return buildResponseNotFound();
     const roleBody = await request.json().catch(() => null) as Record<string, unknown> | null;
@@ -284,16 +278,6 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ res
     if (new Set(requested.map((item) => item.actionKey)).size !== requested.length) return invalidBody("权限动作不能重复。");
     const actionCount = await prisma.action.count({ where: { key: { in: requested.map((item) => item.actionKey) } } });
     if (actionCount !== requested.length) return invalidBody("权限列表包含不存在的动作。");
-    for (const permission of requested) {
-      const decision = await assertGrantRule({
-        actorMembershipId: auth.membership.id,
-        actorUserId: auth.userId,
-        actionKey: permission.actionKey,
-        requestedScope: permission.scope as PermissionScope,
-        target: { businessUnitId: auth.membership.businessUnitId, departmentId: auth.membership.departmentId, siteId: auth.membership.siteId },
-      });
-      if (!decision.allowed) return NextResponse.json({ error: "ROLE_PERMISSION_EXCEEDS_AUTHORITY", actionKey: permission.actionKey, reasons: decision.reasons }, { status: 403 });
-    }
     const code = roleBody.code.trim();
     const name = roleBody.name.trim();
     if (!code || !name) return invalidBody("角色编码和名称不能为空。");
