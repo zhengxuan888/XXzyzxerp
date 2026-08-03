@@ -5,6 +5,7 @@ import { useMemo, useState, type FormEvent } from "react";
 
 import {
   DEFAULT_RETURN_WORKBOOK_MAPPING,
+  countryRouteLines,
   parseLogisticsTemplateConfiguration,
   returnMappingLines,
 } from "@/lib/logistics-provider-template";
@@ -158,9 +159,12 @@ export default function LogisticsTemplateManager({
           <label className="text-sm">物流商<input name="carrierName" required className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
           <label className="text-sm">导出工作表名称<input name="sheetName" defaultValue="出库订单" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
           <label className="text-sm md:col-span-2">
-            导出字段（每行：系统字段=表格列名；可用 custom:字段名 接入订单自定义字段）
+            导出字段（每行：系统字段=表格列名；custom:字段名 读取订单补充信息；constant:值 填固定内容）
             <textarea name="columnLines" required rows={10} defaultValue={defaultColumns} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs" />
           </label>
+          <label className="text-sm md:col-span-2">国家线路（每行：国家二字码=运输方式）<textarea name="countryRouteLines" rows={4} placeholder={"PT=R葡萄牙COD专线(代发)\nES=R西班牙COD专线(代发)"} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs" /></label>
+          <label className="text-sm">表头底色（六位色值）<input name="headerFill" placeholder="例如 FFFF00" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
+          <label className="text-sm">表头文字颜色<input name="headerFontColor" placeholder="例如 000000" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
           <label className="text-sm">回传表头扫描行数（1–20）<input name="returnHeaderScanRows" type="number" min="1" max="20" defaultValue={DEFAULT_RETURN_WORKBOOK_MAPPING.headerScanRows} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
           <label className="text-sm md:col-span-2">
             回传字段识别（每行：字段=可能的列名，逗号分隔）
@@ -236,6 +240,9 @@ export default function LogisticsTemplateManager({
                 <label className="text-sm">物流商<input name="carrierName" required defaultValue={template.carrierName} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
                 <label className="text-sm">导出工作表名称<input name="sheetName" defaultValue={config.sheetName} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
                 <label className="text-sm">导出字段<textarea name="columnLines" required rows={10} defaultValue={config.columns.map((column) => `${column.field}=${column.header}`).join("\n")} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs" /></label>
+                <label className="text-sm">国家线路<textarea name="countryRouteLines" rows={4} defaultValue={countryRouteLines(config.countryRoutes)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs" /></label>
+                <label className="text-sm">表头底色<input name="headerFill" defaultValue={config.headerFill ?? ""} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
+                <label className="text-sm">表头文字颜色<input name="headerFontColor" defaultValue={config.headerFontColor ?? ""} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
                 <label className="text-sm">回传表头扫描行数<input name="returnHeaderScanRows" type="number" min="1" max="20" defaultValue={config.returnWorkbook.headerScanRows} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
                 <label className="text-sm">回传字段识别<textarea name="returnMappingLines" required rows={4} defaultValue={returnMappingLines(config.returnWorkbook)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs" /></label>
                 <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="isActive" defaultChecked={template.isActive} />启用模板</label>

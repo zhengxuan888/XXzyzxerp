@@ -42,7 +42,7 @@ export async function POST(request: NextRequest, context: RouteContext<"/api/mvp
       businessUnitId: auth.membership.businessUnitId,
       status: "WAITING_SHIPMENT",
     },
-    include: { items: { orderBy: { id: "asc" } } },
+    include: { creatorUser: { select: { username: true, fullName: true } }, items: { orderBy: { id: "asc" }, include: { sku: { select: { code: true } } } } },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
   if (candidateOrders.length !== orderIds.length) {
@@ -83,11 +83,15 @@ export async function POST(request: NextRequest, context: RouteContext<"/api/mvp
   const sheet = workbook.addWorksheet(configuration.sheetName);
   sheet.columns = configuration.columns.map((column) => ({ header: column.header, key: column.field, width: 18 }));
   const rowSnapshots = candidateOrders.map((order) => {
-    const payload = Object.fromEntries(configuration.columns.map((column) => [column.field, exportFieldValue(order, column.field)]));
-    sheet.addRow(payload);
+    const values = configuration.columns.map((column) => column.field === "shippingRoute"
+      ? configuration.countryRoutes[order.recipientCountryCode?.toUpperCase() ?? ""] ?? ""
+      : exportFieldValue(order, column.field));
+    const payload = Object.fromEntries(configuration.columns.map((column, index) => [`${index + 1}:${column.header}`, values[index]]));
+    sheet.addRow(values);
     return { order, payload };
   });
-  sheet.getRow(1).font = { bold: true };
+  sheet.getRow(1).font = { bold: true, color: configuration.headerFontColor ? { argb: `FF${configuration.headerFontColor}` } : undefined };
+  if (configuration.headerFill) sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${configuration.headerFill}` } };
   sheet.views = [{ state: "frozen", ySplit: 1 }];
   sheet.autoFilter = { from: "A1", to: { row: 1, column: configuration.columns.length } };
   const output = Buffer.from(await workbook.xlsx.writeBuffer());

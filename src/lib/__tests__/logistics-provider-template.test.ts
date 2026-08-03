@@ -20,4 +20,18 @@ describe("logistics provider template", () => {
       { field: "recipientPhone", header: "电话" },
     ]);
   });
+
+  it("supports fixed provider values and country-specific routes", () => {
+    const result = parseLogisticsTemplateConfiguration({
+      columns: [
+        { field: "shippingRoute", header: "运输方式" },
+        { field: "constant:1", header: "包裹件数" },
+      ],
+      countryRoutes: { pt: "R葡萄牙COD专线(代发)", invalid: "忽略" },
+      headerFill: "#FFFF00",
+    });
+    expect(result.countryRoutes).toEqual({ PT: "R葡萄牙COD专线(代发)" });
+    expect(result.headerFill).toBe("FFFF00");
+    expect(result.columns[1]).toEqual({ field: "constant:1", header: "包裹件数" });
+  });
 });

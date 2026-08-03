@@ -5,6 +5,8 @@ import type { LogisticsCoreExportField, LogisticsExportField } from "@/lib/logis
 type BatchExportItem = {
   productName: string;
   quantity: number;
+  unitPriceCents?: number;
+  sku?: { code: string } | null;
 };
 
 export type BatchExportOrder = {
@@ -23,6 +25,7 @@ export type BatchExportOrder = {
   note: string | null;
   customFields: unknown;
   items: BatchExportItem[];
+  creatorUser?: { username: string; fullName: string | null };
 };
 
 function scalarText(value: unknown): string | number {
@@ -42,7 +45,8 @@ function customFieldValue(input: unknown, key: string) {
 
 export function exportFieldValue(order: BatchExportOrder, field: LogisticsExportField): string | number {
   if (field.startsWith("custom:")) return customFieldValue(order.customFields, field.slice("custom:".length));
-  const values: Record<Exclude<LogisticsExportField, `custom:${string}`>, string | number> = {
+  if (field.startsWith("constant:")) return field.slice("constant:".length);
+  const values: Record<LogisticsCoreExportField, string | number> = {
     orderNo: order.orderNo,
     recipientName: order.recipientName ?? "",
     recipientPhone: order.recipientPhone ?? "",
@@ -58,6 +62,10 @@ export function exportFieldValue(order: BatchExportOrder, field: LogisticsExport
     currency: order.currency,
     customerWhatsapp: order.customerWhatsapp ?? "",
     note: order.note ?? "",
+    salesName: order.creatorUser?.fullName || order.creatorUser?.username || "",
+    productSkus: order.items.map((item) => item.sku?.code).filter(Boolean).join(" / "),
+    unitPrice: typeof order.items[0]?.unitPriceCents === "number" ? (order.items[0].unitPriceCents / 100).toFixed(2) : "",
+    shippingRoute: "",
   };
   return values[field as LogisticsCoreExportField];
 }

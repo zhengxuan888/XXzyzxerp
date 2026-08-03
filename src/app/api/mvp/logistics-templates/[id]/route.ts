@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { requireAuthContext } from "@/lib/api-auth";
 import { fail, ok } from "@/lib/api-response";
 import { writeAuditLog } from "@/lib/audit";
-import { parseColumnLines, parseLogisticsTemplateConfiguration, parseReturnMappingLines } from "@/lib/logistics-provider-template";
+import { parseColumnLines, parseCountryRouteLines, parseLogisticsTemplateConfiguration, parseReturnMappingLines } from "@/lib/logistics-provider-template";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 
@@ -26,6 +26,9 @@ export async function PATCH(request: NextRequest, props: RouteContext<"/api/mvp/
   const configuration = parseLogisticsTemplateConfiguration({
     sheetName: body?.sheetName,
     columns,
+    countryRoutes: parseCountryRouteLines(typeof body?.countryRouteLines === "string" ? body.countryRouteLines : ""),
+    headerFill: body?.headerFill,
+    headerFontColor: body?.headerFontColor,
     returnWorkbook: parseReturnMappingLines(
       typeof body?.returnMappingLines === "string" ? body.returnMappingLines : "",
       body?.returnHeaderScanRows,

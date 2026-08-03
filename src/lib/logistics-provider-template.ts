@@ -14,12 +14,16 @@ export const LOGISTICS_EXPORT_FIELDS = [
   "currency",
   "customerWhatsapp",
   "note",
+  "salesName",
+  "productSkus",
+  "unitPrice",
+  "shippingRoute",
 ] as const;
 
 export const LOGISTICS_RETURN_FIELDS = ["orderNo", "trackingNo", "carrier", "providerStatus"] as const;
 
 export type LogisticsCoreExportField = (typeof LOGISTICS_EXPORT_FIELDS)[number];
-export type LogisticsExportField = LogisticsCoreExportField | `custom:${string}`;
+export type LogisticsExportField = LogisticsCoreExportField | `custom:${string}` | `constant:${string}`;
 export type LogisticsReturnField = (typeof LOGISTICS_RETURN_FIELDS)[number];
 
 export type LogisticsTemplateColumn = {
@@ -38,10 +42,15 @@ export type LogisticsProviderTemplateConfiguration = {
   sheetName: string;
   columns: LogisticsTemplateColumn[];
   returnWorkbook: ReturnWorkbookMapping;
+  countryRoutes: Record<string, string>;
+  headerFill: string | null;
+  headerFontColor: string | null;
 };
 
 const coreFieldSet = new Set<string>(LOGISTICS_EXPORT_FIELDS);
 const customFieldPattern = /^custom:([a-zA-Z0-9_.-]{1,80})$/;
+const constantFieldPattern = /^constant:(.{0,100})$/u;
+const hexColorPattern = /^[0-9A-F]{6}$/i;
 
 // This is only a backward-compatible starting profile for old template rows.
 // Every newly created/edited template stores its own mapping in the database.
@@ -71,7 +80,7 @@ export function parseLogisticsExportField(value: unknown): LogisticsExportField 
   if (typeof value !== "string") return null;
   const field = value.trim();
   if (coreFieldSet.has(field)) return field as LogisticsCoreExportField;
-  return customFieldPattern.test(field) ? field as LogisticsExportField : null;
+  return customFieldPattern.test(field) || constantFieldPattern.test(field) ? field as LogisticsExportField : null;
 }
 
 export function parseReturnWorkbookMapping(value: unknown): ReturnWorkbookMapping {
@@ -108,6 +117,19 @@ export function returnMappingLines(mapping: ReturnWorkbookMapping) {
     .join("\n");
 }
 
+export function parseCountryRouteLines(raw: string) {
+  return Object.fromEntries(raw.split(/\r?\n/).flatMap((line) => {
+    const [countryRaw, ...routeParts] = line.split("=");
+    const country = countryRaw?.trim().toUpperCase();
+    const route = routeParts.join("=").trim();
+    return country && /^[A-Z]{2}$/.test(country) && route ? [[country, route.slice(0, 150)]] : [];
+  }));
+}
+
+export function countryRouteLines(routes: Record<string, string>) {
+  return Object.entries(routes).map(([country, route]) => `${country}=${route}`).join("\n");
+}
+
 export function parseLogisticsTemplateConfiguration(value: unknown): LogisticsProviderTemplateConfiguration {
   const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const rawColumns = Array.isArray(input.columns) ? input.columns : [];
@@ -120,12 +142,27 @@ export function parseLogisticsTemplateConfiguration(value: unknown): LogisticsPr
     return [{ field, header }];
   });
   if (!columns.length) throw new Error("LOGISTICS_TEMPLATE_COLUMNS_REQUIRED");
+  const rawCountryRoutes = input.countryRoutes && typeof input.countryRoutes === "object" && !Array.isArray(input.countryRoutes)
+    ? input.countryRoutes as Record<string, unknown>
+    : {};
+  const countryRoutes = Object.fromEntries(Object.entries(rawCountryRoutes).flatMap(([country, route]) => {
+    const code = country.trim().toUpperCase();
+    return /^[A-Z]{2}$/.test(code) && typeof route === "string" && route.trim()
+      ? [[code, route.trim().slice(0, 150)]]
+      : [];
+  }));
+  const color = (candidate: unknown) => typeof candidate === "string" && hexColorPattern.test(candidate.replace(/^#/, ""))
+    ? candidate.replace(/^#/, "").toUpperCase()
+    : null;
   return {
     sheetName: typeof input.sheetName === "string" && input.sheetName.trim()
       ? input.sheetName.trim().slice(0, 31)
       : "出库订单",
     columns,
     returnWorkbook: parseReturnWorkbookMapping(input.returnWorkbook),
+    countryRoutes,
+    headerFill: color(input.headerFill),
+    headerFontColor: color(input.headerFontColor),
   };
 }
 
