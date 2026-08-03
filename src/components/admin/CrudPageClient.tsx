@@ -2,6 +2,7 @@
 
 import { ChevronLeft, ChevronRight, Eye, FileSearch, LoaderCircle, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { useMemo, useState, type FormEvent } from "react";
 
 import { zh } from "@/lib/i18n";
@@ -23,6 +24,7 @@ export type DataCell = {
   label: string;
   render?: (row: DataRow) => string;
   linkPath?: string;
+  type?: "text" | "image";
 };
 
 export type CrudPageProps = {
@@ -339,7 +341,9 @@ export default function CrudPage({
                     <tr key={id} className={`group hover:bg-violet-50/30 ${highlightClass}`}>
                       {dataColumns.map((column) => (
                         <td key={`${id}-${column.key}`} className="max-w-80 whitespace-nowrap px-4 py-3 text-slate-700">
-                          {column.linkPath ? (
+                          {column.type === "image" && typeof row[column.key] === "string" && row[column.key] ? (
+                            <Image unoptimized width={56} height={56} src={String(row[column.key])} alt="商品图片" className="h-14 w-14 rounded-xl border border-slate-200 bg-white object-contain p-1" />
+                          ) : column.linkPath ? (
                             <Link className="block truncate font-semibold text-violet-700 hover:text-violet-900 hover:underline" href={column.linkPath.replace("{id}", id)}>
                               {column.render ? column.render(row) || "-" : displayValue(row[column.key]) || "-"}
                             </Link>

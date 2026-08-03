@@ -12,7 +12,7 @@ import CrudPageClient, {
  * cross into the interactive client component.
  */
 export default function CrudPage(props: CrudPageProps) {
-  const clientColumns: DataCell[] = props.dataColumns.map(({ key, label, linkPath }) => ({ key, label, linkPath }));
+  const clientColumns: DataCell[] = props.dataColumns.map(({ key, label, linkPath, type }) => ({ key, label, linkPath, type }));
   const clientRows: DataRow[] = props.rows.map((row) => {
     const prepared: DataRow = { ...row };
     if (props.rowClassName) prepared.__rowClassName = props.rowClassName(row);
