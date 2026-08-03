@@ -51,13 +51,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "该账号没有可用岗位，请联系管理员。" }, { status: 403 });
   }
 
+  const attendanceExempt = ["platform_admin", "business_manager", "legacy_admin", "legacy_ceo"].includes(selected.role?.code ?? "");
   const shanghaiDate = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Shanghai",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   }).format(new Date());
-  await prisma.attendance.upsert({
+  if (!attendanceExempt) await prisma.attendance.upsert({
     where: {
       businessUnitId_userId_attendanceDate_recordType: {
         businessUnitId: selected.businessUnitId,

@@ -8,7 +8,7 @@ function dateText() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
 function dateValue() { return new Date(`${dateText()}T00:00:00.000Z`); }
-function exempt(roleCode?: string | null) { return roleCode === "platform_admin" || roleCode === "business_manager"; }
+function exempt(roleCode?: string | null) { return ["platform_admin", "business_manager", "legacy_admin", "legacy_ceo"].includes(roleCode ?? ""); }
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuthContext(request);

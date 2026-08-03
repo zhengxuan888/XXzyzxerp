@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 export default function DailyGoalGate({ roleCode }: { roleCode?: string | null }) {
-  const exempt = roleCode === "platform_admin" || roleCode === "business_manager";
+  const exempt = ["platform_admin", "business_manager", "legacy_admin", "legacy_ceo"].includes(roleCode ?? "");
   const [state, setState] = useState({ loading: !exempt, completed: exempt, date: "" });
   const [count, setCount] = useState("");
   const [note, setNote] = useState("");
