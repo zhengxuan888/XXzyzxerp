@@ -90,7 +90,7 @@ export default function LogisticsReturnImport({ batches }: { batches: ExportBatc
       setMessage(payload?.error?.message ?? "确认回填失败，请重新预检。" );
       return;
     }
-    setMessage(`已回填 ${payload.data.summary.imported} 条物流单号。订单仍处于待发货；请上传出货凭证并点击“确认发货”后才会进入物流追踪。`);
+    setMessage(`已回填 ${payload.data.summary.imported} 条物流单号。下一步：打开下方待发货订单，上传发货凭证并确认发货。`);
     window.setTimeout(() => window.location.reload(), 1200);
   }
 
@@ -187,7 +187,12 @@ export default function LogisticsReturnImport({ batches }: { batches: ExportBatc
       </div>
       <p className="mt-2 text-xs text-slate-500">支持 .xlsx / .xltx。旧 .xls / .xlt 为避免运单号精度或前导零丢失，当前会提示先用 Excel 另存为 .xlsx 后预检。</p>
       {file && <p className="mt-2 text-sm text-slate-600">当前文件：{file.name}</p>}
-      {message && <p role="status" className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">{message}</p>}
+      {message && (
+        <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
+          <span>{message}</span>
+          {message.startsWith("已回填") && <a href="#shipping-confirmation" className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700">前往上传凭证</a>}
+        </div>
+      )}
 
       {rows.length > 0 && (
         <div className="mt-4 max-h-80 overflow-auto rounded-xl border border-slate-200">

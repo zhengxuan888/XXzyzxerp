@@ -295,8 +295,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       )}
 
       {canReadAttachments.allowed && order.status === "WAITING_SHIPMENT" && order.shipments.filter((shipment) => shipment.status === "PENDING").map((shipment) => (
+        <div key={shipment.id} id="shipment-proof" className="scroll-mt-24">
         <AttachmentPanel
-          key={shipment.id}
           targetType="SHIPMENT"
           targetId={shipment.id}
           canUpload={canCreateAttachments.allowed && canShip.allowed && Boolean(shipment.trackingNo)}
@@ -304,6 +304,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           refreshAfterUpload
           title={`出货凭证 · ${shipment.carrier || "待填写物流商"} · ${shipmentPermissions.get(shipment.id)?.trackingNo ? shipment.trackingNo || "待回填运单号" : "物流单号受限"}`}
         />
+        </div>
       ))}
 
       <section className="rounded border border-gray-200 p-4">

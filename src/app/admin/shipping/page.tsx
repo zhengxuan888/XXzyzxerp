@@ -163,21 +163,35 @@ export default async function ShippingWorkbenchPage() {
       memo: shipment?.memo ?? null,
     };
   });
+  const waitingTrackingCount = orders.filter((item) => !item.shipments[0]?.trackingNo).length;
+  const waitingConfirmationCount = orders.length - waitingTrackingCount;
 
   return (
     <div className="space-y-6">
       <header>
         <h1 className="text-2xl font-bold text-slate-950">待发货工作台</h1>
-        <p className="mt-1 text-sm text-slate-500">先回填真实物流单号，再上传出货凭证并确认发货；只有确认发货后才进入物流追踪。</p>
-        <p className="mt-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800"><strong>回填运单号不等于确认发货。</strong> 物流商回传运单号只是待发货资料：系统会保留导出批次、模板版本、原始回传文件与审计记录，绝不会自动把订单改成已发货。</p>
+        <p className="mt-1 text-sm text-slate-500">订单导出、物流单号回传、发货凭证和确认发货在这里依次完成。</p>
       </header>
-      <section className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">核单通过待处理</p><p className="mt-1 text-2xl font-bold text-slate-950">{orders.length}</p></div>
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm"><p className="text-xs text-amber-700">等待物流单号</p><p className="mt-1 text-2xl font-bold text-amber-900">{orders.filter((item) => !item.shipments[0]?.trackingNo).length}</p></div>
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm"><p className="text-xs text-emerald-700">已回填待确认发货</p><p className="mt-1 text-2xl font-bold text-emerald-900">{orders.filter((item) => item.shipments[0]?.trackingNo).length}</p></div>
+      <section aria-label="发货流程" className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:grid-cols-4">
+        {[
+          { step: "01", title: "导出订单", text: "选择订单和物流商模板", count: orders.length, tone: "text-slate-700 bg-slate-100" },
+          { step: "02", title: "回传物流单号", text: "上传物流商回传表", count: waitingTrackingCount, tone: "text-amber-800 bg-amber-50" },
+          { step: "03", title: "上传发货凭证", text: "进入订单上传图片或 PDF", count: waitingConfirmationCount, tone: "text-blue-800 bg-blue-50" },
+          { step: "04", title: "确认发货", text: "完成后进入物流追踪", count: waitingConfirmationCount, tone: "text-emerald-800 bg-emerald-50" },
+        ].map((item, index) => (
+          <div key={item.step} className={`relative p-4 ${index ? "border-t border-slate-100 lg:border-l lg:border-t-0" : ""}`}>
+            <div className="flex items-center justify-between gap-3">
+              <span className={`rounded-lg px-2 py-1 text-xs font-bold tabular-nums ${item.tone}`}>{item.step}</span>
+              <span className="text-xl font-bold tabular-nums text-slate-950">{item.count}</span>
+            </div>
+            <p className="mt-3 text-sm font-bold text-slate-900">{item.title}</p>
+            <p className="mt-1 text-xs text-slate-500">{item.text}</p>
+          </div>
+        ))}
       </section>
       {templateRead.allowed && <LogisticsTemplateManager templates={logisticsTemplates} exportCandidates={exportCandidates} canManage={templateManage.allowed} canExport={exportCandidates.length > 0} />}
       <LogisticsReturnImport batches={batches} />
+      <div id="shipping-confirmation" className="scroll-mt-24">
       <CrudPage
         apiBase="/api/mvp"
         resource="shipments"
@@ -204,9 +218,10 @@ export default async function ShippingWorkbenchPage() {
           { key: "products", label: "商品", render: (row) => ((row.order as { items?: Array<{ productName: string; quantity: number }> } | undefined)?.items ?? []).map((item) => `${item.productName} × ${item.quantity}`).join("、") || "-" },
           { key: "trackingNo", label: "物流单号" },
           { key: "carrier", label: "物流商 / 运输方式" },
-          { key: "status", label: "发货状态" },
+          { key: "status", label: "当前步骤", render: (row) => row.trackingNo ? "待上传凭证并确认发货" : "待回传物流单号" },
         ]}
       />
+      </div>
     </div>
   );
 }

@@ -96,21 +96,27 @@ export default function OrderWorkflowActions({
       <h2 className="font-medium">订单流程</h2>
       <p className="mt-1 text-sm text-gray-500">当前状态：{zh(currentStatus)}</p>
       {currentStatus === "WAITING_SHIPMENT" && permissions.ship && shippingChecklist && (
-        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <p className="text-xs font-bold text-slate-700">确认发货前检查</p>
-          <div className="mt-2 grid gap-2 text-xs sm:grid-cols-3">
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-bold text-slate-900">发货进度</p>
+            <span className="text-xs text-slate-500">按顺序完成后即可确认发货</span>
+          </div>
+          <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
             {[
-              ["物流记录", shippingChecklist.hasShipment],
-              ["真实物流单号", shippingChecklist.hasTrackingNo],
-              ["出货凭证", shippingChecklist.hasProof],
-            ].map(([label, complete]) => (
-              <span key={String(label)} className={`rounded-lg px-2.5 py-2 font-semibold ${complete ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}>
-                {complete ? "✓" : "○"} {label}
+              ["1", "回填物流单号", shippingChecklist.hasShipment && shippingChecklist.hasTrackingNo],
+              ["2", "上传发货凭证", shippingChecklist.hasProof],
+              ["3", "确认发货", shippingChecklist.hasShipment && shippingChecklist.hasTrackingNo && shippingChecklist.hasProof],
+            ].map(([step, label, complete]) => (
+              <span key={String(label)} className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 font-semibold ${complete ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
+                <span className={`grid h-5 w-5 place-items-center rounded-full text-[11px] ${complete ? "bg-emerald-600 text-white" : "bg-white text-amber-800"}`}>{complete ? "✓" : step}</span>
+                {label}
               </span>
             ))}
           </div>
           {(!shippingChecklist.hasShipment || !shippingChecklist.hasTrackingNo || !shippingChecklist.hasProof) && (
-            <p className="mt-2 text-xs text-amber-800">完成以上三项后，“确认发货”按钮才会开放。</p>
+            <p className="mt-3 text-xs text-amber-800">
+              {!shippingChecklist.hasTrackingNo ? "请先在待发货工作台回传物流单号。" : !shippingChecklist.hasProof ? "物流单号已回填，请在下方上传发货凭证。" : "完成以上步骤后即可确认发货。"}
+            </p>
           )}
         </div>
       )}
