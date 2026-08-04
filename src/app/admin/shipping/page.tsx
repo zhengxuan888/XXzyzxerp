@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 
-import CrudPage from "@/components/admin/CrudPage";
 import LogisticsReturnImport from "@/components/admin/LogisticsReturnImport";
 import LogisticsTemplateManager from "@/components/admin/LogisticsTemplateManager";
+import ShippingQuickQueue from "@/components/admin/ShippingQuickQueue";
 import { getActiveMembershipById } from "@/lib/auth";
 import { createOrderAccessPlan } from "@/lib/order-access";
 import { checkPermission } from "@/lib/permission";
@@ -25,9 +25,10 @@ export default async function ShippingWorkbenchPage() {
   // tree, direct reports, site, or an explicit Access Grant. Compile the
   // predicate once so the waiting-shipment queue never fetches out-of-scope
   // orders and then tries to hide them in the UI.
-  const [manualShipmentAccess, exportBatchAccess, templateRead, templateManage] = await Promise.all([
+  const [manualShipmentAccess, exportBatchAccess, shipAccess, templateRead, templateManage] = await Promise.all([
     createOrderAccessPlan({ membership, actionKey: "shipment.create" }),
     createOrderAccessPlan({ membership, actionKey: "logistics.export_batch.create" }),
+    createOrderAccessPlan({ membership, actionKey: "order.ship" }),
     checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "logistics_template.read", targetBusinessUnitId: membership.businessUnitId }),
     checkPermission({ userId: session.userId, membershipId: membership.id, actionKey: "logistics_template.manage", targetBusinessUnitId: membership.businessUnitId }),
   ]);
@@ -99,6 +100,12 @@ export default async function ShippingWorkbenchPage() {
     ownerMembershipId: order.ownedByMembershipId,
   });
   const orders = rawOrders.filter((order) => allowsOrder(order, manualShipmentAccess));
+  const shipmentIds = orders.flatMap((order) => order.shipments[0]?.id ? [order.shipments[0].id] : []);
+  const proofRows = shipmentIds.length ? await prisma.attachment.findMany({
+    where: { businessUnitId: membership.businessUnitId, targetType: "SHIPMENT", targetId: { in: shipmentIds }, status: "ACTIVE" },
+    select: { targetId: true },
+  }) : [];
+  const proofCounts = proofRows.reduce((counts, item) => counts.set(item.targetId, (counts.get(item.targetId) ?? 0) + 1), new Map<string, number>());
   const exportCandidates = rawOrders
     .filter((order) => allowsOrder(order, exportBatchAccess) && !order.shipments[0]?.trackingNo)
     .map((order) => ({
@@ -155,12 +162,17 @@ export default async function ShippingWorkbenchPage() {
   const workRows = orders.map((order) => {
     const shipment = order.shipments[0];
     return {
-      id: order.id,
-      order,
+      orderId: order.id,
+      orderNo: order.orderNo,
+      employee: order.creatorUser.fullName || order.creatorUser.username,
+      recipient: order.recipientName || "-",
+      country: order.recipientCountryCode || "-",
+      productSummary: order.items.map((item) => `${item.productName} × ${item.quantity}`).join("、"),
+      shipmentId: shipment?.id ?? null,
       trackingNo: shipment?.trackingNo ?? null,
       carrier: shipment?.carrier ?? null,
-      status: shipment?.status ?? "PENDING",
-      memo: shipment?.memo ?? null,
+      proofCount: shipment ? proofCounts.get(shipment.id) ?? 0 : 0,
+      canOperate: allowsOrder(order, shipAccess),
     };
   });
   const waitingTrackingCount = orders.filter((item) => !item.shipments[0]?.trackingNo).length;
@@ -191,37 +203,7 @@ export default async function ShippingWorkbenchPage() {
       </section>
       {templateRead.allowed && <LogisticsTemplateManager templates={logisticsTemplates} exportCandidates={exportCandidates} canManage={templateManage.allowed} canExport={exportCandidates.length > 0} />}
       <LogisticsReturnImport batches={batches} />
-      <div id="shipping-confirmation" className="scroll-mt-24">
-      <CrudPage
-        apiBase="/api/mvp"
-        resource="shipments"
-        listTitle="待发货订单（回填运单号后上传凭证并确认发货）"
-        createLabel="手动补录 / 更正"
-        detailPath="/admin/orders"
-        canCreate
-        canDelete={false}
-        rows={workRows}
-        createFields={[
-          { key: "orderId", label: "已核单订单", required: true, type: "select", options: orders.map((order) => ({ value: order.id, label: order.orderNo })) },
-          { key: "carrier", label: "物流商 / 运输方式", required: true },
-          { key: "trackingNo", label: "物流单号", required: true },
-          { key: "memo", label: "回填备注" },
-        ]}
-        dataColumns={[
-          { key: "order", label: "订单号", render: (row) => (row.order as { orderNo?: string } | undefined)?.orderNo ?? "-" },
-          { key: "employee", label: "销售", render: (row) => {
-            const creator = (row.order as { creatorUser?: { username?: string; fullName?: string | null } } | undefined)?.creatorUser;
-            return creator?.fullName || creator?.username || "-";
-          } },
-          { key: "recipient", label: "收件人", render: (row) => (row.order as { recipientName?: string | null } | undefined)?.recipientName ?? "-" },
-          { key: "country", label: "目的地", render: (row) => (row.order as { recipientCountryCode?: string | null } | undefined)?.recipientCountryCode ?? "-" },
-          { key: "products", label: "商品", render: (row) => ((row.order as { items?: Array<{ productName: string; quantity: number }> } | undefined)?.items ?? []).map((item) => `${item.productName} × ${item.quantity}`).join("、") || "-" },
-          { key: "trackingNo", label: "物流单号" },
-          { key: "carrier", label: "物流商 / 运输方式" },
-          { key: "status", label: "当前步骤", render: (row) => row.trackingNo ? "待上传凭证并确认发货" : "待回传物流单号" },
-        ]}
-      />
-      </div>
+      <ShippingQuickQueue rows={workRows} />
     </div>
   );
 }

@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import OrderReviewQuickTable from "@/components/admin/OrderReviewQuickTable";
 import { formatMoneyCents } from "@/lib/money";
 import { getActiveMembershipById } from "@/lib/auth";
 import { createOrderAccessPlan } from "@/lib/order-access";
+import { parseOrderTemplateConfiguration } from "@/lib/order-template";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookie } from "@/lib/session";
 
@@ -40,7 +42,12 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
   if (!session?.activeMembershipId) redirect("/login");
   const membership = await getActiveMembershipById(session.activeMembershipId);
   if (!membership) redirect("/login");
-  const reviewAccess = await createOrderAccessPlan({ membership, actionKey: "order.review" });
+  const [reviewAccess, approveAccess, rejectAccess, cancelAccess] = await Promise.all([
+    createOrderAccessPlan({ membership, actionKey: "order.review" }),
+    createOrderAccessPlan({ membership, actionKey: "order.review.approve" }),
+    createOrderAccessPlan({ membership, actionKey: "order.review.reject" }),
+    createOrderAccessPlan({ membership, actionKey: "order.void" }),
+  ]);
   if (!reviewAccess.allowed) redirect("/admin");
 
   const params = await searchParams;
@@ -144,6 +151,34 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       })
     : [];
+  const reviewConfiguration = parseOrderTemplateConfiguration(undefined);
+  const quickRows = rows.map((order) => {
+    const target = {
+      businessUnitId: membership.businessUnitId,
+      departmentId: order.departmentId,
+      siteId: order.siteId,
+      ownerMembershipId: order.ownedByMembershipId,
+    };
+    return {
+      id: order.id,
+      orderNo: order.orderNo,
+      employee: order.creatorUser.fullName || order.creatorUser.username,
+      recipient: order.recipientName || order.customer.name,
+      contact: order.recipientEmail || order.customerWhatsapp || order.recipientPhone || "-",
+      phone: order.recipientPhone || "",
+      whatsapp: order.customerWhatsapp || "",
+      address: order.recipientAddress || "",
+      productSummary: order.items.map((item) => `${item.productName} × ${item.quantity}`).join("、") || "-",
+      country: order.recipientCountryCode || "-",
+      amount: formatMoneyCents(order.codAmountCents, order.currency),
+      submittedAt: order.createdAt.toLocaleString("zh-CN"),
+      permissions: {
+        approve: approveAccess.allows(target),
+        reject: rejectAccess.allows(target),
+        cancel: cancelAccess.allows(target),
+      },
+    };
+  });
 
   const query = (overrides: Partial<Params>) => {
     const next = new URLSearchParams({
@@ -185,22 +220,7 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
       </form>
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1180px] text-left text-sm">
-            <thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-4 py-3">订单号</th><th className="px-4 py-3">状态</th><th className="px-4 py-3">录单人</th><th className="px-4 py-3">收件人</th><th className="px-4 py-3">商品</th><th className="px-4 py-3">国家</th><th className="px-4 py-3">货到付款金额</th><th className="px-4 py-3">提交时间</th><th className="px-4 py-3">操作</th></tr></thead>
-            <tbody>{rows.map((order) => <tr key={order.id} className="border-t border-slate-100">
-              <td className="px-4 py-3 font-semibold text-amber-800">{order.orderNo}</td>
-              <td className="px-4 py-3"><span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">待核单</span></td>
-              <td className="px-4 py-3">{order.creatorUser.fullName || order.creatorUser.username}</td>
-              <td className="px-4 py-3"><p>{order.recipientName || order.customer.name}</p><p className="text-xs text-slate-400">{order.recipientEmail || order.customerWhatsapp || order.recipientPhone || "-"}</p></td>
-              <td className="px-4 py-3">{order.items.map((item) => `${item.productName} × ${item.quantity}`).join("、") || "-"}</td>
-              <td className="px-4 py-3">{order.recipientCountryCode || "-"}</td>
-              <td className="px-4 py-3 font-semibold">{formatMoneyCents(order.codAmountCents, order.currency)}</td>
-              <td className="px-4 py-3">{order.createdAt.toLocaleString("zh-CN")}</td>
-              <td className="px-4 py-3"><Link href={`/admin/orders/${order.id}`} className="rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-50">开始核单</Link></td>
-            </tr>)}</tbody>
-          </table>
-        </div>
+        <OrderReviewQuickTable rows={quickRows} reviewRejectReasons={reviewConfiguration.reviewRejectReasons} voidReasons={reviewConfiguration.voidReasons} />
         {!rows.length && <p className="px-4 py-12 text-center text-sm text-slate-400">当前筛选暂无待核单订单</p>}
         <footer className="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
           <form method="get" className="flex items-center gap-2">{Object.entries({ tab, search, employee, product, country, start: params.start || "", end: params.end || "" }).map(([key, value]) => <input key={key} type="hidden" name={key} value={value} />)}<span>共 {selected.length} 条</span><select name="pageSize" defaultValue={String(pageSize)} className="h-9 rounded-lg border border-slate-200 px-2"><option value="10">10 / 页</option><option value="20">20 / 页</option><option value="50">50 / 页</option><option value="100">100 / 页</option></select><button className="rounded-lg border border-slate-200 px-3 py-2">应用</button></form>
