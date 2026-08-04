@@ -57,6 +57,7 @@ export default async function ShippingWorkbenchPage() {
         recipientCountryCode: true,
         creatorUser: { select: { username: true, fullName: true } },
         items: { select: { productName: true, quantity: true } },
+        logisticsExportBatchItems: { take: 1, select: { id: true } },
         shipments: {
           where: { status: "PENDING" },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -110,7 +111,7 @@ export default async function ShippingWorkbenchPage() {
   }) : [];
   const proofCounts = proofRows.reduce((counts, item) => counts.set(item.targetId, (counts.get(item.targetId) ?? 0) + 1), new Map<string, number>());
   const exportCandidates = rawOrders
-    .filter((order) => allowsOrder(order, exportBatchAccess) && !order.shipments[0]?.trackingNo)
+    .filter((order) => allowsOrder(order, exportBatchAccess) && !order.shipments[0]?.trackingNo && order.logisticsExportBatchItems.length === 0)
     .map((order) => ({
       id: order.id,
       orderNo: order.orderNo,

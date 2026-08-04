@@ -69,17 +69,12 @@ export async function POST(request: NextRequest, context: RouteContext<"/api/mvp
   const inFlight = await prisma.logisticsExportBatchItem.findFirst({
     where: {
       orderId: { in: candidateOrders.map((order) => order.id) },
-      exportBatch: {
-        is: {
-          businessUnitId: auth.membership.businessUnitId,
-          status: { in: ["EXPORTED", "SENT_TO_PROVIDER", "RETURN_PREVIEWED"] },
-        },
-      },
+      exportBatch: { is: { businessUnitId: auth.membership.businessUnitId } },
     },
     select: { exportBatch: { select: { batchNo: true } } },
   });
   if (inFlight) {
-    return fail("ORDER_ALREADY_IN_LOGISTICS_BATCH", `所选订单已在待回传的物流批次 ${inFlight.exportBatch.batchNo} 中，请先完成回传或取消旧批次。`, 409);
+    return fail("ORDER_ALREADY_EXPORTED", `所选订单已通过物流批次 ${inFlight.exportBatch.batchNo} 导出。一个订单只能选择一个模板并导出一次。`, 409);
   }
 
   const workbook = new ExcelJS.Workbook();
