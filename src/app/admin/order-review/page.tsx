@@ -9,8 +9,6 @@ import { getSessionFromCookie } from "@/lib/session";
 
 const tabs = [
   { key: "ALL", label: "全部" },
-  { key: "PENDING", label: "待核单" },
-  { key: "REVIEWING", label: "审核中" },
   { key: "REPEAT", label: "复购" },
   { key: "DUPLICATE", label: "重单" },
 ] as const;
@@ -46,7 +44,7 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
   if (!reviewAccess.allowed) redirect("/admin");
 
   const params = await searchParams;
-  const tab = (tabs.some((item) => item.key === params.tab) ? params.tab : "PENDING") as TabKey;
+  const tab = (tabs.some((item) => item.key === params.tab) ? params.tab : "ALL") as TabKey;
   const search = params.search?.trim() || "";
   const employee = params.employee?.trim() || "";
   const product = params.product?.trim() || "";
@@ -87,7 +85,6 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
         recipientPhone: true,
         customerWhatsapp: true,
         recipientCountryCode: true,
-        reviewClaimedByMembershipId: true,
       },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     }),
@@ -129,8 +126,6 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
   };
   const classified = {
     ALL: candidateIndex,
-    PENDING: candidateIndex.filter((order) => !order.reviewClaimedByMembershipId),
-    REVIEWING: candidateIndex.filter((order) => Boolean(order.reviewClaimedByMembershipId)),
     REPEAT: candidateIndex.filter((order) => repeatCustomers.has(order.customerId)),
     DUPLICATE: candidateIndex.filter(isDuplicate),
   };
@@ -144,7 +139,6 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
         include: {
           customer: { select: { id: true, name: true } },
           creatorUser: { select: { id: true, username: true, fullName: true } },
-          reviewClaimedBy: { include: { user: { select: { fullName: true, username: true } } } },
           items: { select: { productName: true, quantity: true } },
         },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -172,7 +166,7 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
       <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <p className="text-xs font-semibold text-amber-700">销售与订单</p>
         <h1 className="mt-1 text-2xl font-bold text-slate-950">核单工作台</h1>
-        <p className="mt-1 text-sm text-slate-500">领取后进入审核中；复购和重单由真实历史订单与客户联系方式自动识别。</p>
+        <p className="mt-1 text-sm text-slate-500">打开订单即可直接核单；复购和重单由真实历史订单与客户联系方式自动识别。</p>
       </header>
 
       <nav className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
@@ -196,14 +190,14 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
             <thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-4 py-3">订单号</th><th className="px-4 py-3">状态</th><th className="px-4 py-3">录单人</th><th className="px-4 py-3">收件人</th><th className="px-4 py-3">商品</th><th className="px-4 py-3">国家</th><th className="px-4 py-3">货到付款金额</th><th className="px-4 py-3">提交时间</th><th className="px-4 py-3">操作</th></tr></thead>
             <tbody>{rows.map((order) => <tr key={order.id} className="border-t border-slate-100">
               <td className="px-4 py-3 font-semibold text-amber-800">{order.orderNo}</td>
-              <td className="px-4 py-3">{order.reviewClaimedBy ? <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">审核中 · {order.reviewClaimedBy.user.fullName || order.reviewClaimedBy.user.username}</span> : <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">待核单</span>}</td>
+              <td className="px-4 py-3"><span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">待核单</span></td>
               <td className="px-4 py-3">{order.creatorUser.fullName || order.creatorUser.username}</td>
               <td className="px-4 py-3"><p>{order.recipientName || order.customer.name}</p><p className="text-xs text-slate-400">{order.recipientEmail || order.customerWhatsapp || order.recipientPhone || "-"}</p></td>
               <td className="px-4 py-3">{order.items.map((item) => `${item.productName} × ${item.quantity}`).join("、") || "-"}</td>
               <td className="px-4 py-3">{order.recipientCountryCode || "-"}</td>
               <td className="px-4 py-3 font-semibold">{formatMoneyCents(order.codAmountCents, order.currency)}</td>
               <td className="px-4 py-3">{order.createdAt.toLocaleString("zh-CN")}</td>
-              <td className="px-4 py-3"><Link href={`/admin/orders/${order.id}`} className="rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-50">{order.reviewClaimedByMembershipId === membership.id ? "继续审核" : "查看详情"}</Link></td>
+              <td className="px-4 py-3"><Link href={`/admin/orders/${order.id}`} className="rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-50">开始核单</Link></td>
             </tr>)}</tbody>
           </table>
         </div>

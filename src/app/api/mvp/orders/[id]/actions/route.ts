@@ -67,13 +67,6 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     const proofPermission = await checkPermission({ userId: auth.userId, membershipId: auth.membership.id, actionKey: "order.review.proof.upload", targetBusinessUnitId: order.businessUnitId, targetDepartmentId: order.departmentId, targetSiteId: order.siteId, targetUserId: order.creatorUserId, targetMembershipId: order.ownedByMembershipId });
     if (!proofPermission.allowed) return fail("FORBIDDEN", "当前角色未配置核单凭证权限", 403);
   }
-  if (
-    (action === "approve" || action === "reject" || (action === "void" && order.status === "SUBMITTED"))
-    && order.reviewClaimedByMembershipId !== auth.membership.id
-  ) {
-    return fail("ORDER_REVIEW_CLAIM_REQUIRED", "请先领取该订单，且只能由领取人完成核单。", 409);
-  }
-
   if (!config.from.includes(order.status) || !canTransitionOrder(order.status, config.to)) {
     return fail(
       "INVALID_ORDER_TRANSITION",
@@ -101,13 +94,6 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       if (!current || current.status !== order.status) {
         throw new Error("ORDER_CONCURRENTLY_CHANGED");
       }
-      if (
-        (action === "approve" || action === "reject" || (action === "void" && current.status === "SUBMITTED"))
-        && current.reviewClaimedByMembershipId !== auth.membership.id
-      ) {
-        throw new Error("ORDER_REVIEW_CLAIM_REQUIRED");
-      }
-
       const hasStockControlledItems = current.items.some((item) => item.stockControlled);
       if (action === "submit") {
         const communicationProofCount = await tx.attachment.count({
@@ -310,10 +296,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       );
     }
     if (error instanceof Error && error.message === "ORDER_REVIEW_PROOF_REQUIRED") {
-      return fail("ORDER_REVIEW_PROOF_REQUIRED", "核单通过前必须上传核单凭证，且由当前审核人员上传。", 409);
-    }
-    if (error instanceof Error && error.message === "ORDER_REVIEW_CLAIM_REQUIRED") {
-      return fail("ORDER_REVIEW_CLAIM_REQUIRED", "请先领取该订单，且只能由领取人完成核单或作废。", 409);
+      return fail("ORDER_REVIEW_PROOF_REQUIRED", "核单通过前必须上传核单凭证。", 409);
     }
     if (error instanceof Error && error.message === "SHIPMENT_FIELDS_REQUIRED") {
       return fail("SHIPMENT_FIELDS_REQUIRED", "请填写承运商与物流单号", 400);

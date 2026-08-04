@@ -15,7 +15,6 @@ type Props = {
     ship: boolean;
     cancel?: boolean;
   };
-  reviewClaimedByMe?: boolean;
   reviewRejectReasons?: string[];
   voidReasons?: string[];
   shippingChecklist?: {
@@ -37,7 +36,6 @@ export default function OrderWorkflowActions({
   orderId,
   currentStatus,
   permissions,
-  reviewClaimedByMe = false,
   reviewRejectReasons = [],
   voidReasons = [],
   shippingChecklist,
@@ -52,9 +50,9 @@ export default function OrderWorkflowActions({
     available.push("submit");
   }
   if (currentStatus === "SUBMITTED") {
-    if (reviewClaimedByMe && permissions.reviewApprove) available.push("approve");
-    if (reviewClaimedByMe && permissions.reviewReject) available.push("reject");
-    if (reviewClaimedByMe && permissions.cancel) available.push("void");
+    if (permissions.reviewApprove) available.push("approve");
+    if (permissions.reviewReject) available.push("reject");
+    if (permissions.cancel) available.push("void");
   }
   if (currentStatus === "WAITING_SHIPMENT") {
     if (permissions.cancel) available.push("void");
@@ -123,11 +121,6 @@ export default function OrderWorkflowActions({
       {available.length === 0 ? (
         <>
           <p className="mt-4 text-sm text-gray-500">当前状态下暂无可执行动作。</p>
-          {currentStatus === "SUBMITTED" && (permissions.reviewApprove || permissions.reviewReject || permissions.cancel) && !reviewClaimedByMe && (
-            <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              请先领取该订单；领取人上传核单凭证后才能通过或退回。
-            </p>
-          )}
         </>
       ) : (
         <>

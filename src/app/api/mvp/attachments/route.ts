@@ -96,13 +96,10 @@ export async function POST(request: NextRequest) {
   if (targetType === "ORDER_REVIEW") {
     const reviewOrder = await prisma.order.findFirst({
       where: { id: targetId, businessUnitId: auth.membership.businessUnitId },
-      select: { status: true, reviewClaimedByMembershipId: true },
+      select: { status: true },
     });
     if (!reviewOrder || reviewOrder.status !== "SUBMITTED") {
       return fail("ORDER_NOT_REVIEWABLE", "订单当前不在核单阶段。", 409);
-    }
-    if (reviewOrder.reviewClaimedByMembershipId !== auth.membership.id) {
-      return fail("ORDER_REVIEW_CLAIM_REQUIRED", "请先领取该订单，且只能由领取人上传核单凭证。", 409);
     }
   }
   if (targetType === "SHIPMENT") {

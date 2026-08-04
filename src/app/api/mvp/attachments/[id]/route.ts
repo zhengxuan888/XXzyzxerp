@@ -38,16 +38,13 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ id
   if (attachment.targetType === "ORDER_REVIEW") {
     const reviewOrder = await prisma.order.findFirst({
       where: { id: attachment.targetId, businessUnitId: auth.membership.businessUnitId },
-      select: { status: true, reviewClaimedByMembershipId: true },
+      select: { status: true },
     });
     if (!reviewOrder || reviewOrder.status !== "SUBMITTED") {
       return fail("REVIEW_PROOF_LOCKED", "核单完成后的凭证已锁定，不能删除。", 409);
     }
-    if (
-      reviewOrder.reviewClaimedByMembershipId !== auth.membership.id
-      || attachment.uploadedByMembershipId !== auth.membership.id
-    ) {
-      return fail("FORBIDDEN", "只能由当前领取人删除自己上传的核单凭证。", 403);
+    if (attachment.uploadedByMembershipId !== auth.membership.id) {
+      return fail("FORBIDDEN", "只能删除自己上传的核单凭证。", 403);
     }
   }
   if (attachment.targetType === "SHIPMENT") {

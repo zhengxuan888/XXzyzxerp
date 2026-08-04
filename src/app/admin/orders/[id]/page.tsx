@@ -5,7 +5,6 @@ import { format } from "date-fns";
 import type { Prisma } from "@prisma/client";
 
 import OrderWorkflowActions from "@/components/admin/OrderWorkflowActions";
-import OrderReviewClaimButton from "@/components/admin/OrderReviewClaimButton";
 import AttachmentPanel from "@/components/admin/AttachmentPanel";
 import { formatMoneyCents } from "@/lib/money";
 import { getSessionFromCookie } from "@/lib/session";
@@ -244,16 +243,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           </ul>
         </section>
 
-        {order.status === "SUBMITTED" && canReview.allowed && (
-          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
-            <OrderReviewClaimButton
-              orderId={order.id}
-              claimedByMe={order.reviewClaimedByMembershipId === membership.id}
-              claimedByName={order.reviewClaimedBy?.user.fullName ?? order.reviewClaimedBy?.user.username}
-            />
-          </div>
-        )}
-        <OrderWorkflowActions
+        {order.status !== "SUBMITTED" && <OrderWorkflowActions
           orderId={order.id}
           currentStatus={order.status}
           permissions={{
@@ -263,7 +253,6 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             ship: canShip.allowed,
             cancel: canCancel.allowed,
           }}
-          reviewClaimedByMe={order.reviewClaimedByMembershipId === membership.id}
           reviewRejectReasons={templateConfiguration.reviewRejectReasons}
           voidReasons={templateConfiguration.voidReasons}
           shippingChecklist={{
@@ -271,7 +260,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             hasTrackingNo: Boolean(pendingShipment?.trackingNo),
             hasProof: shipmentProofCount > 0,
           }}
-        />
+        />}
       </div>
 
       {canReadAttachments.allowed && (
@@ -285,13 +274,28 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       )}
 
       {canReadAttachments.allowed && canReview.allowed && canReviewProof.allowed && order.status === "SUBMITTED" && (
-        <AttachmentPanel
-          targetType="ORDER_REVIEW"
-          targetId={order.id}
-          canUpload={order.reviewClaimedByMembershipId === membership.id}
-          canDelete={canDeleteAttachments.allowed}
-          title="核单凭证（审核通过前必传，由当前审核人员上传）"
-        />
+        <div className="space-y-3">
+          <AttachmentPanel
+            targetType="ORDER_REVIEW"
+            targetId={order.id}
+            canUpload={canReviewProof.allowed}
+            canDelete={canDeleteAttachments.allowed}
+            title="核单凭证（审核通过前必传）"
+          />
+          <OrderWorkflowActions
+            orderId={order.id}
+            currentStatus={order.status}
+            permissions={{
+              submit: canSubmit.allowed,
+              reviewApprove: canReviewApprove.allowed,
+              reviewReject: canReviewReject.allowed,
+              ship: canShip.allowed,
+              cancel: canCancel.allowed,
+            }}
+            reviewRejectReasons={templateConfiguration.reviewRejectReasons}
+            voidReasons={templateConfiguration.voidReasons}
+          />
+        </div>
       )}
 
       {canReadAttachments.allowed && order.status === "WAITING_SHIPMENT" && order.shipments.filter((shipment) => shipment.status === "PENDING").map((shipment) => (
