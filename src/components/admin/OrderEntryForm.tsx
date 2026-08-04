@@ -139,10 +139,6 @@ export default function OrderEntryForm({
       return;
     }
     setCreatedOrder({ id: result.data.id, orderNo: result.data.orderNo });
-    const statsResponse = await fetch("/api/mvp/orders/success-stats", { cache: "no-store" });
-    if (statsResponse.ok) setCelebrationStats(await statsResponse.json());
-    setCelebration(true);
-    window.setTimeout(() => setCelebration(false), 10000);
     setSaving(false);
   }
 
@@ -158,7 +154,10 @@ export default function OrderEntryForm({
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.error?.message ?? payload?.error ?? "提交核单失败");
-      window.location.assign(`/admin/orders/${createdOrder.id}`);
+      const statsResponse = await fetch("/api/mvp/orders/success-stats", { cache: "no-store" });
+      if (statsResponse.ok) setCelebrationStats(await statsResponse.json());
+      setCelebration(true);
+      window.setTimeout(() => window.location.assign("/admin/orders"), 10000);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "提交核单失败");
     } finally {
@@ -210,7 +209,7 @@ export default function OrderEntryForm({
             <div className="rounded-2xl bg-blue-50 p-4"><strong className="block text-2xl tabular-nums text-blue-800">{celebrationStats?.week ?? "-"}</strong><span className="mt-1 block text-xs text-blue-700">本周累计</span></div>
             <div className="rounded-2xl bg-emerald-50 p-4"><strong className="block text-2xl tabular-nums text-emerald-800">{celebrationStats?.month ?? "-"}</strong><span className="mt-1 block text-xs text-emerald-700">本月累计</span></div>
           </div>
-          <p className="mt-5 text-sm text-slate-500">10 秒后自动关闭，请继续上传客户沟通凭证。</p>
+          <p className="mt-5 text-sm text-slate-500">订单已确认并提交核单，10 秒后进入下一笔录单。</p>
         </div>
       </div>}
       <div className="grid gap-3 md:grid-cols-3">
