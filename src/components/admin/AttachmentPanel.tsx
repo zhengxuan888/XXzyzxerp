@@ -297,19 +297,29 @@ export default function AttachmentPanel({
           </div>
           <button type="button" onClick={() => setPreviewIndex(null)} className="absolute right-5 top-5 z-20 rounded-full bg-white/90 p-2 text-slate-800 hover:bg-white" aria-label="关闭预览"><X size={20} /></button>
           {imageItems.length > 1 && <button type="button" onClick={showPrevious} className="absolute left-4 z-20 rounded-full bg-white/90 p-3 text-slate-800 hover:bg-white" aria-label="上一张"><ChevronLeft size={24} /></button>}
-          <div className="relative h-[82vh] w-[86vw] max-w-6xl overflow-auto rounded-lg" onWheel={(event) => { if (event.ctrlKey) { event.preventDefault(); setPreviewScale((value) => Math.min(4, Math.max(0.5, value + (event.deltaY < 0 ? 0.25 : -0.25)))); } }}>
+          <div className="relative h-[82vh] w-[86vw] max-w-6xl overflow-auto rounded-lg overscroll-contain" onWheel={(event) => { if (event.ctrlKey) { event.preventDefault(); setPreviewScale((value) => Math.min(4, Math.max(0.5, value + (event.deltaY < 0 ? 0.25 : -0.25)))); } }}>
             {previewLoading && <div className="absolute inset-0 z-10 grid place-items-center"><span className="inline-flex items-center gap-2 rounded-full bg-black/60 px-4 py-2 text-sm text-white"><LoaderCircle className="animate-spin" size={18} />正在加载原图</span></div>}
-            {/* Native img keeps the already-loaded attachment in the browser cache and allows smooth CSS zooming. */}
-            {/* eslint-disable-next-line @next/next/no-img-element -- native img reuses the authenticated full-image response and avoids a second optimizer request */}
-            <img
-              src={imageUrl(imageItems[previewIndex])}
-              alt={imageItems[previewIndex].originalName}
-              draggable={false}
-              onLoad={() => setPreviewLoading(false)}
-              onError={() => setPreviewLoading(false)}
-              className="mx-auto block h-full w-full object-contain transition-transform duration-150"
-              style={{ transform: `scale(${previewScale})` }}
-            />
+            <div
+              className="grid place-items-center transition-[width,height] duration-150"
+              style={{
+                width: `${Math.max(1, previewScale) * 100}%`,
+                height: `${Math.max(1, previewScale) * 100}%`,
+                minWidth: "100%",
+                minHeight: "100%",
+              }}
+            >
+              {/* Native img reuses the authenticated full-image response and avoids a second optimizer request. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={imageUrl(imageItems[previewIndex])}
+                alt={imageItems[previewIndex].originalName}
+                draggable={false}
+                onLoad={() => setPreviewLoading(false)}
+                onError={() => setPreviewLoading(false)}
+                className="block h-full w-full object-contain"
+                style={{ transform: previewScale < 1 ? `scale(${previewScale})` : undefined }}
+              />
+            </div>
             <p className="fixed bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1.5 text-xs text-white">{imageItems[previewIndex].originalName} · {previewIndex + 1}/{imageItems.length}</p>
           </div>
           {imageItems.length > 1 && <button type="button" onClick={showNext} className="absolute right-4 z-20 rounded-full bg-white/90 p-3 text-slate-800 hover:bg-white" aria-label="下一张"><ChevronRight size={24} /></button>}
