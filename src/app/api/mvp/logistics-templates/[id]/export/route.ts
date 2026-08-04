@@ -35,6 +35,9 @@ export async function POST(request: NextRequest, context: RouteContext<"/api/mvp
   });
   if (!template) return fail("TEMPLATE_NOT_FOUND", "物流商模板不存在或已停用。", 404);
   const configuration = parseLogisticsTemplateConfiguration(template.configuration);
+  const exportColumns = configuration.columns.some((column) => column.field === "salesName")
+    ? configuration.columns
+    : [...configuration.columns, { field: "salesName" as const, header: "录单员工" }];
 
   const candidateOrders = await prisma.order.findMany({
     where: {
@@ -81,19 +84,19 @@ export async function POST(request: NextRequest, context: RouteContext<"/api/mvp
 
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet(configuration.sheetName);
-  sheet.columns = configuration.columns.map((column) => ({ header: column.header, key: column.field, width: 18 }));
+  sheet.columns = exportColumns.map((column) => ({ header: column.header, key: column.field, width: 18 }));
   const rowSnapshots = candidateOrders.map((order) => {
-    const values = configuration.columns.map((column) => column.field === "shippingRoute"
+    const values = exportColumns.map((column) => column.field === "shippingRoute"
       ? configuration.countryRoutes[order.recipientCountryCode?.toUpperCase() ?? ""] ?? ""
       : exportFieldValue(order, column.field));
-    const payload = Object.fromEntries(configuration.columns.map((column, index) => [`${index + 1}:${column.header}`, values[index]]));
+    const payload = Object.fromEntries(exportColumns.map((column, index) => [`${index + 1}:${column.header}`, values[index]]));
     sheet.addRow(values);
     return { order, payload };
   });
   sheet.getRow(1).font = { bold: true, color: configuration.headerFontColor ? { argb: `FF${configuration.headerFontColor}` } : undefined };
   if (configuration.headerFill) sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${configuration.headerFill}` } };
   sheet.views = [{ state: "frozen", ySplit: 1 }];
-  sheet.autoFilter = { from: "A1", to: { row: 1, column: configuration.columns.length } };
+  sheet.autoFilter = { from: "A1", to: { row: 1, column: exportColumns.length } };
   const output = Buffer.from(await workbook.xlsx.writeBuffer());
   const safeCode = template.code.replace(/[^A-Z0-9_-]/g, "_");
   const artifact = prepareGeneratedSpreadsheetArtifact(`${safeCode}-${new Date().toISOString().slice(0, 10)}.xlsx`, output);
@@ -104,7 +107,7 @@ export async function POST(request: NextRequest, context: RouteContext<"/api/mvp
     name: template.name,
     carrierName: template.carrierName,
     version: template.version,
-    configuration,
+    configuration: { ...configuration, columns: exportColumns },
   };
 
   await localDemoStorage.put({ storageKey: artifact.storageKey, bytes: output });

@@ -256,7 +256,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     ) {
       return fail(
         "ORDER_CONCURRENTLY_CHANGED",
-        "订单或物流记录刚刚被其他人处理，请刷新后核对，系统未重复发货。",
+        action === "ship"
+          ? "订单或物流记录刚刚被其他人处理，请刷新后核对，系统未重复发货。"
+          : "订单刚刚被其他人处理，请刷新页面后核对。",
         409,
       );
     }

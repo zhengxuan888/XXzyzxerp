@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import type { Prisma } from "@prisma/client";
 
 import OrderWorkflowActions from "@/components/admin/OrderWorkflowActions";
+import DraftOrderEditForm from "@/components/admin/DraftOrderEditForm";
 import AttachmentPanel from "@/components/admin/AttachmentPanel";
 import { formatMoneyCents } from "@/lib/money";
 import { getSessionFromCookie } from "@/lib/session";
@@ -34,7 +35,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       customer: { select: { code: true, name: true } },
       creatorUser: { select: { username: true, fullName: true } },
       orderTemplate: { select: { code: true, name: true, configuration: true } },
-      items: { include: { product: { select: { code: true, name: true } } } },
+      items: { include: { product: { select: { code: true, name: true } }, sku: { select: { id: true, code: true } } } },
       shipments: { include: { events: true } },
       reviewClaimedBy: { include: { user: { select: { fullName: true, username: true } } } },
     },
@@ -53,10 +54,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     targetUserId: order.creatorUserId,
     targetMembershipId: order.ownedByMembershipId,
   };
-  const [canSubmit, canReview, canReviewApprove, canReviewReject, canShip, canCancel, canReadAttachments, canCreateAttachments, canDeleteAttachments] = await Promise.all([
+  const [canSubmit, canUpdate, canReview, canReviewApprove, canReviewReject, canShip, canCancel, canReadAttachments, canCreateAttachments, canDeleteAttachments] = await Promise.all([
     checkPermission({
       ...permissionTarget,
       actionKey: "order.submit",
+    }),
+    checkPermission({
+      ...permissionTarget,
+      actionKey: "order.update",
     }),
     checkPermission({
       ...permissionTarget,
@@ -111,6 +116,10 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     })),
   );
   const templateConfiguration = parseOrderTemplateConfiguration(order.orderTemplate?.configuration);
+  const [editableProducts, countries] = order.status === "DRAFT" && canUpdate.allowed ? await Promise.all([
+    prisma.product.findMany({ where: { businessUnitId: order.businessUnitId, isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, skus: { where: { isActive: true }, orderBy: { code: "asc" }, select: { id: true, code: true } } } }),
+    prisma.country.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { code: true, name: true } }),
+  ]) : [[], []];
   const contactMatches = ([
     order.recipientEmail ? { recipientEmail: { equals: order.recipientEmail, mode: "insensitive" as const } } : null,
     order.recipientPhone ? { recipientPhone: order.recipientPhone } : null,
@@ -260,6 +269,23 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           }}
         />}
       </div>
+
+      {order.status === "DRAFT" && canUpdate.allowed && order.exceptionNote && order.items[0] && (
+        <DraftOrderEditForm
+          products={editableProducts}
+          countries={countries}
+          order={{
+            id: order.id, shopId: order.shopId ?? "", productId: order.items[0].productId ?? "", skuId: order.items[0].sku?.id ?? "",
+            productName: order.items[0].productName, quantity: order.items[0].quantity, unitPriceCents: order.items[0].unitPriceCents,
+            codAmountCents: order.codAmountCents, shippingFeeCents: order.shippingFeeCents, currency: order.currency,
+            orderedAt: format(order.orderedAt, "yyyy-MM-dd"), recipientName: order.recipientName ?? "", recipientPhone: order.recipientPhone ?? "",
+            recipientEmail: order.recipientEmail ?? "", recipientCountryCode: order.recipientCountryCode ?? "", recipientPostalCode: order.recipientPostalCode ?? "",
+            recipientRegion: order.recipientRegion ?? "", recipientCity: order.recipientCity ?? "", recipientAddress: order.recipientAddress ?? "",
+            customerWhatsapp: order.customerWhatsapp ?? "", staffWhatsapp: order.staffWhatsapp ?? "", packageWeightGrams: order.packageWeightGrams ?? 0,
+            paymentMethod: order.paymentMethod ?? "COD", logisticsChannel: order.logisticsChannel ?? "", note: order.note ?? "", returnReason: order.exceptionNote,
+          }}
+        />
+      )}
 
       {canReadAttachments.allowed && (
         <AttachmentPanel

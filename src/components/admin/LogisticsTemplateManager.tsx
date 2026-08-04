@@ -45,6 +45,7 @@ const defaultColumns = [
   "currency=币种",
   "customerWhatsapp=WhatsApp",
   "note=备注",
+  "salesName=录单员工",
 ].join("\n");
 
 const defaultReturnMappings = returnMappingLines(DEFAULT_RETURN_WORKBOOK_MAPPING);
@@ -69,9 +70,13 @@ export default function LogisticsTemplateManager({
   const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  const [countryFilter, setCountryFilter] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState(templates.find((template) => template.isActive)?.id ?? "");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const selectedSet = useMemo(() => new Set(selectedOrderIds), [selectedOrderIds]);
+  const countries = useMemo(() => [...new Set(exportCandidates.map((order) => order.countryCode).filter((value): value is string => Boolean(value)))].sort(), [exportCandidates]);
+  const visibleCandidates = useMemo(() => countryFilter ? exportCandidates.filter((order) => order.countryCode === countryFilter) : exportCandidates, [countryFilter, exportCandidates]);
 
   function toggleOrder(orderId: string) {
     setSelectedOrderIds((current) => current.includes(orderId)
@@ -199,15 +204,19 @@ export default function LogisticsTemplateManager({
             <p className="text-xs text-slate-500">有权限且尚未回填运单号：{exportCandidates.length} 单；已选 {selectedOrderIds.length} 单。</p>
           </div>
           {canExport && exportCandidates.length > 0 && (
-            <div className="flex gap-2">
-              <button type="button" onClick={() => setSelectedOrderIds(exportCandidates.map((order) => order.id))} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-white">全选</button>
+            <div className="flex flex-wrap items-center gap-2">
+              <select value={countryFilter} onChange={(event) => setCountryFilter(event.target.value)} aria-label="按目的地筛选" className="h-9 min-w-40 rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700"><option value="">全部目的地（{exportCandidates.length}）</option>{countries.map((country) => <option key={country} value={country}>{country}（{exportCandidates.filter((order) => order.countryCode === country).length}）</option>)}</select>
+              <button type="button" onClick={() => setSelectedOrderIds((current) => [...new Set([...current, ...visibleCandidates.map((order) => order.id)])])} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-white">全选当前 {visibleCandidates.length} 单</button>
               <button type="button" onClick={() => setSelectedOrderIds([])} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-white">清空</button>
+              <span className="mx-1 hidden h-6 w-px bg-slate-200 xl:block" />
+              <select value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)} aria-label="选择物流模板" className="h-9 min-w-52 rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700"><option value="">选择物流模板</option>{templates.filter((template) => template.isActive).map((template) => <option key={template.id} value={template.id}>{template.name} · {template.carrierName}</option>)}</select>
+              <button type="button" disabled={!selectedOrderIds.length || !selectedTemplateId || loading} onClick={() => { const template = templates.find((item) => item.id === selectedTemplateId); if (template) void exportSelected(template); }} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500">{loading ? <LoaderCircle size={14} className="animate-spin" /> : <Download size={14} />}导出 {selectedOrderIds.length || 0} 单</button>
             </div>
           )}
         </div>
-        {exportCandidates.length ? (
-          <div className="max-h-64 overflow-auto">
-            {exportCandidates.map((order) => {
+        {visibleCandidates.length ? (
+          <div className="max-h-[520px] min-h-80 overflow-auto">
+            {visibleCandidates.map((order) => {
               const checked = selectedSet.has(order.id);
               return (
                 <label key={order.id} className="flex cursor-pointer items-center gap-3 border-b border-slate-100 px-4 py-2.5 last:border-0 hover:bg-violet-50/40">
@@ -221,32 +230,22 @@ export default function LogisticsTemplateManager({
               );
             })}
           </div>
-        ) : <p className="p-4 text-sm text-slate-500">当前权限范围内没有可导出的待发货订单。</p>}
+        ) : <p className="p-4 text-sm text-slate-500">{countryFilter ? "当前目的地没有可导出的待发货订单。" : "当前权限范围内没有可导出的待发货订单。"}</p>}
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-4 grid gap-2.5 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
         {templates.map((template) => (
-          <article key={template.id} className="rounded-xl border border-slate-200 p-4">
+          <article key={template.id} className="rounded-xl border border-slate-200 p-3 transition hover:border-slate-300 hover:shadow-sm">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <p className="text-xs font-semibold text-violet-600">{template.code} · v{template.version}</p>
-                <h3 className="mt-1 font-semibold text-slate-900">{template.name}</h3>
-                <p className="mt-1 text-sm text-slate-500">{template.carrierName}</p>
+                <p className="truncate text-[11px] font-semibold text-violet-600" title={template.code}>{template.code} · v{template.version}</p>
+                <h3 className="mt-1 truncate text-sm font-semibold text-slate-900" title={template.name}>{template.name}</h3>
+                <p className="mt-0.5 truncate text-xs text-slate-500">{template.carrierName}</p>
               </div>
               <span className={`inline-flex rounded-full px-2 py-1 text-xs ${template.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{template.isActive ? "启用" : "停用"}</span>
             </div>
-            {canExport && (
-              <button
-                type="button"
-                disabled={!template.isActive || !selectedOrderIds.length || loading}
-                onClick={() => exportSelected(template)}
-                className="mt-3 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
-              >
-                {loading ? <LoaderCircle size={15} className="animate-spin" /> : <Download size={15} />} 导出选中 {selectedOrderIds.length || ""} 单
-              </button>
-            )}
-            {canManage && <button type="button" onClick={() => setEditingId(editingId === template.id ? null : template.id)} className="ml-2 mt-3 inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Pencil size={15} />编辑</button>}
-            {canManage && <button type="button" disabled={loading} onClick={() => deleteTemplate(template)} className="ml-2 mt-3 inline-flex items-center gap-2 rounded-lg border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"><Trash2 size={15} />删除</button>}
+            {canManage && <button type="button" onClick={() => setEditingId(editingId === template.id ? null : template.id)} className="mt-2 inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><Pencil size={13} />编辑</button>}
+            {canManage && <button type="button" disabled={loading} onClick={() => deleteTemplate(template)} className="ml-1.5 mt-2 inline-flex h-8 items-center gap-1 rounded-lg border border-rose-200 px-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"><Trash2 size={13} />删除</button>}
             {canManage && editingId === template.id && (() => {
               const config = parseLogisticsTemplateConfiguration(template.configuration);
               return <form onSubmit={(event) => saveTemplate(event, template.id)} className="mt-4 grid gap-3 border-t border-slate-100 pt-4">

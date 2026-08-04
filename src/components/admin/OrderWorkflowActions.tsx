@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { zh } from "@/lib/i18n";
 
 type WorkflowAction = "submit" | "approve" | "reject" | "void" | "ship";
@@ -44,6 +44,7 @@ export default function OrderWorkflowActions({
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const submittingRef = useRef(false);
 
   const available: WorkflowAction[] = [];
   if (currentStatus === "DRAFT" && permissions.submit) {
@@ -67,21 +68,23 @@ export default function OrderWorkflowActions({
     available.push("void");
   }
 
-  async function execute() {
-    if (!action) return;
+  async function execute(selectedAction = action) {
+    if (!selectedAction || submittingRef.current) return;
+    submittingRef.current = true;
     setLoading(true);
     setMessage(null);
 
     const response = await fetch(`/api/mvp/orders/${orderId}/actions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, note }),
+      body: JSON.stringify({ action: selectedAction, note }),
     });
     const payload = await response.json().catch(() => null);
 
     if (!response.ok) {
       setMessage(payload?.error?.message || payload?.error || "操作失败");
       setLoading(false);
+      submittingRef.current = false;
       return;
     }
 
@@ -129,7 +132,8 @@ export default function OrderWorkflowActions({
               <button
                 key={item}
                 type="button"
-                onClick={() => setAction(item)}
+                onClick={() => item === "submit" ? void execute(item) : setAction(item)}
+                disabled={loading}
                 className={`rounded border px-3 py-2 text-sm ${action === item ? "border-amber-500 bg-amber-50 text-amber-900" : "border-gray-300"}`}
               >
                 {actionLabel[item]}
@@ -168,14 +172,14 @@ export default function OrderWorkflowActions({
             <p className="mt-2 text-xs text-gray-500">确认发货前请先上传发货凭证（图片/视频/PDF）。</p>
           )}
 
-          <button
+          {available.some((item) => item !== "submit") && <button
             type="button"
             disabled={!action || loading || ((action === "reject" || action === "void") && !note.trim())}
-            onClick={execute}
+            onClick={() => void execute()}
             className="mt-4 rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
           >
             {loading ? "提交中..." : action ? actionLabel[action] : "选择动作"}
-          </button>
+          </button>}
         </>
       )}
       {message && <p className="mt-3 text-sm text-blue-700">{message}</p>}

@@ -371,6 +371,9 @@ export async function PUT(request: NextRequest) {
 
   const target = await prisma.order.findUnique({ where: { id: body.id } });
   if (!target) return NextResponse.json({ error: "Order not found." }, { status: 404 });
+  if (target.status !== "DRAFT") {
+    return fail("ORDER_UPDATE_NOT_ALLOWED", "只有草稿或核单退回的订单可以修改。", 409);
+  }
 
   // Do not reduce a department/site/self update permission to a business-unit
   // check. The compiled predicate is also used by lists and dashboards, so a
@@ -385,14 +388,49 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "FORBIDDEN", reasons: ["ORDER_UPDATE_SCOPE_DENIED"] }, { status: 403 });
   }
 
-  const data: {
-    note?: string;
-    exceptionNote?: string;
-  } = {};
-  if (typeof body.note === "string") data.note = body.note;
-  if (typeof body.exceptionNote === "string") data.exceptionNote = body.exceptionNote;
-
-  const row = await prisma.order.update({ where: { id: target.id }, data });
+  const item = parseSingleOrderItem(body)[0];
+  if (!item) return fail("ORDER_ITEM_REQUIRED", "请选择商品和 SKU。", 400);
+  const shopId = typeof body.shopId === "string" ? body.shopId.trim().slice(0, 100) : "";
+  const recipientName = typeof body.recipientName === "string" ? body.recipientName.trim().slice(0, 100) : "";
+  if (!shopId) return fail("SHOP_ID_REQUIRED", "请填写比特窗口号（店铺 ID）。", 400);
+  if (!recipientName) return fail("RECIPIENT_NAME_REQUIRED", "请填写收件人。", 400);
+  const sku = item.skuId ? await prisma.productSku.findFirst({
+    where: { id: item.skuId, productId: item.productId ?? undefined, isActive: true, product: { businessUnitId: target.businessUnitId, isActive: true } },
+    select: { id: true, productId: true },
+  }) : null;
+  if (!sku) return fail("SKU_OWNERSHIP_MISMATCH", "请选择当前业务板块内有效的 SKU。", 400);
+  const orderedAt = typeof body.orderedAt === "string" ? new Date(body.orderedAt) : target.orderedAt;
+  if (Number.isNaN(orderedAt.getTime())) return fail("INVALID_ORDER_DATE", "订单日期格式不正确。", 400);
+  const packageWeightGrams = Number(body.packageWeightGrams ?? 0);
+  if (!Number.isSafeInteger(packageWeightGrams) || packageWeightGrams < 0) return fail("INVALID_PACKAGE_WEIGHT", "包裹重量格式不正确。", 400);
+  const productValueCents = item.quantity * item.unitPriceCents;
+  const codAmountCents = normalizeMoneyCents(body.codAmountCents ?? 0);
+  const shippingFeeCents = normalizeMoneyCents(body.shippingFeeCents ?? 0);
+  const text = (value: unknown, max: number) => typeof value === "string" ? value.trim().slice(0, max) || null : null;
+  const row = await prisma.$transaction(async (tx) => {
+    const updated = await tx.order.update({
+      where: { id: target.id, status: "DRAFT" },
+      data: {
+        shopId, productValueCents, codAmountCents, shippingFeeCents,
+        currency: (text(body.currency, 3) ?? target.currency).toUpperCase(), orderedAt,
+        recipientName, recipientPhone: text(body.recipientPhone, 100), recipientEmail: text(body.recipientEmail, 200)?.toLowerCase(),
+        recipientCountryCode: text(body.recipientCountryCode, 3)?.toUpperCase(), recipientPostalCode: text(body.recipientPostalCode, 30),
+        recipientRegion: text(body.recipientRegion, 100), recipientCity: text(body.recipientCity, 100), recipientAddress: text(body.recipientAddress, 500),
+        customerWhatsapp: text(body.customerWhatsapp, 50), staffWhatsapp: text(body.staffWhatsapp, 50), packageWeightGrams,
+        paymentMethod: text(body.paymentMethod, 30), logisticsChannel: text(body.logisticsChannel, 50), note: text(body.note, 2000),
+        exceptionNote: null,
+      },
+    });
+    await tx.orderItem.deleteMany({ where: { orderId: target.id } });
+    await tx.orderItem.create({ data: {
+      orderId: target.id, productId: sku.productId, skuId: sku.id, stockControlled: true,
+      productName: item.productName, quantity: item.quantity, unitPriceCents: item.unitPriceCents, subtotalCents: productValueCents,
+    } });
+    await tx.customer.update({ where: { id: target.customerId }, data: {
+      name: recipientName, contactName: recipientName, contactPhone: text(body.recipientPhone, 100), contactEmail: text(body.recipientEmail, 200)?.toLowerCase(),
+    } });
+    return updated;
+  });
   await writeAuditLog({
     actorUserId: auth.userId,
     actorMembershipId: auth.membership.id,
@@ -402,7 +440,7 @@ export async function PUT(request: NextRequest) {
     targetId: row.id,
     businessUnitId: row.businessUnitId,
     roleId: auth.membership.roleId,
-    details: { changed: { note: data.note, exceptionNote: data.exceptionNote } },
+    details: { changed: "returned_order_details", previousExceptionNote: target.exceptionNote },
   });
 
   return ok(row);
