@@ -53,10 +53,10 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ id
       select: { status: true },
     });
     if (!shipment || shipment.status !== "PENDING") {
-      return fail("SHIPMENT_PROOF_LOCKED", "确认发货后的出货凭证已锁定，不能删除。", 409);
+      return fail("SHIPMENT_PROOF_LOCKED", "确认发货后的发货凭证已锁定，不能删除。", 409);
     }
     if (attachment.uploadedByMembershipId !== auth.membership.id) {
-      return fail("FORBIDDEN", "只能删除自己上传的出货凭证。", 403);
+      return fail("FORBIDDEN", "只能删除自己上传的发货凭证。", 403);
     }
   }
   const deleted = await prisma.$transaction(async (tx) => {

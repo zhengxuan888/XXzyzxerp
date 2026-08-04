@@ -190,7 +190,7 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
           targetId={shipment.id}
           canUpload={canUpload.allowed}
           canDelete={canDeleteAttachments.allowed}
-          title="出货凭证与资料"
+          title="发货凭证与资料"
         />
       )}
 

@@ -53,7 +53,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     targetUserId: order.creatorUserId,
     targetMembershipId: order.ownedByMembershipId,
   };
-  const [canSubmit, canReview, canReviewApprove, canReviewReject, canReviewProof, canShip, canCancel, canReadAttachments, canCreateAttachments, canDeleteAttachments] = await Promise.all([
+  const [canSubmit, canReview, canReviewApprove, canReviewReject, canShip, canCancel, canReadAttachments, canCreateAttachments, canDeleteAttachments] = await Promise.all([
     checkPermission({
       ...permissionTarget,
       actionKey: "order.submit",
@@ -69,10 +69,6 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     checkPermission({
       ...permissionTarget,
       actionKey: "order.review.reject",
-    }),
-    checkPermission({
-      ...permissionTarget,
-      actionKey: "order.review.proof.upload",
     }),
     checkPermission({
       ...permissionTarget,
@@ -273,29 +269,20 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         />
       )}
 
-      {canReadAttachments.allowed && canReview.allowed && canReviewProof.allowed && order.status === "SUBMITTED" && (
-        <div className="space-y-3">
-          <AttachmentPanel
-            targetType="ORDER_REVIEW"
-            targetId={order.id}
-            canUpload={canReviewProof.allowed}
-            canDelete={canDeleteAttachments.allowed}
-            title="核单凭证（审核通过前必传）"
-          />
-          <OrderWorkflowActions
-            orderId={order.id}
-            currentStatus={order.status}
-            permissions={{
-              submit: canSubmit.allowed,
-              reviewApprove: canReviewApprove.allowed,
-              reviewReject: canReviewReject.allowed,
-              ship: canShip.allowed,
-              cancel: canCancel.allowed,
-            }}
-            reviewRejectReasons={templateConfiguration.reviewRejectReasons}
-            voidReasons={templateConfiguration.voidReasons}
-          />
-        </div>
+      {canReview.allowed && order.status === "SUBMITTED" && (
+        <OrderWorkflowActions
+          orderId={order.id}
+          currentStatus={order.status}
+          permissions={{
+            submit: canSubmit.allowed,
+            reviewApprove: canReviewApprove.allowed,
+            reviewReject: canReviewReject.allowed,
+            ship: canShip.allowed,
+            cancel: canCancel.allowed,
+          }}
+          reviewRejectReasons={templateConfiguration.reviewRejectReasons}
+          voidReasons={templateConfiguration.voidReasons}
+        />
       )}
 
       {canReadAttachments.allowed && order.status === "WAITING_SHIPMENT" && order.shipments.filter((shipment) => shipment.status === "PENDING").map((shipment) => (
@@ -306,7 +293,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           canUpload={canCreateAttachments.allowed && canShip.allowed && Boolean(shipment.trackingNo)}
           canDelete={canDeleteAttachments.allowed && canShip.allowed && Boolean(shipment.trackingNo)}
           refreshAfterUpload
-          title={`出货凭证 · ${shipment.carrier || "待填写物流商"} · ${shipmentPermissions.get(shipment.id)?.trackingNo ? shipment.trackingNo || "待回填运单号" : "物流单号受限"}`}
+          title={`发货凭证 · ${shipment.carrier || "待填写物流商"} · ${shipmentPermissions.get(shipment.id)?.trackingNo ? shipment.trackingNo || "待回填运单号" : "物流单号受限"}`}
         />
         </div>
       ))}

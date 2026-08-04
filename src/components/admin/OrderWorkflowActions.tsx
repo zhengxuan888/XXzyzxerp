@@ -165,7 +165,7 @@ export default function OrderWorkflowActions({
           )}
 
           {action === "ship" && (
-            <p className="mt-2 text-xs text-gray-500">确认发货前请先上传出货凭证（图片/视频/PDF）。</p>
+            <p className="mt-2 text-xs text-gray-500">确认发货前请先上传发货凭证（图片/视频/PDF）。</p>
           )}
 
           <button

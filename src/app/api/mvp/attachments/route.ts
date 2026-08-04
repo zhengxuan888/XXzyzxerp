@@ -108,10 +108,10 @@ export async function POST(request: NextRequest) {
       select: { status: true, trackingNo: true },
     });
     if (!shipment || shipment.status !== "PENDING") {
-      return fail("SHIPMENT_PROOF_LOCKED", "订单已确认发货，出货凭证已锁定。", 409);
+      return fail("SHIPMENT_PROOF_LOCKED", "订单已确认发货，发货凭证已锁定。", 409);
     }
     if (!shipment.trackingNo) {
-      return fail("TRACKING_NO_REQUIRED", "请先回填真实物流单号，再上传出货凭证。", 409);
+      return fail("TRACKING_NO_REQUIRED", "请先回填真实物流单号，再上传发货凭证。", 409);
     }
   }
   const file = form?.get("file");
