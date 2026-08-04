@@ -167,6 +167,7 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
       contact: order.recipientEmail || order.customerWhatsapp || order.recipientPhone || "-",
       phone: order.recipientPhone || "",
       whatsapp: order.customerWhatsapp || "",
+      shopId: order.shopId || "",
       address: order.recipientAddress || "",
       productSummary: order.items.map((item) => `${item.productName} × ${item.quantity}`).join("、") || "-",
       country: order.recipientCountryCode || "-",

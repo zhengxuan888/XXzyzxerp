@@ -82,6 +82,11 @@ export default function OrderEntryForm({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canCreate) return;
+    const submittedData = new FormData(event.currentTarget);
+    if (!String(submittedData.get("shopId") ?? "").trim()) {
+      setError("请填写比特窗口号（店铺 ID）。");
+      return;
+    }
     if (config?.requireProductName !== false && !finalProductName) {
       setError("请填写商品名称。");
       return;
@@ -92,7 +97,7 @@ export default function OrderEntryForm({
     }
     setSaving(true);
     setError("");
-    const data = new FormData(event.currentTarget);
+    const data = submittedData;
     const moneyToCents = (name: string) => Math.round(Number(data.get(name) || 0) * 100);
     const customFields = Object.fromEntries(
       (config?.customFields ?? []).map((field) => [field.key, data.get(`custom_${field.key}`) ?? ""]),
@@ -251,7 +256,7 @@ export default function OrderEntryForm({
           <Field label="订单号">
             <input name="orderNo" readOnly value="保存后自动生成" className={`${input} bg-slate-50 text-slate-500`} aria-label="订单号（保存后自动生成）" />
           </Field>
-          <Field label="店铺 ID" required={config?.requireShopId}><input name="shopId" required={config?.requireShopId} className={input} placeholder="可按订单模板设为必填" /></Field>
+          <Field label="比特窗口号（店铺 ID）" required><input name="shopId" required className={input} placeholder="请输入比特浏览器窗口号" /></Field>
           <Field label="搜索库存商品（可选）">
             <input
               className={input}

@@ -139,6 +139,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       })
     : 0;
   const missingFields = [
+    !order.shopId && "比特窗口号（店铺 ID）",
     !order.recipientName && "收件人",
     !order.recipientPhone && "电话",
     !order.recipientEmail && "邮箱",
@@ -187,6 +188,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         </div>
         <dl className="mt-5 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4">
           {[
+            ["比特窗口号（店铺 ID）", order.shopId],
             ["收件人", order.recipientName],
             ["销售", order.creatorUser?.fullName ?? order.creatorUser?.username],
             ["电话", order.recipientPhone],

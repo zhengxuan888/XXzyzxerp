@@ -15,6 +15,7 @@ type ReviewRow = {
   contact: string;
   phone: string;
   whatsapp: string;
+  shopId: string;
   address: string;
   productSummary: string;
   country: string;
@@ -60,6 +61,7 @@ export default function OrderReviewQuickTable({ rows, reviewRejectReasons, voidR
                             <Link href={`/admin/orders/${row.id}`} className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-amber-700">完整详情<ExternalLink size={13} /></Link>
                           </div>
                           <dl className="mt-3 space-y-3 text-sm">
+                            <div><dt className="text-xs text-slate-400">比特窗口号（店铺 ID）</dt><dd className={`mt-0.5 font-medium ${row.shopId ? "text-slate-800" : "text-rose-600"}`}>{row.shopId || "未填写"}</dd></div>
                             <div><dt className="text-xs text-slate-400">收件人</dt><dd className="mt-0.5 font-medium text-slate-800">{row.recipient}</dd></div>
                             <div><dt className="text-xs text-slate-400">电话 / WhatsApp</dt><dd className="mt-0.5 break-all text-slate-700">{row.phone || "-"} / {row.whatsapp || "-"}</dd></div>
                             <div><dt className="text-xs text-slate-400">完整地址</dt><dd className="mt-0.5 text-slate-700">{row.address || "-"}</dd></div>

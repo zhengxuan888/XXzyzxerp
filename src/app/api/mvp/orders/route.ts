@@ -135,9 +135,7 @@ export async function POST(request: NextRequest) {
   const customerName = typeof body.customerName === "string" ? body.customerName.trim().slice(0, 100) : "";
   const shopId = typeof body.shopId === "string" ? body.shopId.trim().slice(0, 100) : "";
   if (!customerName) return fail("RECIPIENT_NAME_REQUIRED", "请填写本次订单收件人/客户姓名。", 400);
-  if (templateConfiguration.requireShopId && !shopId) {
-    return fail("SHOP_ID_REQUIRED", "当前订单模板要求填写店铺 ID。", 400);
-  }
+  if (!shopId) return fail("SHOP_ID_REQUIRED", "请填写比特窗口号（店铺 ID）。", 400);
   const recipientEmail = typeof body.recipientEmail === "string" ? body.recipientEmail.trim().toLowerCase() : "";
   const recipientAddress = typeof body.recipientAddress === "string" ? body.recipientAddress.trim() : "";
   const recipientCountryCode = typeof body.recipientCountryCode === "string" ? body.recipientCountryCode.trim() : "";
