@@ -50,6 +50,9 @@ export default async function ShippingWorkbenchPage() {
         siteId: true,
         creatorUserId: true,
         ownedByMembershipId: true,
+        shopId: true,
+        shopWindowTransferredAt: true,
+        shopWindowTransferredBy: { select: { user: { select: { fullName: true, username: true } } } },
         recipientName: true,
         recipientCountryCode: true,
         creatorUser: { select: { username: true, fullName: true } },
@@ -168,6 +171,11 @@ export default async function ShippingWorkbenchPage() {
       recipient: order.recipientName || "-",
       country: order.recipientCountryCode || "-",
       productSummary: order.items.map((item) => `${item.productName} × ${item.quantity}`).join("、"),
+      shopId: order.shopId || "",
+      shopWindowTransferredAt: order.shopWindowTransferredAt?.toISOString() ?? null,
+      shopWindowTransferredBy: order.shopWindowTransferredBy
+        ? order.shopWindowTransferredBy.user.fullName || order.shopWindowTransferredBy.user.username
+        : null,
       shipmentId: shipment?.id ?? null,
       trackingNo: shipment?.trackingNo ?? null,
       carrier: shipment?.carrier ?? null,

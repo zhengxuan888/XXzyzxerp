@@ -522,18 +522,18 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  memberships           Membership[]
-  auditLogs             AuditLog[]
-  orders                Order[]                @relation("OrderCreator")
-  expenses              Expense[]
-  documents             Document[]
-  logisticsFollowUps    LogisticsFollowUp[]
-  attendanceRecords     Attendance[]
-  inventoryTransactions InventoryTransaction[]
-  inboxAuditEvents      InboxAuditEvent[]      @relation("InboxAuditActor")
-  attachments           Attachment[]           @relation("AttachmentUploader")
-  marketingDailyReports MarketingDailyReport[] @relation("MarketingReportCreator")
-  marketingCreatives    MarketingCreative[]    @relation("MarketingCreativeCreator")
+  memberships                       Membership[]
+  auditLogs                         AuditLog[]
+  orders                            Order[]                     @relation("OrderCreator")
+  expenses                          Expense[]
+  documents                         Document[]
+  logisticsFollowUps                LogisticsFollowUp[]
+  attendanceRecords                 Attendance[]
+  inventoryTransactions             InventoryTransaction[]
+  inboxAuditEvents                  InboxAuditEvent[]           @relation("InboxAuditActor")
+  attachments                       Attachment[]                @relation("AttachmentUploader")
+  marketingDailyReports             MarketingDailyReport[]      @relation("MarketingReportCreator")
+  marketingCreatives                MarketingCreative[]         @relation("MarketingCreativeCreator")
   updatedMarketingWorkbenchSettings MarketingWorkbenchSetting[] @relation("MarketingWorkbenchSettingUpdater")
 }
 
@@ -644,6 +644,7 @@ model Membership {
   directReports       Membership[] @relation("MembershipHierarchy")
   orders              Order[]      @relation("OrderOwner")
   claimedOrderReviews Order[]      @relation("OrderReviewClaim")
+  shopWindowTransfers Order[]      @relation("OrderShopWindowTransfer")
   uploadedDocuments   Document[]   @relation("DocumentOwnerMembership")
   reviewedDocuments   Document[]   @relation("DocumentReviewer")
 
@@ -816,10 +817,10 @@ model Product {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  legalEntity  LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  skus         ProductSku[]
-  orderItems   OrderItem[]
+  legalEntity           LegalEntity            @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit          BusinessUnit           @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  skus                  ProductSku[]
+  orderItems            OrderItem[]
   marketingDailyReports MarketingDailyReport[]
   marketingCreatives    MarketingCreative[]
 
@@ -828,15 +829,15 @@ model Product {
 }
 
 model ProductSku {
-  id                   String   @id @default(uuid())
-  productId            String
-  code                 String
-  barcode              String?
-  attributes           Json?
-  safetyStockQuantity  Int      @default(0)
-  isActive             Boolean  @default(true)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                  String   @id @default(uuid())
+  productId           String
+  code                String
+  barcode             String?
+  attributes          Json?
+  safetyStockQuantity Int      @default(0)
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   product               Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
   orderItems            OrderItem[]
@@ -849,49 +850,51 @@ model ProductSku {
 }
 
 model Order {
-  id                          String      @id @default(uuid())
-  legalEntityId               String
-  businessUnitId              String
-  departmentId                String?
-  siteId                      String?
-  customerId                  String
-  orderNo                     String
-  creatorUserId               String
-  ownedByMembershipId         String
-  shopId                      String?
-  orderTemplateId             String?
-  orderNumberRuleId           String?
-  status                      OrderStatus @default(DRAFT)
-  currency                    String      @default("CNY")
-  productValueCents           Int         @default(0)
-  shippingFeeCents            Int         @default(0)
-  codAmountCents              Int         @default(0)
-  paidAmountCents             Int         @default(0)
-  logisticsChannel            String?
-  recipientName               String?
-  recipientPhone              String?
-  recipientEmail              String?
-  emailValidationStatus       String?
-  emailValidatedAt            DateTime?
-  recipientCountryCode        String?
-  recipientPostalCode         String?
-  recipientRegion             String?
-  recipientCity               String?
-  recipientAddress            String?
-  packageWeightGrams          Int?
-  paymentMethod               String?
-  customerWhatsapp            String?
-  staffWhatsapp               String?
-  orderedAt                   DateTime    @default(now())
-  note                        String?
-  exceptionNote               String?
-  customFields                Json?
-  templateSnapshot            Json?
-  deliveredAt                 DateTime?
-  reviewClaimedByMembershipId String?
-  reviewClaimedAt             DateTime?
-  createdAt                   DateTime    @default(now())
-  updatedAt                   DateTime    @updatedAt
+  id                                  String      @id @default(uuid())
+  legalEntityId                       String
+  businessUnitId                      String
+  departmentId                        String?
+  siteId                              String?
+  customerId                          String
+  orderNo                             String
+  creatorUserId                       String
+  ownedByMembershipId                 String
+  shopId                              String?
+  orderTemplateId                     String?
+  orderNumberRuleId                   String?
+  status                              OrderStatus @default(DRAFT)
+  currency                            String      @default("CNY")
+  productValueCents                   Int         @default(0)
+  shippingFeeCents                    Int         @default(0)
+  codAmountCents                      Int         @default(0)
+  paidAmountCents                     Int         @default(0)
+  logisticsChannel                    String?
+  recipientName                       String?
+  recipientPhone                      String?
+  recipientEmail                      String?
+  emailValidationStatus               String?
+  emailValidatedAt                    DateTime?
+  recipientCountryCode                String?
+  recipientPostalCode                 String?
+  recipientRegion                     String?
+  recipientCity                       String?
+  recipientAddress                    String?
+  packageWeightGrams                  Int?
+  paymentMethod                       String?
+  customerWhatsapp                    String?
+  staffWhatsapp                       String?
+  orderedAt                           DateTime    @default(now())
+  note                                String?
+  exceptionNote                       String?
+  customFields                        Json?
+  templateSnapshot                    Json?
+  deliveredAt                         DateTime?
+  reviewClaimedByMembershipId         String?
+  reviewClaimedAt                     DateTime?
+  shopWindowTransferredAt             DateTime?
+  shopWindowTransferredByMembershipId String?
+  createdAt                           DateTime    @default(now())
+  updatedAt                           DateTime    @updatedAt
 
   legalEntity               LegalEntity                @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
   businessUnit              BusinessUnit               @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
@@ -901,6 +904,7 @@ model Order {
   creatorUser               User                       @relation("OrderCreator", fields: [creatorUserId], references: [id], onDelete: Restrict)
   ownerMembership           Membership                 @relation("OrderOwner", fields: [ownedByMembershipId], references: [id], onDelete: Restrict)
   reviewClaimedBy           Membership?                @relation("OrderReviewClaim", fields: [reviewClaimedByMembershipId], references: [id], onDelete: SetNull)
+  shopWindowTransferredBy   Membership?                @relation("OrderShopWindowTransfer", fields: [shopWindowTransferredByMembershipId], references: [id], onDelete: SetNull)
   orderTemplate             OrderTemplate?             @relation(fields: [orderTemplateId], references: [id], onDelete: SetNull)
   orderNumberRule           OrderNumberRule?           @relation(fields: [orderNumberRuleId], references: [id], onDelete: SetNull)
   items                     OrderItem[]
@@ -920,6 +924,7 @@ model Order {
   @@index([orderNumberRuleId])
   @@index([businessUnitId, recipientEmail])
   @@index([businessUnitId, status, reviewClaimedByMembershipId])
+  @@index([businessUnitId, shopWindowTransferredAt])
   @@index([businessUnitId, departmentId, creatorUserId, createdAt])
   @@index([businessUnitId, ownedByMembershipId, createdAt, id])
   @@index([businessUnitId, recipientCountryCode])
@@ -1002,18 +1007,18 @@ model OrderNumberCounter {
 }
 
 model LogisticsProviderTemplate {
-  id             String   @id @default(uuid())
+  id             String    @id @default(uuid())
   legalEntityId  String
   businessUnitId String
   code           String
   name           String
   carrierName    String
   configuration  Json
-  version        Int      @default(1)
-  isActive       Boolean  @default(true)
+  version        Int       @default(1)
+  isActive       Boolean   @default(true)
   archivedAt     DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   legalEntity   LegalEntity            @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
   businessUnit  BusinessUnit           @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
@@ -1380,14 +1385,14 @@ model LogisticsWorkbenchSetting {
 // Third-party credentials are encrypted as one authenticated payload. Raw
 // values are never stored in JSON configuration columns or audit records.
 model IntegrationCredential {
-  id              String   @id @default(uuid())
-  businessUnitId  String
-  providerKey     String
+  id               String   @id @default(uuid())
+  businessUnitId   String
+  providerKey      String
   encryptedPayload String
-  isEnabled       Boolean  @default(false)
-  updatedByUserId String
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  isEnabled        Boolean  @default(false)
+  updatedByUserId  String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
 
@@ -2532,12 +2537,12 @@ model MarketingSource {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  legalEntity  LegalEntity      @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit     @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  department   Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  site         Site?            @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  parent       MarketingSource? @relation("MarketingSourceTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children     MarketingSource[] @relation("MarketingSourceTree")
+  legalEntity  LegalEntity            @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit           @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department   Department?            @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  site         Site?                  @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  parent       MarketingSource?       @relation("MarketingSourceTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children     MarketingSource[]      @relation("MarketingSourceTree")
   reports      MarketingDailyReport[]
   creatives    MarketingCreative[]
 
@@ -2550,29 +2555,29 @@ model MarketingSource {
 // formulas configuration-driven. There is deliberately no free-form formula
 // execution or code branch for an ad platform.
 model MarketingMetricDefinition {
-  id                     String                       @id @default(uuid())
-  legalEntityId          String
-  businessUnitId         String
-  code                   String
-  name                   String
-  valueType              MarketingMetricValueType
-  aggregation            MarketingMetricAggregation  @default(SUM)
-  calculation            MarketingMetricCalculation  @default(DIRECT)
-  numeratorMetricCode    String?
-  denominatorMetricCode  String?
-  multiplier             Decimal?                     @db.Decimal(20, 6)
-  inputRequired          Boolean                      @default(false)
-  showOnWorkbench        Boolean                      @default(false)
-  sortOrder              Int                          @default(0)
-  isActive               Boolean                      @default(true)
-  description            String?
-  createdAt              DateTime                     @default(now())
-  updatedAt              DateTime                     @updatedAt
+  id                    String                     @id @default(uuid())
+  legalEntityId         String
+  businessUnitId        String
+  code                  String
+  name                  String
+  valueType             MarketingMetricValueType
+  aggregation           MarketingMetricAggregation @default(SUM)
+  calculation           MarketingMetricCalculation @default(DIRECT)
+  numeratorMetricCode   String?
+  denominatorMetricCode String?
+  multiplier            Decimal?                   @db.Decimal(20, 6)
+  inputRequired         Boolean                    @default(false)
+  showOnWorkbench       Boolean                    @default(false)
+  sortOrder             Int                        @default(0)
+  isActive              Boolean                    @default(true)
+  description           String?
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
 
-  legalEntity LegalEntity                   @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit                 @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  values      MarketingDailyMetricValue[]
-  kpiTargets  MarketingKpiTarget[]
+  legalEntity    LegalEntity                    @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit   BusinessUnit                   @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  values         MarketingDailyMetricValue[]
+  kpiTargets     MarketingKpiTarget[]
   creativeValues MarketingCreativeMetricValue[]
 
   @@unique([businessUnitId, code])
@@ -2606,17 +2611,17 @@ model MarketingDailyReport {
   createdAt              DateTime              @default(now())
   updatedAt              DateTime              @updatedAt
 
-  legalEntity        LegalEntity                  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  businessUnit       BusinessUnit                 @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  department         Department?                  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  site               Site?                        @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  source             MarketingSource              @relation(fields: [sourceId], references: [id], onDelete: Restrict)
-  product            Product?                     @relation(fields: [productId], references: [id], onDelete: SetNull)
-  ownerMembership    Membership                   @relation("MarketingReportOwner", fields: [ownerMembershipId], references: [id], onDelete: Restrict)
-  createdByUser      User                         @relation("MarketingReportCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  reviewedByMembership Membership?                @relation("MarketingReportReviewer", fields: [reviewedByMembershipId], references: [id], onDelete: SetNull)
-  lockedByMembership Membership?                  @relation("MarketingReportLocker", fields: [lockedByMembershipId], references: [id], onDelete: SetNull)
-  metricValues       MarketingDailyMetricValue[]
+  legalEntity          LegalEntity                 @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit         BusinessUnit                @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department           Department?                 @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  site                 Site?                       @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  source               MarketingSource             @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  product              Product?                    @relation(fields: [productId], references: [id], onDelete: SetNull)
+  ownerMembership      Membership                  @relation("MarketingReportOwner", fields: [ownerMembershipId], references: [id], onDelete: Restrict)
+  createdByUser        User                        @relation("MarketingReportCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  reviewedByMembership Membership?                 @relation("MarketingReportReviewer", fields: [reviewedByMembershipId], references: [id], onDelete: SetNull)
+  lockedByMembership   Membership?                 @relation("MarketingReportLocker", fields: [lockedByMembershipId], references: [id], onDelete: SetNull)
+  metricValues         MarketingDailyMetricValue[]
 
   @@unique([businessUnitId, ownerMembershipId, sourceId, reportDate])
   @@index([businessUnitId, reportDate, status])
@@ -2634,7 +2639,7 @@ model MarketingDailyMetricValue {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  report           MarketingDailyReport     @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  report           MarketingDailyReport      @relation(fields: [reportId], references: [id], onDelete: Cascade)
   metricDefinition MarketingMetricDefinition @relation(fields: [metricDefinitionId], references: [id], onDelete: Restrict)
 
   @@unique([reportId, metricDefinitionId])
@@ -2645,30 +2650,30 @@ model MarketingDailyMetricValue {
 // explicit and validated on the server; the scope key is kept for a stable
 // unique constraint and is never treated as an untrusted client permission.
 model MarketingKpiTarget {
-  id                     String                  @id @default(uuid())
-  legalEntityId          String
-  businessUnitId         String
-  departmentId           String?
-  targetMembershipId     String?
-  metricDefinitionId     String
-  scopeType              MarketingKpiScopeType
-  scopeKey               String
-  periodStart            DateTime                @db.Date
-  periodEnd              DateTime                @db.Date
-  targetCents            BigInt?
-  targetDecimal          Decimal?                @db.Decimal(22, 6)
-  currency               String                  @default("EUR")
-  note                   String?
-  setByMembershipId      String
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
+  id                 String                @id @default(uuid())
+  legalEntityId      String
+  businessUnitId     String
+  departmentId       String?
+  targetMembershipId String?
+  metricDefinitionId String
+  scopeType          MarketingKpiScopeType
+  scopeKey           String
+  periodStart        DateTime              @db.Date
+  periodEnd          DateTime              @db.Date
+  targetCents        BigInt?
+  targetDecimal      Decimal?              @db.Decimal(22, 6)
+  currency           String                @default("EUR")
+  note               String?
+  setByMembershipId  String
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
 
-  legalEntity      LegalEntity                   @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  businessUnit     BusinessUnit                  @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  department       Department?                   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  targetMembership Membership?                   @relation("MarketingKpiTargetMembership", fields: [targetMembershipId], references: [id], onDelete: SetNull)
-  metricDefinition MarketingMetricDefinition     @relation(fields: [metricDefinitionId], references: [id], onDelete: Restrict)
-  setByMembership  Membership                    @relation("MarketingKpiTargetSetter", fields: [setByMembershipId], references: [id], onDelete: Restrict)
+  legalEntity      LegalEntity               @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit     BusinessUnit              @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department       Department?               @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  targetMembership Membership?               @relation("MarketingKpiTargetMembership", fields: [targetMembershipId], references: [id], onDelete: SetNull)
+  metricDefinition MarketingMetricDefinition @relation(fields: [metricDefinitionId], references: [id], onDelete: Restrict)
+  setByMembership  Membership                @relation("MarketingKpiTargetSetter", fields: [setByMembershipId], references: [id], onDelete: Restrict)
 
   @@unique([businessUnitId, metricDefinitionId, scopeType, scopeKey, periodStart, periodEnd])
   @@index([businessUnitId, periodStart, periodEnd])
@@ -2691,8 +2696,8 @@ model MarketingCreativeStatus {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  legalEntity  LegalEntity        @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit       @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  legalEntity  LegalEntity         @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit        @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
   creatives    MarketingCreative[]
 
   @@unique([businessUnitId, code])
@@ -2710,8 +2715,8 @@ model MarketingTag {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  legalEntity  LegalEntity              @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit             @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  legalEntity  LegalEntity            @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit           @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
   creatives    MarketingCreativeTag[]
 
   @@unique([businessUnitId, name])
@@ -2740,18 +2745,18 @@ model MarketingCreative {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  legalEntity      LegalEntity             @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  businessUnit     BusinessUnit            @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  department       Department?             @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  site             Site?                   @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  source           MarketingSource?        @relation(fields: [sourceId], references: [id], onDelete: SetNull)
-  product          Product?                @relation(fields: [productId], references: [id], onDelete: SetNull)
-  status           MarketingCreativeStatus @relation(fields: [statusId], references: [id], onDelete: Restrict)
-  ownerMembership  Membership              @relation("MarketingCreativeOwner", fields: [ownerMembershipId], references: [id], onDelete: Restrict)
-  createdByUser    User                    @relation("MarketingCreativeCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  assets           MarketingCreativeAttachment[]
-  tags             MarketingCreativeTag[]
-  metricValues     MarketingCreativeMetricValue[]
+  legalEntity     LegalEntity                    @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit    BusinessUnit                   @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department      Department?                    @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  site            Site?                          @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  source          MarketingSource?               @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  product         Product?                       @relation(fields: [productId], references: [id], onDelete: SetNull)
+  status          MarketingCreativeStatus        @relation(fields: [statusId], references: [id], onDelete: Restrict)
+  ownerMembership Membership                     @relation("MarketingCreativeOwner", fields: [ownerMembershipId], references: [id], onDelete: Restrict)
+  createdByUser   User                           @relation("MarketingCreativeCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  assets          MarketingCreativeAttachment[]
+  tags            MarketingCreativeTag[]
+  metricValues    MarketingCreativeMetricValue[]
 
   @@unique([businessUnitId, code])
   @@index([businessUnitId, statusId, isArchived, updatedAt])
@@ -2760,12 +2765,12 @@ model MarketingCreative {
 }
 
 model MarketingCreativeAttachment {
-  id           String                       @id @default(uuid())
+  id           String                        @id @default(uuid())
   creativeId   String
   attachmentId String
   purpose      MarketingCreativeAssetPurpose @default(PRIMARY)
-  sortOrder    Int                          @default(0)
-  createdAt    DateTime                     @default(now())
+  sortOrder    Int                           @default(0)
+  createdAt    DateTime                      @default(now())
 
   creative   MarketingCreative @relation(fields: [creativeId], references: [id], onDelete: Cascade)
   attachment Attachment        @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
@@ -2825,12 +2830,12 @@ model Attachment {
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
 
-  legalEntity          LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  businessUnit         BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
-  department           Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  uploadedByUser       User         @relation("AttachmentUploader", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
-  uploadedByMembership Membership   @relation("AttachmentUploaderMembership", fields: [uploadedByMembershipId], references: [id], onDelete: Restrict)
-  document             Document?    @relation("DocumentAttachment")
+  legalEntity             LegalEntity                   @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  businessUnit            BusinessUnit                  @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  department              Department?                   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  uploadedByUser          User                          @relation("AttachmentUploader", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+  uploadedByMembership    Membership                    @relation("AttachmentUploaderMembership", fields: [uploadedByMembershipId], references: [id], onDelete: Restrict)
+  document                Document?                     @relation("DocumentAttachment")
   marketingCreativeAssets MarketingCreativeAttachment[]
 
   @@index([businessUnitId, departmentId, targetType, targetId, status])

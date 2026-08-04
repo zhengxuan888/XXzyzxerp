@@ -131,6 +131,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
 
       let shipmentId: string | null = null;
       if (action === "ship") {
+        if (!current.shopWindowTransferredAt) throw new Error("SHOP_WINDOW_NOT_TRANSFERRED");
         const pendingShipment = await tx.shipment.findFirst({
           where: { orderId: current.id, status: "PENDING" },
           orderBy: { createdAt: "desc" },
@@ -270,6 +271,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     }
     if (error instanceof Error && error.message === "SHIPMENT_PROOF_REQUIRED") {
       return fail("SHIPMENT_PROOF_REQUIRED", "请先上传发货凭证（图片/PDF）", 409);
+    }
+    if (error instanceof Error && error.message === "SHOP_WINDOW_NOT_TRANSFERRED") {
+      return fail("SHOP_WINDOW_NOT_TRANSFERRED", "请先将比特窗口标记为已转，再确认发货。", 409);
     }
     if (error instanceof Error && error.message === "ORDER_COMMUNICATION_PROOF_REQUIRED") {
       return fail(

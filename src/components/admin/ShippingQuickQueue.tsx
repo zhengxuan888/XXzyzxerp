@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, ExternalLink, LoaderCircle, PackageCheck, Truck, Upload } from "lucide-react";
+import { ArrowRightLeft, CheckCircle2, ExternalLink, LoaderCircle, PackageCheck, Truck, Upload } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -11,6 +11,9 @@ type QueueRow = {
   recipient: string;
   country: string;
   productSummary: string;
+  shopId: string;
+  shopWindowTransferredAt: string | null;
+  shopWindowTransferredBy: string | null;
   shipmentId: string | null;
   carrier: string | null;
   trackingNo: string | null;
@@ -82,6 +85,24 @@ export default function ShippingQuickQueue({ rows }: { rows: QueueRow[] }) {
     window.location.reload();
   }
 
+  async function toggleShopWindowTransfer(row: QueueRow) {
+    const transferred = !row.shopWindowTransferredAt;
+    setBusyId(row.orderId);
+    setMessage("");
+    const response = await fetch(`/api/mvp/orders/${row.orderId}/shop-window-transfer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transferred }),
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      setMessage(payload?.error?.message || "窗口转移状态保存失败。");
+      setBusyId(null);
+      return;
+    }
+    window.location.reload();
+  }
+
   return (
     <section id="shipping-confirmation" className="scroll-mt-24 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
@@ -97,14 +118,14 @@ export default function ShippingQuickQueue({ rows }: { rows: QueueRow[] }) {
       <div className="divide-y divide-slate-100">
         {rows.map((row) => {
           const busy = busyId === row.orderId;
-          const step = !row.trackingNo ? "TRACKING" : row.proofCount < 1 ? "PROOF" : "CONFIRM";
+          const step = !row.trackingNo ? "TRACKING" : row.proofCount < 1 ? "PROOF" : !row.shopWindowTransferredAt ? "TRANSFER" : "CONFIRM";
           return (
             <article key={row.orderId} className="grid gap-4 px-5 py-4 xl:grid-cols-[minmax(280px,1.2fr)_minmax(260px,1fr)_minmax(420px,1.5fr)] xl:items-center">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <Link href={`/admin/orders/${row.orderId}`} className="font-bold text-slate-950 hover:text-amber-700">{row.orderNo}</Link>
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${step === "TRACKING" ? "bg-amber-50 text-amber-700" : step === "PROOF" ? "bg-blue-50 text-blue-700" : "bg-emerald-50 text-emerald-700"}`}>
-                    {step === "TRACKING" ? "待物流单号" : step === "PROOF" ? "待发货凭证" : "可确认发货"}
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${step === "TRACKING" ? "bg-amber-50 text-amber-700" : step === "PROOF" ? "bg-blue-50 text-blue-700" : step === "TRANSFER" ? "bg-violet-50 text-violet-700" : "bg-emerald-50 text-emerald-700"}`}>
+                    {step === "TRACKING" ? "待物流单号" : step === "PROOF" ? "待发货凭证" : step === "TRANSFER" ? "待窗口转移" : "可确认发货"}
                   </span>
                 </div>
                 <p className="mt-1 truncate text-sm text-slate-600">{row.productSummary || "-"}</p>
@@ -112,12 +133,37 @@ export default function ShippingQuickQueue({ rows }: { rows: QueueRow[] }) {
               </div>
 
               <div className="min-w-0 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-slate-400">窗口 ID</span>
+                  <strong className={row.shopId ? "font-mono text-slate-900" : "text-rose-600"}>{row.shopId || "未填写"}</strong>
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${row.shopWindowTransferredAt ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                    {row.shopWindowTransferredAt ? "已转" : "未转"}
+                  </span>
+                </div>
+                {row.shopWindowTransferredAt && (
+                  <p className="mt-1 text-xs text-slate-400">
+                    {row.shopWindowTransferredBy || "未知操作人"} · {new Date(row.shopWindowTransferredAt).toLocaleString("zh-CN")}
+                  </p>
+                )}
+                {row.canOperate && row.shopId && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void toggleShopWindowTransfer(row)}
+                    className={`mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold disabled:opacity-50 ${row.shopWindowTransferredAt ? "border-slate-200 text-slate-600 hover:bg-slate-50" : "border-amber-300 text-amber-800 hover:bg-amber-50"}`}
+                  >
+                    {busy ? <LoaderCircle size={14} className="animate-spin" /> : <ArrowRightLeft size={14} />}
+                    {row.shopWindowTransferredAt ? "改回未转" : "标记已转"}
+                  </button>
+                )}
+                <div className="mt-3 border-t border-slate-100 pt-2">
                 {row.trackingNo ? (
                   <>
                     <p className="truncate font-semibold text-slate-800">{row.carrier || "未填写物流商"}</p>
                     <p className="mt-1 truncate font-mono text-xs text-slate-500">{row.trackingNo}</p>
                   </>
                 ) : <p className="text-xs text-slate-400">尚未回填物流资料</p>}
+                </div>
               </div>
 
               <div>
@@ -137,6 +183,8 @@ export default function ShippingQuickQueue({ rows }: { rows: QueueRow[] }) {
                     </label>
                     <span className="text-xs text-slate-400">图片、PDF 或视频</span>
                   </div>
+                ) : step === "TRANSFER" ? (
+                  <p className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-medium text-violet-700">请先将窗口状态标记为“已转”，才能确认发货。</p>
                 ) : (
                   <div className="flex flex-wrap items-center gap-2">
                     <button type="button" disabled={busy} onClick={() => void confirmShipment(row)} className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">{busy ? <LoaderCircle size={16} className="animate-spin" /> : <PackageCheck size={17} />}确认发货</button>
