@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 
 import CrudPage from "@/components/admin/CrudPage";
+import type { DataRow } from "@/components/admin/CrudPageClient";
 import OrderBatchImport from "@/components/admin/OrderBatchImport";
 import OrderEntryForm from "@/components/admin/OrderEntryForm";
 import { parseOrderTemplateConfiguration } from "@/lib/order-template";
@@ -92,6 +93,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     createOrderAccessPlan({ membership, actionKey: "order.read" }),
   ]);
   const canDelete = effectiveActions.has("order.delete");
+  const canViewShipmentStatus = effectiveActions.has("shipment.timeline.view");
   if (!orderReadAccess.allowed) redirect("/admin");
 
   const products = await prisma.product.findMany({
@@ -262,17 +264,17 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             },
           },
           { key: "status", label: "订单状态" },
-          {
+          ...(canViewShipmentStatus ? [{
             key: "shipStatusLabel",
             label: "运输状态",
-            render: (row) => {
+            render: (row: DataRow) => {
               const rowStatus = (row as { status?: string }).status;
               if (rowStatus === "SUBMITTED" || rowStatus === "WAITING_SHIPMENT") {
                 return "运输中（待发货）";
               }
               return rowStatus ? zh(rowStatus as OrderStatus) : "-";
             },
-          },
+          }] : []),
           {
             key: "amount",
             label: "订单金额",

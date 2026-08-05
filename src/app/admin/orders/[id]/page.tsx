@@ -108,11 +108,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         targetUserId: order.creatorUserId,
         targetMembershipId: order.ownedByMembershipId,
       };
-      const [trackingNo, timeline] = await Promise.all([
+      const [read, trackingNo, timeline] = await Promise.all([
+        checkPermission({ ...target, actionKey: "shipment.read" }),
         checkPermission({ ...target, actionKey: "shipment.tracking_no.view" }),
         checkPermission({ ...target, actionKey: "shipment.timeline.view" }),
       ]);
-      return [shipment.id, { trackingNo: trackingNo.allowed, timeline: timeline.allowed }] as const;
+      return [shipment.id, { read: read.allowed, trackingNo: trackingNo.allowed, timeline: timeline.allowed }] as const;
     })),
   );
   const templateConfiguration = parseOrderTemplateConfiguration(order.orderTemplate?.configuration);
@@ -313,7 +314,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         />
       )}
 
-      {canReadAttachments.allowed && order.status === "WAITING_SHIPMENT" && order.shipments.filter((shipment) => shipment.status === "PENDING").map((shipment) => (
+      {canReadAttachments.allowed && order.status === "WAITING_SHIPMENT" && order.shipments.filter((shipment) => shipment.status === "PENDING" && shipmentPermissions.get(shipment.id)?.read).map((shipment) => (
         <div key={shipment.id} id="shipment-proof" className="scroll-mt-24">
         <AttachmentPanel
           targetType="SHIPMENT"
@@ -326,13 +327,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         </div>
       ))}
 
-      <section className="rounded border border-gray-200 p-4">
+      {order.shipments.some((shipment) => shipmentPermissions.get(shipment.id)?.read) && <section className="rounded border border-gray-200 p-4">
         <h2 className="mb-3 font-medium">物流信息</h2>
         {order.shipments.length === 0 ? (
           <p className="text-sm text-gray-600">暂无物流信息</p>
         ) : (
           <ul className="space-y-2 text-sm">
-            {order.shipments.map((shipment) => (
+            {order.shipments.filter((shipment) => shipmentPermissions.get(shipment.id)?.read).map((shipment) => (
               <li
                 key={shipment.id}
                 className="flex flex-wrap items-center justify-between gap-2 rounded border border-gray-100 p-3"
@@ -350,7 +351,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             ))}
           </ul>
         )}
-      </section>
+      </section>}
     </div>
   );
 }

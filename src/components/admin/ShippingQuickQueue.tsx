@@ -2,6 +2,7 @@
 
 import { ArrowRightLeft, CheckCircle2, ClipboardPaste, ExternalLink, ImagePlus, LoaderCircle, PackageCheck, Truck, Upload } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { type ClipboardEvent, useState } from "react";
 
 type QueueRow = {
@@ -22,6 +23,7 @@ type QueueRow = {
 };
 
 export default function ShippingQuickQueue({ rows }: { rows: QueueRow[] }) {
+  const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
 
@@ -46,7 +48,8 @@ export default function ShippingQuickQueue({ rows }: { rows: QueueRow[] }) {
       setBusyId(null);
       return;
     }
-    window.location.reload();
+    setBusyId(null);
+    router.refresh();
   }
 
   async function uploadProof(row: QueueRow, file: File | null) {
@@ -64,7 +67,8 @@ export default function ShippingQuickQueue({ rows }: { rows: QueueRow[] }) {
       setBusyId(null);
       return;
     }
-    window.location.reload();
+    setBusyId(null);
+    router.refresh();
   }
 
   function pastedImage(event: ClipboardEvent<HTMLDivElement>) {
@@ -88,7 +92,8 @@ export default function ShippingQuickQueue({ rows }: { rows: QueueRow[] }) {
       setBusyId(null);
       return;
     }
-    window.location.reload();
+    setBusyId(null);
+    router.refresh();
   }
 
   async function toggleShopWindowTransfer(row: QueueRow) {
@@ -106,7 +111,8 @@ export default function ShippingQuickQueue({ rows }: { rows: QueueRow[] }) {
       setBusyId(null);
       return;
     }
-    window.location.reload();
+    setBusyId(null);
+    router.refresh();
   }
 
   return (

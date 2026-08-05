@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import type { AttachmentTargetType } from "@/lib/attachments";
 import { ChevronLeft, ChevronRight, ExternalLink, FileText, ImageOff, LoaderCircle, Minus, Paperclip, Plus, RefreshCw, RotateCcw, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -30,6 +31,7 @@ export default function AttachmentPanel({
   title?: string;
   refreshAfterUpload?: boolean;
 }) {
+  const router = useRouter();
   const [items, setItems] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -152,7 +154,7 @@ export default function AttachmentPanel({
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error?.message ?? payload.error?.code ?? "上传失败");
       await load();
-      if (refreshAfterUpload) window.location.reload();
+      if (refreshAfterUpload) router.refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "上传失败");
     } finally {

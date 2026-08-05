@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { zh } from "@/lib/i18n";
 
 type WorkflowAction = "submit" | "approve" | "reject" | "void" | "ship";
@@ -40,6 +41,7 @@ export default function OrderWorkflowActions({
   voidReasons = [],
   shippingChecklist,
 }: Props) {
+  const router = useRouter();
   const [action, setAction] = useState<WorkflowAction | null>(null);
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
@@ -88,8 +90,8 @@ export default function OrderWorkflowActions({
       return;
     }
 
-    setMessage("操作成功，正在刷新...");
-    window.location.reload();
+    setMessage("操作成功");
+    router.refresh();
   }
 
   return (
