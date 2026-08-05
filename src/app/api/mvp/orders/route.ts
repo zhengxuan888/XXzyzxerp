@@ -6,6 +6,7 @@ import { requireAuthContext } from "@/lib/api-auth";
 import { createOrderAccessPlan } from "@/lib/order-access";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
+import { currencyForCountry } from "@/lib/order-country-currency";
 import { writeAuditLog } from "@/lib/audit";
 import { fail, ok, paginated, parsePagination } from "@/lib/api-response";
 import { normalizeMoneyCents } from "@/lib/money";
@@ -274,7 +275,7 @@ export async function POST(request: NextRequest) {
         shopId,
         orderTemplateId: orderTemplate?.id,
         status: "DRAFT",
-        currency: typeof body.currency === "string" ? body.currency.trim().toUpperCase().slice(0, 3) : templateConfiguration.currency,
+        currency: currencyForCountry(recipientCountryCode, typeof body.currency === "string" ? body.currency.trim().toUpperCase().slice(0, 3) : templateConfiguration.currency),
         productValueCents: productValue,
         shippingFeeCents: shippingFee,
         codAmountCents: codAmount,
@@ -407,14 +408,16 @@ export async function PUT(request: NextRequest) {
   const codAmountCents = normalizeMoneyCents(body.codAmountCents ?? 0);
   const shippingFeeCents = normalizeMoneyCents(body.shippingFeeCents ?? 0);
   const text = (value: unknown, max: number) => typeof value === "string" ? value.trim().slice(0, max) || null : null;
+  const recipientCountryCode = text(body.recipientCountryCode, 3)?.toUpperCase() ?? target.recipientCountryCode;
   const row = await prisma.$transaction(async (tx) => {
     const updated = await tx.order.update({
       where: { id: target.id, status: "DRAFT" },
       data: {
         shopId, productValueCents, codAmountCents, shippingFeeCents,
-        currency: (text(body.currency, 3) ?? target.currency).toUpperCase(), orderedAt,
+        currency: currencyForCountry(recipientCountryCode ?? target.recipientCountryCode ?? "", (text(body.currency, 3) ?? target.currency).toUpperCase()),
+        orderedAt,
         recipientName, recipientPhone: text(body.recipientPhone, 100), recipientEmail: text(body.recipientEmail, 200)?.toLowerCase(),
-        recipientCountryCode: text(body.recipientCountryCode, 3)?.toUpperCase(), recipientPostalCode: text(body.recipientPostalCode, 30),
+        recipientCountryCode, recipientPostalCode: text(body.recipientPostalCode, 30),
         recipientRegion: text(body.recipientRegion, 100), recipientCity: text(body.recipientCity, 100), recipientAddress: text(body.recipientAddress, 500),
         customerWhatsapp: text(body.customerWhatsapp, 50), staffWhatsapp: text(body.staffWhatsapp, 50), packageWeightGrams,
         paymentMethod: text(body.paymentMethod, 30), logisticsChannel: text(body.logisticsChannel, 50), note: text(body.note, 2000),
