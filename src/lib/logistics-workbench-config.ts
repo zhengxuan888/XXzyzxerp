@@ -82,7 +82,7 @@ export function parseLogisticsWorkbenchConfig(raw: { quickTags?: unknown; cards?
     const fallback = defaultLogisticsWorkbenchConfig.cards.find((card) => card.key === key)!;
     byKey.set(key, {
       key,
-      label: typeof value.label === "string" && value.label.trim() ? value.label.trim().slice(0, 30) : fallback.label,
+      label: key === "delivered" ? "成功签收" : typeof value.label === "string" && value.label.trim() ? value.label.trim().slice(0, 30) : fallback.label,
       isVisible: value.isVisible !== false,
       sortOrder: Number.isSafeInteger(value.sortOrder) ? Number(value.sortOrder) : fallback.sortOrder,
       matches: Array.isArray(value.matches)

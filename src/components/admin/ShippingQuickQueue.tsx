@@ -25,6 +25,7 @@ type QueueRow = {
 export default function ShippingQuickQueue({ rows }: { rows: QueueRow[] }) {
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [editingTrackingId, setEditingTrackingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
 
   async function saveTracking(row: QueueRow, form: HTMLFormElement) {
@@ -49,6 +50,7 @@ export default function ShippingQuickQueue({ rows }: { rows: QueueRow[] }) {
       return;
     }
     setBusyId(null);
+    setEditingTrackingId(null);
     router.refresh();
   }
 
@@ -173,6 +175,7 @@ export default function ShippingQuickQueue({ rows }: { rows: QueueRow[] }) {
                   <>
                     <p className="truncate font-semibold text-slate-800">{row.carrier || "未填写物流商"}</p>
                     <p className="mt-1 truncate font-mono text-xs text-slate-500">{row.trackingNo}</p>
+                    {row.canOperate && <button type="button" onClick={() => setEditingTrackingId(row.orderId)} className="mt-2 text-xs font-semibold text-amber-700 hover:text-amber-900">修改物流单号</button>}
                   </>
                 ) : <p className="text-xs text-slate-400">尚未回填物流资料</p>}
                 </div>
@@ -181,11 +184,12 @@ export default function ShippingQuickQueue({ rows }: { rows: QueueRow[] }) {
               <div>
                 {!row.canOperate ? (
                   <span className="text-xs text-slate-400">当前账号无发货操作权限</span>
-                ) : step === "TRACKING" ? (
+                ) : editingTrackingId === row.orderId || step === "TRACKING" ? (
                   <form className="flex flex-col gap-2 sm:flex-row" onSubmit={(event) => { event.preventDefault(); void saveTracking(row, event.currentTarget); }}>
-                    <input name="carrier" required placeholder="物流商" className="h-10 min-w-0 flex-1 rounded-lg border border-slate-200 px-3 text-sm focus:border-amber-500 focus:outline-none" />
-                    <input name="trackingNo" required placeholder="物流单号" className="h-10 min-w-0 flex-[1.4] rounded-lg border border-slate-200 px-3 font-mono text-sm focus:border-amber-500 focus:outline-none" />
+                    <input name="carrier" required defaultValue={row.carrier ?? ""} placeholder="物流商" className="h-10 min-w-0 flex-1 rounded-lg border border-slate-200 px-3 text-sm focus:border-amber-500 focus:outline-none" />
+                    <input name="trackingNo" required defaultValue={row.trackingNo ?? ""} placeholder="物流单号" className="h-10 min-w-0 flex-[1.4] rounded-lg border border-slate-200 px-3 font-mono text-sm focus:border-amber-500 focus:outline-none" />
                     <button disabled={busy} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-50">{busy ? <LoaderCircle size={16} className="animate-spin" /> : <Truck size={16} />}保存</button>
+                    {row.trackingNo && <button type="button" onClick={() => setEditingTrackingId(null)} className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-600">取消</button>}
                   </form>
                 ) : step === "PROOF" ? (
                   <div

@@ -97,18 +97,23 @@ export async function POST(request: NextRequest) {
     return fail("ORDER_NOT_READY_TO_SHIP", "只有核单通过并进入待发货状态的订单才能回填物流单号。", 409);
   }
 
-  const canCreate = await checkPermission({
+  const existingPending = await prisma.shipment.findFirst({
+    where: { orderId: order.id, businessUnitId: order.businessUnitId, status: "PENDING" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: { id: true, trackingNo: true, carrier: true },
+  });
+  const canSaveTracking = await checkPermission({
     userId: auth.userId,
     membershipId: auth.membership.id,
-    actionKey: "shipment.create",
+    actionKey: existingPending ? "shipment.track.update" : "shipment.create",
     targetBusinessUnitId: order.businessUnitId,
     targetDepartmentId: order.departmentId,
     targetSiteId: order.siteId,
     targetUserId: order.creatorUserId,
     targetMembershipId: order.ownedByMembershipId,
   });
-  if (!canCreate.allowed) {
-    return NextResponse.json({ error: "FORBIDDEN", reasons: canCreate.reasons }, { status: 403 });
+  if (!canSaveTracking.allowed) {
+    return NextResponse.json({ error: "FORBIDDEN", reasons: canSaveTracking.reasons }, { status: 403 });
   }
 
   const trackingNo = typeof body.trackingNo === "string" ? body.trackingNo.trim() : "";
@@ -116,11 +121,6 @@ export async function POST(request: NextRequest) {
   if (!trackingNo || !carrier) {
     return fail("SHIPMENT_FIELDS_REQUIRED", "物流商和物流单号必填。", 400);
   }
-  const existingPending = await prisma.shipment.findFirst({
-    where: { orderId: order.id, businessUnitId: order.businessUnitId, status: "PENDING" },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    select: { id: true, trackingNo: true, carrier: true },
-  });
   const duplicate = await prisma.shipment.findFirst({
     where: {
       businessUnitId: order.businessUnitId,
