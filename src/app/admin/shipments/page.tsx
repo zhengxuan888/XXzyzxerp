@@ -203,6 +203,8 @@ export default async function ShipmentsPage({
           creatorUserId: true,
           ownedByMembershipId: true,
           orderNo: true,
+          status: true,
+          exceptionNote: true,
           shopId: true,
           recipientName: true,
           recipientEmail: true,
@@ -327,6 +329,8 @@ export default async function ShipmentsPage({
     return searchable.includes(keyword);
   });
   const matchesCard = (row: (typeof baseFiltered)[number], key: LogisticsQueueKey) => {
+    if (key === "delivered") return row.status === "DELIVERED" && row.order.exceptionNote === "人工确认成功签收";
+    if (key === "signed_refund") return row.order.exceptionNote === "签收后退款";
     const configuredMatches = workbenchConfig.cards.find((card) => card.key === key)?.matches ?? [];
     return matchesQueueSignals({
       status: row.status,
@@ -363,6 +367,8 @@ export default async function ShipmentsPage({
           select: {
             id: true,
             orderNo: true,
+            status: true,
+            exceptionNote: true,
             shopId: true,
             recipientName: true,
             recipientPhone: true,

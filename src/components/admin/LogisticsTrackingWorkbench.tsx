@@ -8,7 +8,7 @@ import type { LogisticsQueueKey, LogisticsWorkbenchConfig } from "@/lib/logistic
 
 type Annotation = { note: string | null; tags: string[]; isHandled: boolean; handledAt: string | null; updatedAt: string; handledByMembership?: { user?: { fullName: string | null; username: string } } | null };
 type TrackingEvent = { id: string; occurredAt: string; eventType: string; statusMilestone: string | null; location: string | null; memo: string | null; annotation: Annotation | null };
-type TrackingRow = { id: string; updatedAt: string; trackingNo: string | null; carrier: string | null; status: string; urgency: "critical" | "high" | "normal"; urgencyLabel: string; priorityTag: string; dueStatus: string; canViewTrackingNo: boolean; canViewTimeline: boolean; canAnnotate: boolean; eventTotal: number; unhandledEventCount: number; queueSignals: string[]; followUpOwner: { id: string; user: { username: string; fullName: string | null } } | null; order: { id: string; orderNo: string; shopId: string | null; recipientName: string | null; recipientPhone: string | null; recipientEmail: string | null; customerWhatsapp: string | null; recipientCountryCode: string | null; codAmountLabel: string; customer: { name: string }; creatorUser: { username: string; fullName: string | null }; ownerMembership: { id: string; department: { id: string; name: string } | null; managerMembership: { id: string; user: { username: string; fullName: string | null } } | null }; items: Array<{ productName: string; quantity: number }> }; events: TrackingEvent[] };
+type TrackingRow = { id: string; updatedAt: string; trackingNo: string | null; carrier: string | null; status: string; urgency: "critical" | "high" | "normal"; urgencyLabel: string; priorityTag: string; dueStatus: string; canViewTrackingNo: boolean; canViewTimeline: boolean; canAnnotate: boolean; eventTotal: number; unhandledEventCount: number; queueSignals: string[]; followUpOwner: { id: string; user: { username: string; fullName: string | null } } | null; order: { id: string; orderNo: string; status: string; exceptionNote: string | null; shopId: string | null; recipientName: string | null; recipientPhone: string | null; recipientEmail: string | null; customerWhatsapp: string | null; recipientCountryCode: string | null; codAmountLabel: string; customer: { name: string }; creatorUser: { username: string; fullName: string | null }; ownerMembership: { id: string; department: { id: string; name: string } | null; managerMembership: { id: string; user: { username: string; fullName: string | null } } | null }; items: Array<{ productName: string; quantity: number }> }; events: TrackingEvent[] };
 
 const trackingStatusLabels: Record<string, string> = {
   UNKNOWN: "状态待确认",
@@ -98,6 +98,9 @@ export default function LogisticsTrackingWorkbench({
   const urlSearchParams = useSearchParams();
   const [keyword, setKeyword] = useState(urlSearchParams.get("q") ?? "");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [confirmingDeliveredId, setConfirmingDeliveredId] = useState<string | null>(null);
+  const [refundingId, setRefundingId] = useState<string | null>(null);
+  const [deliveryMessage, setDeliveryMessage] = useState<Record<string, string>>({});
   const queue = (urlSearchParams.get("queue") ?? "all") as LogisticsQueueKey;
   const departmentId = urlSearchParams.get("departmentId") ?? "";
   const managerMembershipId = urlSearchParams.get("managerMembershipId") ?? "";
@@ -107,6 +110,39 @@ export default function LogisticsTrackingWorkbench({
   const destination = urlSearchParams.get("destination") ?? "";
   const ownerQueue = (urlSearchParams.get("owner") ?? "all") as "all" | "mine" | "unassigned";
   const [claimedOwners, setClaimedOwners] = useState<Record<string, string>>({});
+  const confirmDelivered = async (row: TrackingRow) => {
+    if (!window.confirm(`第一次确认：订单 ${row.order.orderNo} 的客户确实已经收到货？`)) return;
+    if (!window.confirm("第二次确认：将该订单标记为“成功签收”并结束物流跟进。确认继续？")) return;
+    setConfirmingDeliveredId(row.id);
+    setDeliveryMessage((current) => ({ ...current, [row.id]: "" }));
+    const response = await fetch(`/api/mvp/shipments/${row.id}/confirm-delivery`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const payload = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+    setConfirmingDeliveredId(null);
+    if (!response.ok) {
+      setDeliveryMessage((current) => ({ ...current, [row.id]: payload?.error?.message ?? "确认签收失败" }));
+      return;
+    }
+    setDeliveryMessage((current) => ({ ...current, [row.id]: "已人工确认成功签收" }));
+    router.refresh();
+  };
+  const markAfterDeliveryRefund = async (row: TrackingRow) => {
+    if (!window.confirm(`第一次确认：订单 ${row.order.orderNo} 已签收后发生退款？`)) return;
+    if (!window.confirm("第二次确认：订单结果将改为“签收后退款”并进入已完成。确认继续？")) return;
+    setRefundingId(row.id);
+    const response = await fetch(`/api/mvp/shipments/${row.id}/after-delivery-refund`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const payload = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+    setRefundingId(null);
+    if (!response.ok) {
+      setDeliveryMessage((current) => ({ ...current, [row.id]: payload?.error?.message ?? "登记退款失败" }));
+      return;
+    }
+    setDeliveryMessage((current) => ({ ...current, [row.id]: "已登记签收后退款" }));
+    router.refresh();
+  };
   const replaceQuery = (updates: Record<string, string | null>, resetPage = true) => {
     const next = new URLSearchParams(urlSearchParams.toString());
     for (const [key, value] of Object.entries(updates)) {
@@ -118,7 +154,7 @@ export default function LogisticsTrackingWorkbench({
   };
   const pagedRows = rows;
   const countFor = (key: LogisticsQueueKey) => queueCounts[key] ?? 0;
-  const toneFor = (key: LogisticsQueueKey) => key === "critical" || key === "exception" ? "border-rose-200 bg-rose-50 text-rose-900" : key === "high" || key === "out_for_delivery" ? "border-amber-200 bg-amber-50 text-amber-900" : key === "normal" || key === "delivered" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : key === "unhandled" || key === "returning" ? "border-violet-200 bg-violet-50 text-violet-900" : key === "in_transit" ? "border-sky-200 bg-sky-50 text-sky-900" : "border-slate-200 bg-white text-slate-900";
+  const toneFor = (key: LogisticsQueueKey) => key === "critical" || key === "exception" || key === "signed_refund" ? "border-rose-200 bg-rose-50 text-rose-900" : key === "high" || key === "out_for_delivery" ? "border-amber-200 bg-amber-50 text-amber-900" : key === "normal" || key === "delivered" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : key === "unhandled" || key === "returning" ? "border-violet-200 bg-violet-50 text-violet-900" : key === "in_transit" ? "border-sky-200 bg-sky-50 text-sky-900" : "border-slate-200 bg-white text-slate-900";
   const queueCards = config.cards.filter((card) => card.isVisible).map((card) => ({ ...card, count: countFor(card.key), tone: toneFor(card.key) }));
   const { departments, managers, creators, statuses: shipmentStatuses, carriers, destinations } = filterOptions;
 
@@ -154,6 +190,9 @@ export default function LogisticsTrackingWorkbench({
         <div><div className="flex items-start gap-2"><Package size={16} className="mt-0.5 shrink-0 text-slate-400" /><div className="text-sm text-slate-700">{row.order.items.map((item) => `${item.productName} × ${item.quantity}`).join("、") || "未记录产品"}</div></div><div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500"><span>COD：<strong className="text-slate-800">{row.order.codAmountLabel}</strong></span><span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-1 font-medium text-violet-700"><UserRound size={13} />销售：{row.order.creatorUser.fullName || row.order.creatorUser.username}</span></div></div>
         <div className="flex flex-col gap-2">
           {row.canAnnotate && <ClaimButton shipmentId={row.id} expectedUpdatedAt={row.updatedAt} currentMembershipId={currentMembershipId} ownerId={claimedOwners[row.id] ?? row.followUpOwner?.id ?? null} ownerName={claimedOwners[row.id] ? "我" : row.followUpOwner?.user.fullName || row.followUpOwner?.user.username || null} canReassign={canReassign} onClaimed={() => setClaimedOwners((current) => ({ ...current, [row.id]: currentMembershipId }))} />}
+          {row.canAnnotate && row.status === "DELIVERED" && row.order.exceptionNote !== "人工确认成功签收" && row.order.exceptionNote !== "签收后退款" && <button type="button" disabled={confirmingDeliveredId === row.id} onClick={() => void confirmDelivered(row)} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"><CheckCircle2 size={16} />{confirmingDeliveredId === row.id ? "确认中…" : "人工确认签收"}</button>}
+          {row.order.exceptionNote === "签收后退款" ? <span className="rounded-xl bg-rose-50 px-3 py-2 text-center text-xs font-semibold text-rose-700">签收退款</span> : row.order.exceptionNote === "人工确认成功签收" ? <><span className="rounded-xl bg-emerald-50 px-3 py-2 text-center text-xs font-semibold text-emerald-700">成功签收</span>{row.canAnnotate && <button type="button" disabled={refundingId === row.id} onClick={() => void markAfterDeliveryRefund(row)} className="inline-flex h-9 items-center justify-center rounded-xl border border-rose-200 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50">{refundingId === row.id ? "登记中…" : "签收后退款"}</button>}</> : row.status === "DELIVERED" && <span className="rounded-xl bg-amber-50 px-3 py-2 text-center text-xs font-semibold text-amber-800">待人工确认签收</span>}
+          {deliveryMessage[row.id] && <span className={`max-w-48 text-center text-xs ${deliveryMessage[row.id].startsWith("已") ? "text-emerald-700" : "text-rose-600"}`}>{deliveryMessage[row.id]}</span>}
           {row.canViewTimeline && <button type="button" onClick={() => setExpanded((value) => ({ ...value, [row.id]: !isOpen }))} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">{isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}{isOpen ? "收起轨迹" : `展开轨迹 ${row.eventTotal}`}</button>}
         </div>
       </div>

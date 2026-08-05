@@ -263,7 +263,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               return customer ? `${customer.code ?? ""} ${customer.name ?? ""}` : "";
             },
           },
-          { key: "status", label: "订单状态" },
+          { key: "status", label: "订单状态", render: (row: DataRow) => canViewShipmentStatus && row.exceptionNote === "签收后退款" ? "签收后退款" : zh(row.status as OrderStatus) },
           ...(canViewShipmentStatus ? [{
             key: "shipStatusLabel",
             label: "运输状态",
