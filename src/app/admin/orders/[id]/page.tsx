@@ -148,6 +148,10 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         },
       })
     : 0;
+  const canViewShipmentStatus = [...shipmentPermissions.values()].some((permission) => permission.timeline);
+  const visibleOrderStatus = !canViewShipmentStatus && ["SHIPPED", "DELIVERED", "EXCEPTION", "COMPLETED"].includes(order.status)
+    ? "已完成"
+    : zh(order.status);
   const missingFields = [
     !order.shopId && "比特窗口号（店铺 ID）",
     !order.recipientName && "收件人",
@@ -172,7 +176,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           客户：{order.customer?.code} {order.customer?.name}
         </p>
         <p className="text-sm text-gray-600">
-          状态：{zh(order.status)}
+          状态：{visibleOrderStatus}
         </p>
         <p className="text-sm text-gray-600">
           申报金额：{formatMoneyCents(order.productValueCents, order.declarationCurrency)} | COD应收：

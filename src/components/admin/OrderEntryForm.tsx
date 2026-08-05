@@ -31,6 +31,7 @@ export default function OrderEntryForm({
   canUploadOrderProof,
   canDeleteOrderProof,
   canSubmitForReview,
+  canViewShipmentStatus,
   myOrderStats,
 }: {
   products: ProductOption[];
@@ -40,6 +41,7 @@ export default function OrderEntryForm({
   canUploadOrderProof: boolean;
   canDeleteOrderProof: boolean;
   canSubmitForReview: boolean;
+  canViewShipmentStatus: boolean;
   myOrderStats: { total: number; draft: number; submitted: number; waiting_shipment: number; shipped: number; delivered: number; exception: number; completed: number; cancelled: number };
 }) {
   const defaultTemplate = templates.find((item) => item.isDefault) ?? templates[0];
@@ -228,7 +230,10 @@ export default function OrderEntryForm({
         <Metric icon={<CalendarDays size={18} />} label="录入日期" value={today} color="text-violet-600 bg-violet-50" />
       </div>
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 text-xs sm:grid-cols-4 lg:grid-cols-8">
-        {[['我的订单', myOrderStats.total], ['审核中', myOrderStats.submitted], ['待发货', myOrderStats.waiting_shipment], ['运输中', myOrderStats.shipped], ['已签收', myOrderStats.delivered], ['异常', myOrderStats.exception], ['已完成', myOrderStats.completed], ['草稿', myOrderStats.draft]].map(([label, value]) => <div key={String(label)} className="bg-white px-3 py-2.5"><span className="block text-slate-500">{label}</span><strong className="mt-1 block text-lg tabular-nums text-slate-900">{value}</strong></div>)}
+        {(canViewShipmentStatus
+          ? [['我的订单', myOrderStats.total], ['审核中', myOrderStats.submitted], ['待发货', myOrderStats.waiting_shipment], ['运输中', myOrderStats.shipped], ['已签收', myOrderStats.delivered], ['异常', myOrderStats.exception], ['已完成', myOrderStats.completed], ['草稿', myOrderStats.draft]]
+          : [['我的订单', myOrderStats.total], ['审核中', myOrderStats.submitted], ['待处理', myOrderStats.waiting_shipment], ['已完成', myOrderStats.shipped + myOrderStats.delivered + myOrderStats.exception + myOrderStats.completed], ['草稿', myOrderStats.draft]]
+        ).map(([label, value]) => <div key={String(label)} className="bg-white px-3 py-2.5"><span className="block text-slate-500">{label}</span><strong className="mt-1 block text-lg tabular-nums text-slate-900">{value}</strong></div>)}
       </div>
 
       <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2.5 text-sm text-slate-500">

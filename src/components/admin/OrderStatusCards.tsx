@@ -14,10 +14,11 @@ const cards: Array<{ status?: OrderStatus; label: string }> = [
   { status: "CANCELLED", label: "已结束" },
 ];
 
-export default function OrderStatusCards({ groups, activeStatus }: { groups: Array<{ status: OrderStatus; count: number }>; activeStatus?: OrderStatus }) {
+export default function OrderStatusCards({ groups, activeStatus, canViewShipmentStatus = true }: { groups: Array<{ status: OrderStatus; count: number }>; activeStatus?: OrderStatus; canViewShipmentStatus?: boolean }) {
   const counts = new Map(groups.map((item) => [item.status, item.count]));
   const total = groups.reduce((sum, item) => sum + item.count, 0);
-  return <nav className="grid gap-3 sm:grid-cols-3 xl:grid-cols-9">{cards.map((card) => {
+  const visibleCards = canViewShipmentStatus ? cards : cards.filter((card) => !card.status || !["SHIPPED", "DELIVERED", "EXCEPTION"].includes(card.status));
+  return <nav className="grid gap-3 sm:grid-cols-3 xl:grid-cols-9">{visibleCards.map((card) => {
     const active = card.status ? activeStatus === card.status : !activeStatus;
     return <Link key={card.label} href={card.status ? `/admin/orders?status=${card.status}` : "/admin/orders"} className={`rounded-2xl border p-4 shadow-sm transition ${active ? "border-amber-400 bg-amber-50" : "border-slate-200 bg-white hover:border-amber-200"}`}><p className="text-xs text-slate-500">{card.label}</p><p className="mt-1 text-2xl font-bold text-slate-950">{card.status ? counts.get(card.status) ?? 0 : total}</p></Link>;
   })}</nav>;

@@ -193,10 +193,11 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         canUploadOrderProof={canUploadOrderProof.allowed}
         canDeleteOrderProof={canDeleteOrderProof.allowed}
         canSubmitForReview={canSubmitForReview.allowed}
+        canViewShipmentStatus={canViewShipmentStatus}
         myOrderStats={myOrderStats}
       />
       <OrderBatchImport canCreate={canCreate.allowed} />
-      <OrderStatusCards groups={statusGroups.map((item) => ({ status: item.status, count: item._count._all }))} activeStatus={status} />
+      <OrderStatusCards groups={statusGroups.map((item) => ({ status: item.status, count: item._count._all }))} activeStatus={status} canViewShipmentStatus={canViewShipmentStatus} />
       <form method="get" className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-2 xl:grid-cols-8">
         <input type="hidden" name="status" value={status ?? ""} />
         <input name="q" defaultValue={keyword ?? ""} placeholder="订单号、客户、邮箱、电话、WhatsApp" className="rounded-xl border border-slate-200 px-3 py-2 text-sm xl:col-span-2" />
@@ -263,7 +264,11 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               return customer ? `${customer.code ?? ""} ${customer.name ?? ""}` : "";
             },
           },
-          { key: "status", label: "订单状态", render: (row: DataRow) => canViewShipmentStatus && row.exceptionNote === "签收后退款" ? "签收后退款" : zh(row.status as OrderStatus) },
+          { key: "status", label: "订单状态", render: (row: DataRow) => {
+            if (canViewShipmentStatus && row.exceptionNote === "签收后退款") return "签收后退款";
+            if (!canViewShipmentStatus && ["SHIPPED", "DELIVERED", "EXCEPTION", "COMPLETED"].includes(String(row.status))) return "已完成";
+            return zh(row.status as OrderStatus);
+          } },
           ...(canViewShipmentStatus ? [{
             key: "shipStatusLabel",
             label: "运输状态",
