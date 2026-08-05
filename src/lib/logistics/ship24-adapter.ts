@@ -7,7 +7,7 @@ export type Ship24Config = { apiKey: string; baseUrl?: string; enabled?: boolean
 export function ship24ConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Ship24Config | null {
   const apiKey = env.SHIP24_API_KEY?.trim();
   if (!apiKey || env.SHIP24_ENABLED !== "true") return null;
-  return { apiKey, baseUrl: env.SHIP24_API_BASE_URL || DEFAULT_BASE_URL, enabled: true, timeoutMs: Number(env.SHIP24_TIMEOUT_MS || 10_000) };
+  return { apiKey, baseUrl: env.SHIP24_API_BASE_URL || DEFAULT_BASE_URL, enabled: true, timeoutMs: Number(env.SHIP24_TIMEOUT_MS || 65_000) };
 }
 
 export class Ship24Adapter implements TrackingProviderAdapter {
@@ -18,10 +18,10 @@ export class Ship24Adapter implements TrackingProviderAdapter {
 
   async track(trackingNo: string, carrier?: string): Promise<TrackingProviderResult> {
     if (!trackingNo.trim()) throw new ProviderRequestError("物流单号不能为空", false);
-    const url = `${(this.config.baseUrl || DEFAULT_BASE_URL).replace(/\/$/, "")}/trackers/track`; 
+    const url = `${(this.config.baseUrl || DEFAULT_BASE_URL).replace(/\/$/, "")}/public/v1/trackers/track`;
     return withRetry(async () => {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs ?? 10_000);
+      const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs ?? 65_000);
       try {
         const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${this.config.apiKey}` }, body: JSON.stringify({ trackingNumber: trackingNo, courierCode: carrier }), signal: controller.signal });
         if (!response.ok) throw new ProviderRequestError(`Ship24 请求失败（${response.status}）`, response.status >= 500 || response.status === 429);
@@ -37,13 +37,18 @@ export class Ship24Adapter implements TrackingProviderAdapter {
 export function normalizeShip24(payload: unknown, trackingNo: string, carrier?: string): TrackingProviderResult {
   const root = (payload && typeof payload === "object") ? payload as Record<string, unknown> : {};
   const data = (root.data && typeof root.data === "object" ? root.data : root) as Record<string, unknown>;
-  const raw = Array.isArray(data.events) ? data.events : Array.isArray(data.trackings) ? data.trackings : [];
+  const trackings = Array.isArray(data.trackings) ? data.trackings : [];
+  const raw = Array.isArray(data.events)
+    ? data.events
+    : trackings.flatMap((tracking) => tracking && typeof tracking === "object" && Array.isArray((tracking as Record<string, unknown>).events)
+      ? (tracking as Record<string, unknown>).events as unknown[]
+      : []);
   const events: LogisticsProviderEvent[] = raw.flatMap((item, index) => {
     if (!item || typeof item !== "object") return [];
     const row = item as Record<string, unknown>;
-    const occurredAt = new Date(String(row.dateTime || row.datetime || row.eventTime || ""));
+    const occurredAt = new Date(String(row.occurrenceDatetime || row.dateTime || row.datetime || row.eventTime || ""));
     if (Number.isNaN(occurredAt.getTime())) return [];
-    return [{ externalEventKey: String(row.eventId || row.id || `${occurredAt.toISOString()}-${index}`), status: String(row.status || row.statusCode || "UNKNOWN").toUpperCase(), description: typeof row.statusMilestone === "string" ? row.statusMilestone : typeof row.description === "string" ? row.description : undefined, location: typeof row.location === "string" ? row.location : undefined, occurredAt }];
+    return [{ externalEventKey: String(row.eventId || row.id || `${occurredAt.toISOString()}-${index}`), status: String(row.statusMilestone || row.statusCode || row.status || "UNKNOWN").toUpperCase(), description: typeof row.status === "string" ? row.status : typeof row.description === "string" ? row.description : undefined, location: typeof row.location === "string" ? row.location : undefined, occurredAt }];
   }).sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
   return { trackingNo, carrier: carrier || (typeof data.courierCode === "string" ? data.courierCode : undefined), events };
 }

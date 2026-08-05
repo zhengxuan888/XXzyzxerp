@@ -203,6 +203,7 @@ export default async function ShipmentsPage({
           creatorUserId: true,
           ownedByMembershipId: true,
           orderNo: true,
+          shopId: true,
           recipientName: true,
           recipientEmail: true,
           customerWhatsapp: true,
@@ -315,6 +316,7 @@ export default async function ShipmentsPage({
     const searchable = [
       row.canViewTrackingNo ? row.trackingNo : null,
       row.order.orderNo,
+      row.order.shopId,
       row.order.recipientName,
       row.order.recipientEmail,
       row.order.customerWhatsapp,
@@ -361,6 +363,7 @@ export default async function ShipmentsPage({
           select: {
             id: true,
             orderNo: true,
+            shopId: true,
             recipientName: true,
             recipientPhone: true,
             recipientEmail: true,

@@ -18,6 +18,19 @@ describe("Ship24 tracking adapter", () => {
     expect(result.events[0].status).toBe("IN_TRANSIT");
   });
 
+  it("normalizes the official nested tracking response", () => {
+    const result = normalizeShip24({ data: { trackings: [{ events: [
+      { eventId: "evt-1", occurrenceDatetime: "2026-07-03T08:30:00Z", status: "Out for delivery", statusMilestone: "out_for_delivery", location: "Madrid" },
+    ] }] } }, "TRACK-2");
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0]).toMatchObject({
+      externalEventKey: "evt-1",
+      status: "OUT_FOR_DELIVERY",
+      description: "Out for delivery",
+      location: "Madrid",
+    });
+  });
+
   it("provides deterministic local demo events", async () => {
     const adapter = new DemoTrackingAdapter();
     const first = await adapter.track("TRACK-1");
