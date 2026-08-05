@@ -39,6 +39,7 @@ function trackingStatusLabel(value: string | null | undefined) {
 function trackingMemoLabel(value: string | null) {
   if (!value) return "暂无轨迹说明";
   const rules: Array<[RegExp, string]> = [
+    [/\bem entrega\b|\bsaiu para entrega\b|\bser[aá] entregue durante o dia\b/i, "快件正在派送，预计当天送达"],
     [/\ben reparto\b|\bem distribuição\b|\bu dostavi\b/i, "快件正在派送，请留意电话并准备签收"],
     [/\benviado\b|\bexpedido\b|\bposlano\b/i, "快件已发出，正在运输途中"],
     [/\bentregado\b|\bentregue\b|\bisporučeno\b/i, "快件已成功签收"],
