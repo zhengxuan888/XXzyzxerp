@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Mail, MessageCircle, Package, Save, Search, Truck, UserRound } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ExternalLink, Mail, MessageCircle, Package, Save, Search, Truck, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -101,14 +101,14 @@ export default function LogisticsTrackingWorkbench({
   const [confirmingDeliveredId, setConfirmingDeliveredId] = useState<string | null>(null);
   const [refundingId, setRefundingId] = useState<string | null>(null);
   const [deliveryMessage, setDeliveryMessage] = useState<Record<string, string>>({});
-  const queue = (urlSearchParams.get("queue") ?? "all") as LogisticsQueueKey;
+  const queue = (urlSearchParams.get("queue") ?? "unhandled") as LogisticsQueueKey;
   const departmentId = urlSearchParams.get("departmentId") ?? "";
   const managerMembershipId = urlSearchParams.get("managerMembershipId") ?? "";
   const creatorMembershipId = urlSearchParams.get("creatorMembershipId") ?? "";
   const shipmentStatus = urlSearchParams.get("status") ?? "";
   const carrier = urlSearchParams.get("carrier") ?? "";
   const destination = urlSearchParams.get("destination") ?? "";
-  const ownerQueue = (urlSearchParams.get("owner") ?? "all") as "all" | "mine" | "unassigned";
+  const ownerQueue = (urlSearchParams.get("owner") ?? "mine") as "all" | "mine" | "unassigned";
   const [claimedOwners, setClaimedOwners] = useState<Record<string, string>>({});
   const confirmDelivered = async (row: TrackingRow) => {
     if (!window.confirm(`第一次确认：订单 ${row.order.orderNo} 的客户确实已经收到货？`)) return;
@@ -156,6 +156,14 @@ export default function LogisticsTrackingWorkbench({
   const countFor = (key: LogisticsQueueKey) => queueCounts[key] ?? 0;
   const toneFor = (key: LogisticsQueueKey) => key === "critical" || key === "exception" || key === "signed_refund" ? "border-rose-200 bg-rose-50 text-rose-900" : key === "high" || key === "out_for_delivery" ? "border-amber-200 bg-amber-50 text-amber-900" : key === "normal" || key === "delivered" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : key === "unhandled" || key === "returning" ? "border-violet-200 bg-violet-50 text-violet-900" : key === "in_transit" ? "border-sky-200 bg-sky-50 text-sky-900" : "border-slate-200 bg-white text-slate-900";
   const queueCards = config.cards.filter((card) => card.isVisible).map((card) => ({ ...card, count: countFor(card.key), tone: toneFor(card.key) }));
+  const priorityFilters: Array<{ key: LogisticsQueueKey; label: string }> = [
+    { key: "critical", label: "超期高风险" },
+    { key: "problem", label: "物流异常" },
+    { key: "pending_delivery_confirmation", label: "待人工确认签收" },
+    { key: "due_today", label: "今日需要跟进" },
+    { key: "out_for_delivery", label: "派送中" },
+    { key: "normal", label: "普通运输" },
+  ];
   const { departments, managers, creators, statuses: shipmentStatuses, carriers, destinations } = filterOptions;
 
   return <div className="space-y-4">
@@ -174,18 +182,28 @@ export default function LogisticsTrackingWorkbench({
       <label className="grid gap-1 text-xs font-medium text-slate-500">目的地<select value={destination} onChange={(event) => replaceQuery({ destination: event.target.value || null })} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部目的地</option>{destinations.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
     </section>
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-      {queueCards.map((card) => <button key={card.key} type="button" onClick={() => replaceQuery({ queue: card.key === "all" ? null : card.key })} className={`rounded-2xl border p-4 text-left shadow-sm transition ${card.tone} ${queue === card.key ? "ring-2 ring-amber-500 ring-offset-2" : "hover:-translate-y-0.5"}`}><p className="text-xs font-medium opacity-70">{card.label}</p><p className="mt-1 text-2xl font-bold">{card.count}</p></button>)}
+      {queueCards.map((card) => <button key={card.key} type="button" onClick={() => replaceQuery({ queue: card.key })} className={`rounded-2xl border p-4 text-left shadow-sm transition ${card.tone} ${queue === card.key ? "ring-2 ring-amber-500 ring-offset-2" : "hover:-translate-y-0.5"}`}><p className="text-xs font-medium opacity-70">{card.label}</p><p className="mt-1 text-2xl font-bold">{card.count}</p></button>)}
     </section>
     {!canViewTrackingNo && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">当前角色未配置“查看物流单号”权限，页面已隐藏物流单号。</p>}
     {!canViewTimeline && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">当前角色未配置“查看物流轨迹”权限，页面已隐藏全部轨迹。</p>}
     {canViewTimeline && !canAnnotate && <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">当前角色可查看物流轨迹，但未配置“处理物流轨迹”权限，备注和完成按钮已隐藏。</p>}
-    {canAnnotate && <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-sm">
-      <span className="font-semibold text-slate-700">任务范围</span>
-      {([["all", "全部任务"], ["mine", "我的待办"], ["unassigned", "未分配"]] as const).map(([value, label]) => <button key={value} type="button" onClick={() => replaceQuery({ owner: value === "all" ? null : value })} className={`rounded-lg px-3 py-1.5 font-medium ${ownerQueue === value ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{label}</button>)}
+    {canAnnotate && <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-3 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold text-slate-700">跟进状态</span>
+        {([["unhandled", "待跟进"], ["followed", "已跟进"]] as const).map(([value, label]) => <button key={value} type="button" onClick={() => replaceQuery({ queue: value })} className={`rounded-lg px-3 py-1.5 font-medium ${queue === value ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{label} {countFor(value)}</button>)}
+        <span className="ml-2 font-semibold text-slate-700">任务范围</span>
+        {canReassign && <button type="button" onClick={() => replaceQuery({ owner: "all" })} className={`rounded-lg px-3 py-1.5 font-medium ${ownerQueue === "all" ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>全部</button>}
+        <button type="button" onClick={() => replaceQuery({ owner: "mine" })} className={`rounded-lg px-3 py-1.5 font-medium ${ownerQueue === "mine" ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>我的待办</button>
+        <button type="button" onClick={() => replaceQuery({ owner: "unassigned" })} className={`rounded-lg px-3 py-1.5 font-medium ${ownerQueue === "unassigned" ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>未分配</button>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+        <span className="font-semibold text-slate-700">优先筛选</span>
+        {priorityFilters.map((filter) => <button key={filter.key} type="button" onClick={() => replaceQuery({ queue: filter.key })} className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${queue === filter.key ? "border-violet-500 bg-violet-50 text-violet-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>{filter.label} {countFor(filter.key)}</button>)}
+      </div>
     </div>}
     {pagedRows.map((row) => { const isOpen = expanded[row.id] ?? false; return <article key={row.id} className={`overflow-hidden rounded-2xl border bg-white shadow-sm ${row.urgency === "critical" ? "border-rose-300" : row.urgency === "high" ? "border-amber-300" : "border-slate-200"}`}>
       <div role={row.canViewTimeline ? "button" : undefined} tabIndex={row.canViewTimeline ? 0 : undefined} onClick={(event) => { if (!row.canViewTimeline || (event.target as HTMLElement).closest("a,button,input,select,textarea,label")) return; setExpanded((value) => ({ ...value, [row.id]: !isOpen })); }} onKeyDown={(event) => { if (!row.canViewTimeline || (event.key !== "Enter" && event.key !== " ")) return; event.preventDefault(); setExpanded((value) => ({ ...value, [row.id]: !isOpen })); }} className={`grid gap-4 p-4 xl:grid-cols-[1.2fr_1.3fr_1fr_auto] xl:items-center ${row.canViewTimeline ? "cursor-pointer hover:bg-slate-50/70" : ""}`}>
-        <div><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.urgency === "critical" ? "bg-rose-50 text-rose-700" : row.urgency === "high" ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-700"}`}>{row.urgencyLabel}</span>{row.priorityTag !== "-" && <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">{row.priorityTag}</span>}</div><p className="mt-2 font-mono text-sm font-semibold text-slate-900">{row.trackingNo || "暂无物流单号"}</p><p className="mt-1 text-xs text-slate-500">{row.carrier || "未填写物流商"} · {row.order.recipientCountryCode || "目的地未知"} · {row.dueStatus}</p></div>
+        <div><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.urgency === "critical" ? "bg-rose-50 text-rose-700" : row.urgency === "high" ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-700"}`}>{row.urgencyLabel}</span>{row.priorityTag !== "-" && <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">{row.priorityTag}</span>}</div><div className="mt-2 flex flex-wrap items-center gap-2"><p className="font-mono text-sm font-semibold text-slate-900">{row.trackingNo || "暂无物流单号"}</p>{row.trackingNo && <a href={`https://www.ship24.com/tracking?p=${encodeURIComponent(row.trackingNo)}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-violet-700 hover:underline">Ship24 查看<ExternalLink size={12} /></a>}</div><p className="mt-1 text-xs text-slate-500">{row.carrier || "未填写物流商"} · {row.order.recipientCountryCode || "目的地未知"} · {row.dueStatus}</p></div>
         <div><div className="flex flex-wrap items-center gap-2"><Link href={`/admin/orders/${row.order.id}`} className="font-semibold text-violet-700 hover:underline">{row.order.orderNo}</Link><span className="rounded-md bg-slate-100 px-2 py-1 font-mono text-xs font-medium text-slate-700">窗口 ID：{row.order.shopId || "未填写"}</span></div><p className="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-slate-800"><MessageCircle size={14} className="text-emerald-600" />客户 WhatsApp：{row.order.customerWhatsapp || "未填写"}</p><div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span className="inline-flex items-center gap-1"><Mail size={13} />{row.order.recipientEmail || "-"}</span><span>{row.order.recipientPhone || "-"}</span></div></div>
         <div><div className="flex items-start gap-2"><Package size={16} className="mt-0.5 shrink-0 text-slate-400" /><div className="text-sm text-slate-700">{row.order.items.map((item) => `${item.productName} × ${item.quantity}`).join("、") || "未记录产品"}</div></div><div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500"><span>COD：<strong className="text-slate-800">{row.order.codAmountLabel}</strong></span><span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-1 font-medium text-violet-700"><UserRound size={13} />销售：{row.order.creatorUser.fullName || row.order.creatorUser.username}</span></div></div>
         <div className="flex flex-col gap-2">
@@ -254,6 +272,7 @@ function TrackingEventsPanel({
   canSync: boolean;
   quickTags: string[];
 }) {
+  const router = useRouter();
   const [events, setEvents] = useState(initialEvents);
   const [total, setTotal] = useState(initialTotal);
   const [loading, setLoading] = useState(false);
@@ -346,6 +365,7 @@ function TrackingEventsPanel({
     setSelected([]);
     setBatchNote("");
     setBatchTags("");
+    router.refresh();
   }
 
   const visibleEvents = expanded ? events : events.slice(0, 1);
@@ -372,6 +392,7 @@ function TrackingEventsPanel({
 }
 
 function EventEditor({ shipmentId, event, canAnnotate, quickTags, allowBatchSelection, selected, onToggleSelection }: { shipmentId: string; event: TrackingEvent; canAnnotate: boolean; quickTags: string[]; allowBatchSelection: boolean; selected: boolean; onToggleSelection: () => void }) {
+  const router = useRouter();
   const [note, setNote] = useState(event.annotation?.note ?? "");
   const [tagsText, setTagsText] = useState((event.annotation?.tags ?? []).join("、"));
   const [isHandled, setIsHandled] = useState(event.annotation?.isHandled ?? false);
@@ -385,9 +406,9 @@ function EventEditor({ shipmentId, event, canAnnotate, quickTags, allowBatchSele
   const [message, setMessage] = useState("");
   async function save(nextHandled = isHandled) {
     if (!canAnnotate) { setMessage("当前角色没有处理物流轨迹的权限"); return; }
-    if (!note.trim()) { setMessage("请先填写本条轨迹备注"); return; }
-    setSaving(true); setMessage("");
     const tags = tagsText.split(/[,，、]/).map((tag) => tag.trim()).filter(Boolean);
+    if (!note.trim() && !tags.length) { setMessage("请填写备注或选择一个跟进标签"); return; }
+    setSaving(true); setMessage("");
     const response = await fetch(`/api/mvp/shipments/${shipmentId}/events/${event.id}/annotation`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note, tags, isHandled: nextHandled, expectedUpdatedAt: updatedAt }) });
     const payload = await response.json().catch(() => null) as {
       data?: {
@@ -403,6 +424,7 @@ function EventEditor({ shipmentId, event, canAnnotate, quickTags, allowBatchSele
     setUpdatedAt(payload?.data?.updatedAt ?? updatedAt);
     setHandledBy(payload?.data?.handledByMembership?.user ?? null);
     setMessage("已保存");
+    router.refresh();
   }
   const toggleQuickTag = (tag: string) => {
     const tags = tagsText.split(/[,，、]/).map((item) => item.trim()).filter(Boolean);

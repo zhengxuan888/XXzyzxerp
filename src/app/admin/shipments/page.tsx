@@ -110,14 +110,14 @@ export default async function ShipmentsPage({
   const nowTs = getServerNowMs();
   const queue = logisticsQueueKeys.includes(params.queue as LogisticsQueueKey)
     ? params.queue as LogisticsQueueKey
-    : "all";
+    : "unhandled";
   const overdueOnly = params.overdue === "1";
   const pageSize = [10, 20, 50].includes(Number(params.pageSize)) ? Number(params.pageSize) : 10;
   const requestedPage = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
   const requestedStatus = Object.values(ShipmentStatus).includes(params.status as ShipmentStatus) && params.status !== "PENDING"
     ? params.status as ShipmentStatus
     : null;
-  const ownerFilter = params.owner === "mine" || params.owner === "unassigned" ? params.owner : "all";
+  const requestedOwnerFilter = params.owner === "mine" || params.owner === "unassigned" || params.owner === "all" ? params.owner : null;
 
   const session = await getSessionFromCookie();
   if (!session?.activeMembershipId) redirect("/login");
@@ -158,6 +158,8 @@ export default async function ShipmentsPage({
   ]);
   if (!readAccess.allowed) redirect("/admin");
   const workbenchConfig = parseLogisticsWorkbenchConfig(workbenchSetting);
+  // 所有售后人员默认先看自己认领的任务；负责人可主动切换到全部或未分配。
+  const ownerFilter = requestedOwnerFilter === "all" && !canReassign ? "mine" : (requestedOwnerFilter ?? "mine");
 
   // Apply filters that map directly to indexed columns before loading related
   // tracking data. Queue signals and field-level permission checks remain
@@ -226,7 +228,7 @@ export default async function ShipmentsPage({
       events: {
         orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
         take: 1,
-        select: { eventType: true, memo: true, occurredAt: true },
+        select: { eventType: true, memo: true, occurredAt: true, annotation: { select: { note: true, tags: true } } },
       },
       _count: { select: { events: true } },
     },
@@ -280,6 +282,7 @@ export default async function ShipmentsPage({
   const withDerived = scopedRows
     .map(({ row, trackingNo, timeline, annotate }) => {
       const latest = row.events[0];
+      const latestFollowed = Boolean(latest?.annotation?.note?.trim() || latest?.annotation?.tags?.length);
       const latestFollowAt = row.nextFollowUpAt ?? null;
       const { overdue, dueLabel, overdueHoursLabel, overdueMinutes } = classifyOverdue(latestFollowAt, nowTs);
       const isHighPriority =
@@ -291,6 +294,7 @@ export default async function ShipmentsPage({
         latestEvent: latest?.eventType ?? "N/A",
         latestMemo: latest?.memo ?? "-",
         latestTime: latest?.occurredAt ? new Date(latest.occurredAt).toLocaleString("zh-CN") : "-",
+        latestFollowed,
         dueStatus: dueLabel,
         overdueHoursLabel,
         overdueMinutes: overdueMinutes,
@@ -331,6 +335,20 @@ export default async function ShipmentsPage({
   const matchesCard = (row: (typeof baseFiltered)[number], key: LogisticsQueueKey) => {
     if (key === "delivered") return row.status === "DELIVERED" && row.order.exceptionNote === "人工确认成功签收";
     if (key === "signed_refund") return row.order.exceptionNote === "签收后退款";
+    if (key === "unhandled") return row._count.events > 0 && !row.latestFollowed;
+    if (key === "followed") return row._count.events > 0 && row.latestFollowed;
+    if (key === "pending_delivery_confirmation") return row.status === "DELIVERED" && row.order.exceptionNote !== "人工确认成功签收" && row.order.exceptionNote !== "签收后退款";
+    if (key === "due_today") {
+      if (!row.nextFollowUpAt) return false;
+      const followAt = new Date(row.nextFollowUpAt);
+      const today = new Date();
+      return followAt.getFullYear() === today.getFullYear() && followAt.getMonth() === today.getMonth() && followAt.getDate() === today.getDate();
+    }
+    if (key === "problem") {
+      const signals = row.canViewTimeline ? (queueSignals.get(row.id) ?? new Set<string>()) : new Set<string>();
+      return ["EXCEPTION", "RETURNING", "RETURNED"].includes(row.status)
+        || ["EVENT:ADDRESS_ERROR", "EVENT:DELIVERY_FAILED", "EVENT:CUSTOMER_ABSENT", "EVENT:REFUSED", "EVENT:RETURNING", "EVENT:RETURNED"].some((signal) => signals.has(signal));
+    }
     const configuredMatches = workbenchConfig.cards.find((card) => card.key === key)?.matches ?? [];
     return matchesQueueSignals({
       status: row.status,
