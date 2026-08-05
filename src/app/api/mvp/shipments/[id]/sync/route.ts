@@ -12,6 +12,7 @@ import { Ship24Adapter } from "@/lib/logistics/ship24-adapter";
 import { getShip24Credential } from "@/lib/integration-credentials";
 import { parseLogisticsWorkbenchConfig } from "@/lib/logistics-workbench-config";
 import { queueLogisticsNotification } from "@/lib/notifications/logistics-delivery";
+import { translateAndCacheTrackingText } from "@/lib/tracking-translation-service";
 
 export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const auth = await requireAuthContext(request);
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
           return new Ship24Adapter({ ...config, enabled: true });
         });
     const result = await adapter.track(shipment.trackingNo, shipment.carrier ?? undefined);
+    await Promise.allSettled(result.events.map((event) => translateAndCacheTrackingText(shipment.businessUnitId, event.description)));
     const workbenchSetting = await prisma.logisticsWorkbenchSetting.findUnique({
       where: { businessUnitId: shipment.businessUnitId },
     });

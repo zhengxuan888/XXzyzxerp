@@ -13,6 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { formatMoneyCents } from "@/lib/money";
 import { getServerNowMs } from "@/lib/server-clock";
 import { logisticsQueueKeys, parseLogisticsWorkbenchConfig, type LogisticsQueueKey } from "@/lib/logistics-workbench-config";
+import { loadTrackingTranslations, trackingTextHash } from "@/lib/tracking-translation-service";
 
 type Urgency = "critical" | "high" | "normal";
 
@@ -422,6 +423,7 @@ export default async function ShipmentsPage({
     })
     : [];
   const detailById = new Map(detailRows.map((row) => [row.id, row]));
+  const trackingTranslations = await loadTrackingTranslations(membership.businessUnitId, detailRows.flatMap((row) => row.events.map((event) => event.memo)));
 
   const departments = [...new Map(withDerived.flatMap((row) => row.order.ownerMembership.department
     ? [[row.order.ownerMembership.department.id, row.order.ownerMembership.department] as const]
@@ -469,6 +471,7 @@ export default async function ShipmentsPage({
         statusMilestone: event.statusMilestone,
         location: event.location,
         memo: event.memo,
+        memoTranslation: event.memo ? trackingTranslations.get(trackingTextHash(event.memo)) ?? null : null,
         annotation: event.annotation ? {
           note: event.annotation.note,
           tags: event.annotation.tags,

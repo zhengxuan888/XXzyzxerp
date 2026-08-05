@@ -7,6 +7,7 @@ import { normalizeProviderEventStatus, providerFollowUpAt, shouldApplyProviderSt
 import { parseLogisticsWorkbenchConfig } from "@/lib/logistics-workbench-config";
 import { queueLogisticsNotification } from "@/lib/notifications/logistics-delivery";
 import { getShip24Credential } from "@/lib/integration-credentials";
+import { translateAndCacheTrackingText } from "@/lib/tracking-translation-service";
 
 function validSignature(raw: string, signature: string | null, secret?: string) {
   if (!secret || !signature) return false;
@@ -38,6 +39,9 @@ export async function POST(request: NextRequest) {
   if (!normalized) return NextResponse.json({ ok: true, ignored: true, reason: "UNKNOWN_STATUS" });
   const occurredAt = new Date(String(data.dateTime ?? data.datetime ?? new Date().toISOString()));
   const safeOccurredAt = Number.isNaN(occurredAt.getTime()) ? new Date() : occurredAt;
+  if (typeof data.description === "string") {
+    await translateAndCacheTrackingText(shipment.businessUnitId, data.description).catch(() => null);
+  }
   const workbenchSetting = await prisma.logisticsWorkbenchSetting.findUnique({
     where: { businessUnitId: shipment.businessUnitId },
   });

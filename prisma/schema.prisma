@@ -1401,6 +1401,23 @@ model IntegrationCredential {
   @@index([businessUnitId, isEnabled])
 }
 
+model TrackingTranslation {
+  id             String   @id @default(uuid())
+  businessUnitId String
+  sourceHash     String
+  sourceText     String
+  translatedText String
+  sourceLanguage String?
+  provider       String   @default("GOOGLE_TRANSLATE")
+  useCount       Int      @default(1)
+  lastUsedAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([businessUnitId, sourceHash])
+  @@index([businessUnitId, lastUsedAt])
+}
+
 // Dashboard cards are business-unit configuration, not a hard-coded role
 // dashboard. Card audience, placement, labels and visibility are all stored
 // as validated JSON so the same engine can serve new departments and roles.

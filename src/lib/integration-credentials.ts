@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 
 import { prisma } from "@/lib/prisma";
 
-export const INTEGRATION_PROVIDERS = ["SHIP24", "FEISHU"] as const;
+export const INTEGRATION_PROVIDERS = ["SHIP24", "FEISHU", "GOOGLE_TRANSLATE"] as const;
 export type IntegrationProvider = (typeof INTEGRATION_PROVIDERS)[number];
 
 export type Ship24Credential = {
@@ -17,7 +17,9 @@ export type FeishuCredential = {
   verificationToken?: string;
 };
 
-type CredentialPayload = Ship24Credential | FeishuCredential;
+export type GoogleTranslateCredential = { apiKey: string };
+
+type CredentialPayload = Ship24Credential | FeishuCredential | GoogleTranslateCredential;
 
 function encryptionKey() {
   const secret = process.env.INTEGRATION_CREDENTIAL_MASTER_KEY?.trim();
@@ -75,4 +77,11 @@ export async function getFeishuCredential(businessUnitId: string): Promise<Feish
   const botSecret = process.env.FEISHU_BOT_SECRET?.trim();
   const verificationToken = process.env.FEISHU_VERIFICATION_TOKEN?.trim();
   return botWebhookUrl || verificationToken ? { botWebhookUrl, botSecret, verificationToken } : null;
+}
+
+export async function getGoogleTranslateCredential(businessUnitId: string): Promise<GoogleTranslateCredential | null> {
+  const stored = await getStoredCredential<GoogleTranslateCredential>(businessUnitId, "GOOGLE_TRANSLATE");
+  if (stored) return stored;
+  const apiKey = process.env.GOOGLE_TRANSLATE_API_KEY?.trim();
+  return apiKey ? { apiKey } : null;
 }

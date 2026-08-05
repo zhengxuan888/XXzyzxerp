@@ -6,6 +6,7 @@ import { getShip24Credential } from "@/lib/integration-credentials";
 import { parseLogisticsWorkbenchConfig } from "@/lib/logistics-workbench-config";
 import { normalizeProviderEventStatus, providerFollowUpAt, shouldApplyProviderStatus } from "@/lib/logistics/provider";
 import { queueLogisticsNotification } from "@/lib/notifications/logistics-delivery";
+import { translateAndCacheTrackingText } from "@/lib/tracking-translation-service";
 
 async function main() {
   const candidates = await prisma.shipment.findMany({
@@ -33,6 +34,7 @@ async function main() {
       const adapter = adapters.get(shipment.businessUnitId);
       if (!adapter) continue;
       const result = await adapter.track(shipment.trackingNo!, shipment.carrier ?? undefined);
+      await Promise.allSettled(result.events.map((event) => translateAndCacheTrackingText(shipment.businessUnitId, event.description)));
       const shipmentResult = await prisma.$transaction(async (tx) => {
         let shipmentInserted = 0;
         let notificationQueued = 0;

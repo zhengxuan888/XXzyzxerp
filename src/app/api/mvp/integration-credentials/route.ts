@@ -8,6 +8,7 @@ import {
   encryptCredential,
   secretHint,
   type FeishuCredential,
+  type GoogleTranslateCredential,
   type Ship24Credential,
 } from "@/lib/integration-credentials";
 import { checkPermission } from "@/lib/permission";
@@ -30,13 +31,15 @@ export async function GET(request: NextRequest) {
   const result = await authorize(request);
   if ("response" in result) return result.response;
   const rows = await prisma.integrationCredential.findMany({
-    where: { businessUnitId: result.auth.membership.businessUnitId, providerKey: { in: ["SHIP24", "FEISHU"] } },
+    where: { businessUnitId: result.auth.membership.businessUnitId, providerKey: { in: ["SHIP24", "FEISHU", "GOOGLE_TRANSLATE"] } },
   });
   const ship24Row = rows.find((row) => row.providerKey === "SHIP24");
   const feishuRow = rows.find((row) => row.providerKey === "FEISHU");
+  const googleRow = rows.find((row) => row.providerKey === "GOOGLE_TRANSLATE");
   try {
     const ship24 = ship24Row ? decryptCredential<Ship24Credential>(ship24Row.encryptedPayload) : null;
     const feishu = feishuRow ? decryptCredential<FeishuCredential>(feishuRow.encryptedPayload) : null;
+    const googleTranslate = googleRow ? decryptCredential<GoogleTranslateCredential>(googleRow.encryptedPayload) : null;
     return ok({
       ship24: {
         enabled: ship24Row?.isEnabled ?? false,
@@ -58,6 +61,12 @@ export async function GET(request: NextRequest) {
         verificationTokenHint: secretHint(feishu?.verificationToken),
         updatedAt: feishuRow?.updatedAt.toISOString() ?? null,
       },
+      googleTranslate: {
+        enabled: googleRow?.isEnabled ?? false,
+        configured: Boolean(googleTranslate?.apiKey),
+        apiKeyHint: secretHint(googleTranslate?.apiKey),
+        updatedAt: googleRow?.updatedAt.toISOString() ?? null,
+      },
     });
   } catch {
     return fail("CREDENTIAL_DECRYPTION_FAILED", "接口凭据无法解密，请检查服务器加密主密钥。", 503);
@@ -67,13 +76,14 @@ export async function GET(request: NextRequest) {
 type UpdateBody = {
   ship24?: { enabled?: boolean; apiKey?: string; baseUrl?: string; webhookSecret?: string; clearWebhookSecret?: boolean };
   feishu?: { enabled?: boolean; botWebhookUrl?: string; botSecret?: string; verificationToken?: string; clearBotSecret?: boolean; clearVerificationToken?: boolean };
+  googleTranslate?: { enabled?: boolean; apiKey?: string };
 };
 
 export async function PUT(request: NextRequest) {
   const result = await authorize(request);
   if ("response" in result) return result.response;
   const body = await request.json().catch(() => null) as UpdateBody | null;
-  if (!body || (!body.ship24 && !body.feishu)) return fail("INVALID_BODY", "请提交需要更新的接口配置。", 400);
+  if (!body || (!body.ship24 && !body.feishu && !body.googleTranslate)) return fail("INVALID_BODY", "请提交需要更新的接口配置。", 400);
   const businessUnitId = result.auth.membership.businessUnitId;
   const existing = await prisma.integrationCredential.findMany({ where: { businessUnitId } });
   const changedProviders: string[] = [];
@@ -124,6 +134,19 @@ export async function PUT(request: NextRequest) {
         changedProviders.push("FEISHU");
         changedFields.FEISHU = [body.feishu.botWebhookUrl ? "botWebhookUrl" : null, body.feishu.botSecret || body.feishu.clearBotSecret ? "botSecret" : null, body.feishu.verificationToken || body.feishu.clearVerificationToken ? "verificationToken" : null, body.feishu.enabled !== undefined ? "enabled" : null].filter((value): value is string => Boolean(value));
       }
+      if (body.googleTranslate) {
+        const oldRow = existing.find((row) => row.providerKey === "GOOGLE_TRANSLATE");
+        const old = oldRow ? decryptCredential<GoogleTranslateCredential>(oldRow.encryptedPayload) : null;
+        const apiKey = body.googleTranslate.apiKey?.trim() || old?.apiKey || "";
+        if (body.googleTranslate.enabled && !apiKey) return Promise.reject(new Error("GOOGLE_TRANSLATE_API_KEY_REQUIRED"));
+        await tx.integrationCredential.upsert({
+          where: { businessUnitId_providerKey: { businessUnitId, providerKey: "GOOGLE_TRANSLATE" } },
+          create: { businessUnitId, providerKey: "GOOGLE_TRANSLATE", encryptedPayload: encryptCredential({ apiKey }), isEnabled: body.googleTranslate.enabled === true, updatedByUserId: result.auth.userId },
+          update: { encryptedPayload: encryptCredential({ apiKey }), isEnabled: body.googleTranslate.enabled ?? oldRow?.isEnabled ?? false, updatedByUserId: result.auth.userId },
+        });
+        changedProviders.push("GOOGLE_TRANSLATE");
+        changedFields.GOOGLE_TRANSLATE = [body.googleTranslate.apiKey ? "apiKey" : null, body.googleTranslate.enabled !== undefined ? "enabled" : null].filter((value): value is string => Boolean(value));
+      }
       await writeAuditLog({
         actorUserId: result.auth.userId,
         actorMembershipId: result.auth.membership.id,
@@ -143,6 +166,7 @@ export async function PUT(request: NextRequest) {
       SHIP24_API_KEY_REQUIRED: "启用 Ship24 前必须填写 API Key。",
       FEISHU_WEBHOOK_URL_INVALID: "飞书 Webhook 地址格式不正确。",
       FEISHU_CREDENTIAL_REQUIRED: "启用飞书前至少填写机器人 Webhook 或事件验证 Token。",
+      GOOGLE_TRANSLATE_API_KEY_REQUIRED: "启用 Google 轨迹翻译前必须填写 API Key。",
     };
     return fail(code, messages[code] ?? "接口配置保存失败。", 400);
   }

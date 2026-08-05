@@ -26,6 +26,7 @@
     "deploy:dry-run": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deployment-dry-run.ps1",
     "backup:drill": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup-restore-drill.ps1",
     "ship24:sync": "tsx scripts/ship24-sync.ts",
+    "tracking:translate-backfill": "tsx scripts/backfill-tracking-translations.ts",
     "notifications:dispatch": "tsx scripts/dispatch-feishu-notifications.ts",
     "desktop:start": "electron .",
     "desktop:build": "electron-builder --win nsis --x64"
