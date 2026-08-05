@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { DemoTrackingAdapter, normalizeShip24, ship24ConfigFromEnv } from "@/lib/logistics/ship24-adapter";
+import { DemoTrackingAdapter, normalizeShip24, Ship24Adapter, ship24ConfigFromEnv } from "@/lib/logistics/ship24-adapter";
 import { normalizeProviderEventStatus, providerFollowUpAt, shouldApplyProviderStatus } from "@/lib/logistics/provider";
 
 describe("Ship24 tracking adapter", () => {
@@ -29,6 +29,14 @@ describe("Ship24 tracking adapter", () => {
       description: "Out for delivery",
       location: "Madrid",
     });
+  });
+
+  it("lets Ship24 auto-detect the courier instead of sending an internal route name", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ data: { trackings: [] } }), { status: 201 }));
+    await new Ship24Adapter({ apiKey: "test-key", enabled: true }).track("TRACK-3", "CT葡萄牙COD专线(代发)");
+    const request = fetchSpy.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(request.body))).toEqual({ trackingNumber: "TRACK-3" });
+    fetchSpy.mockRestore();
   });
 
   it("provides deterministic local demo events", async () => {

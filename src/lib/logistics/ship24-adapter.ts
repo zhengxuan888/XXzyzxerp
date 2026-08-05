@@ -23,7 +23,9 @@ export class Ship24Adapter implements TrackingProviderAdapter {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs ?? 65_000);
       try {
-        const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${this.config.apiKey}` }, body: JSON.stringify({ trackingNumber: trackingNo, courierCode: carrier }), signal: controller.signal });
+        // ERP 中保存的是内部物流线路名称，不一定是 Ship24 courierCode。
+        // 只发送运单号，交给 Ship24 自动识别承运商，避免中文线路名造成匹配失败。
+        const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${this.config.apiKey}` }, body: JSON.stringify({ trackingNumber: trackingNo }), signal: controller.signal });
         if (!response.ok) throw new ProviderRequestError(`Ship24 请求失败（${response.status}）`, response.status >= 500 || response.status === 429);
         return normalizeShip24(await response.json(), trackingNo, carrier);
       } catch (error) {
