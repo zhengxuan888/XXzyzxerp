@@ -36,8 +36,31 @@ function trackingStatusLabel(value: string | null | undefined) {
   return trackingStatusLabels[key] ?? value;
 }
 
-function trackingMemoLabel(value: string | null) {
-  if (!value) return "暂无轨迹说明";
+function trackingMemoLabel(value: string | null, statusMilestone: string | null, eventType: string) {
+  const normalizedStatus = (statusMilestone || eventType).trim().toUpperCase().replace(/[\s-]+/g, "_");
+  const normalizedLabels: Record<string, string> = {
+    INFO_RECEIVED: "物流商已收到电子信息，尚不代表已揽收",
+    PENDING: "暂未获得有效物流轨迹",
+    PICKED_UP: "物流商已揽收快件",
+    IN_TRANSIT: "快件正在运输途中",
+    ARRIVED_AT_DESTINATION: "快件已到达目的国家或地区",
+    CUSTOMS: "快件正在办理清关",
+    CUSTOMS_CLEARED: "快件已完成清关",
+    OUT_FOR_DELIVERY: "快件正在派送，通常会在当天尝试送达",
+    FAILED_ATTEMPT: "本次派送未成功，需查看原文确认原因",
+    DELIVERY_ATTEMPTED: "本次派送未成功，需查看原文确认原因",
+    AVAILABLE_FOR_PICKUP: "快件已到达取件点，等待客户领取",
+    READY_FOR_PICKUP: "快件已到达取件点，等待客户领取",
+    DELIVERED: "物流商显示已送达，仍需人工确认客户实际签收",
+    EXCEPTION: "物流出现异常，需查看原文并人工跟进",
+    ADDRESS_ERROR: "收件地址存在异常，需联系客户核对",
+    CUSTOMER_ABSENT: "派送时客户不在，需联系客户跟进",
+    REFUSED: "物流商显示客户拒收，需人工核对",
+    RETURNING: "快件正在退回途中",
+    RETURNED: "快件已退回寄件方",
+  };
+  if (normalizedLabels[normalizedStatus]) return normalizedLabels[normalizedStatus];
+  if (!value) return "暂无轨迹说明，请人工核对";
   const rules: Array<[RegExp, string]> = [
     [/\bem entrega\b|\bsaiu para entrega\b|\bser[aá] entregue durante o dia\b/i, "快件正在派送，预计当天送达"],
     [/\ben reparto\b|\bem distribuição\b|\bu dostavi\b/i, "快件正在派送，请留意电话并准备签收"],
@@ -62,7 +85,7 @@ function trackingMemoLabel(value: string | null) {
     [/refused/i, "客户拒收快件"],
     [/return.*sender|returned/i, "快件正在退回或已退回寄件方"],
   ];
-  return rules.find(([pattern]) => pattern.test(value))?.[1] ?? value;
+  return rules.find(([pattern]) => pattern.test(value))?.[1] ?? "该承运商原文暂未可靠翻译，请人工核对";
 }
 
 export default function LogisticsTrackingWorkbench({
@@ -401,7 +424,7 @@ function EventEditor({ shipmentId, event, canAnnotate, quickTags, allowBatchSele
   const [handledBy, setHandledBy] = useState(event.annotation?.handledByMembership?.user ?? null);
   const eventLabel = trackingStatusLabel(event.eventType);
   const milestoneLabel = event.statusMilestone ? trackingStatusLabel(event.statusMilestone) : null;
-  const memoLabel = trackingMemoLabel(event.memo);
+  const memoLabel = trackingMemoLabel(event.memo, event.statusMilestone, event.eventType);
   const [updatedAt, setUpdatedAt] = useState(event.annotation?.updatedAt ?? null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
