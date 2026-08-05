@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { LogisticsQueueKey, LogisticsWorkbenchConfig } from "@/lib/logistics-workbench-config";
+import { translateTrackingDescription } from "@/lib/tracking-translation";
 
 type Annotation = { note: string | null; tags: string[]; isHandled: boolean; handledAt: string | null; updatedAt: string; handledByMembership?: { user?: { fullName: string | null; username: string } } | null };
 type TrackingEvent = { id: string; occurredAt: string; eventType: string; statusMilestone: string | null; location: string | null; memo: string | null; annotation: Annotation | null };
@@ -37,6 +38,9 @@ function trackingStatusLabel(value: string | null | undefined) {
 }
 
 function trackingMemoLabel(value: string | null, statusMilestone: string | null, eventType: string) {
+  const verifiedTranslation = translateTrackingDescription(value);
+  if (verifiedTranslation) return verifiedTranslation;
+  if (value) return "该承运商原文暂未提供可靠中文翻译，请人工核对";
   const normalizedStatus = (statusMilestone || eventType).trim().toUpperCase().replace(/[\s-]+/g, "_");
   const normalizedLabels: Record<string, string> = {
     INFO_RECEIVED: "物流商已收到电子信息，尚不代表已揽收",
