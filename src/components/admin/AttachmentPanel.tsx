@@ -211,7 +211,9 @@ export default function AttachmentPanel({
             void upload(event.dataTransfer.files?.[0] ?? null);
           }}
           onPaste={(event) => {
-            const file = Array.from(event.clipboardData.files).find((item) => item.type.startsWith("image/") || item.type === "application/pdf");
+            const file = Array.from(event.clipboardData.items)
+              .find((item) => item.kind === "file")
+              ?.getAsFile() ?? Array.from(event.clipboardData.files)[0] ?? null;
             if (file) {
               event.preventDefault();
               void upload(file);
@@ -221,7 +223,7 @@ export default function AttachmentPanel({
           className={`mt-4 rounded-xl border-2 border-dashed p-4 text-center text-sm transition ${dragging ? "border-amber-500 bg-amber-50 text-amber-800" : "border-slate-200 bg-slate-50 text-slate-500"}`}
           aria-label="拖拽或粘贴凭证"
         >
-          {dragging ? "松开鼠标即可上传" : "可从微信直接拖入截图，或复制截图后在此处按 Ctrl+V 粘贴上传"}
+          {dragging ? "松开鼠标即可上传" : "拖入图片或文件 · Ctrl+V 粘贴截图 · 也可点击上方选择文件"}
         </div>
       )}
 

@@ -864,6 +864,7 @@ model Order {
   orderNumberRuleId                   String?
   status                              OrderStatus @default(DRAFT)
   currency                            String      @default("CNY")
+  declarationCurrency                 String      @default("EUR")
   productValueCents                   Int         @default(0)
   shippingFeeCents                    Int         @default(0)
   codAmountCents                      Int         @default(0)

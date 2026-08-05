@@ -2,6 +2,8 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { currencyForCountry } from "@/lib/order-country-currency";
+import { declarationPreview } from "@/lib/order-declaration";
 
 type Product = { id: string; name: string; skus: { id: string; code: string }[] };
 type InitialOrder = {
@@ -20,6 +22,8 @@ export default function DraftOrderEditForm({ order, products, countries }: { ord
   const [productId, setProductId] = useState(order.productId);
   const [skuId, setSkuId] = useState(order.skuId);
   const [saving, setSaving] = useState(false);
+  const [currency, setCurrency] = useState(order.currency);
+  const [codAmount, setCodAmount] = useState((order.codAmountCents / 100).toFixed(2));
   const [message, setMessage] = useState("");
   const product = products.find((item) => item.id === productId);
   const field = "h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100";
@@ -61,15 +65,15 @@ export default function DraftOrderEditForm({ order, products, countries }: { ord
       <Label text="商品"><select required value={productId} onChange={(e) => { setProductId(e.target.value); setSkuId(""); }} className={field}><option value="">选择商品</option>{products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Label>
       <Label text="SKU"><select required value={skuId} onChange={(e) => setSkuId(e.target.value)} className={field}><option value="">选择 SKU</option>{product?.skus.map((sku) => <option key={sku.id} value={sku.id}>{sku.code}</option>)}</select></Label>
       <Label text="数量"><input required min="1" type="number" name="quantity" defaultValue={order.quantity} className={field}/></Label>
-      <Label text="申报金额"><input required min="0" step="0.01" type="number" name="unitPrice" defaultValue={(order.unitPriceCents / 100).toFixed(2)} className={field}/></Label>
-      <Label text="COD 金额"><input min="0" step="0.01" type="number" name="codAmount" defaultValue={(order.codAmountCents / 100).toFixed(2)} className={field}/></Label>
+      <Label text="申报金额（EUR，自动）"><input readOnly name="unitPrice" value={declarationPreview(Number(codAmount || 0), currency).toFixed(2)} className={`${field} bg-slate-50 font-semibold`}/></Label>
+      <Label text={`COD 金额（${currency}）`}><input min="0" step="0.01" type="number" name="codAmount" value={codAmount} onChange={(event) => setCodAmount(event.target.value)} className={field}/></Label>
       <Label text="运费"><input min="0" step="0.01" type="number" name="shippingFee" defaultValue={(order.shippingFeeCents / 100).toFixed(2)} className={field}/></Label>
-      <Label text="币种"><input required maxLength={3} name="currency" defaultValue={order.currency} className={field}/></Label>
+      <Label text="币种"><input required readOnly maxLength={3} name="currency" value={currency} className={`${field} bg-slate-50 font-semibold`}/></Label>
       <Label text="订单日期"><input type="date" name="orderedAt" defaultValue={order.orderedAt} className={field}/></Label>
       <Label text="收件人"><input required name="recipientName" defaultValue={order.recipientName} className={field}/></Label>
       <Label text="电话"><input name="recipientPhone" defaultValue={order.recipientPhone} className={field}/></Label>
       <Label text="邮箱"><input type="email" name="recipientEmail" defaultValue={order.recipientEmail} className={field}/></Label>
-      <Label text="国家"><select name="recipientCountryCode" defaultValue={order.recipientCountryCode} className={field}><option value="">选择国家</option>{countries.map((c) => <option key={c.code} value={c.code}>{c.name} ({c.code})</option>)}</select></Label>
+      <Label text="国家"><select name="recipientCountryCode" defaultValue={order.recipientCountryCode} onChange={(event) => setCurrency(currencyForCountry(event.target.value, order.currency))} className={field}><option value="">选择国家</option>{countries.map((c) => <option key={c.code} value={c.code}>{c.name} ({c.code})</option>)}</select></Label>
       <Label text="邮编"><input name="recipientPostalCode" defaultValue={order.recipientPostalCode} className={field}/></Label>
       <Label text="州/区域"><input name="recipientRegion" defaultValue={order.recipientRegion} className={field}/></Label>
       <Label text="城市"><input name="recipientCity" defaultValue={order.recipientCity} className={field}/></Label>

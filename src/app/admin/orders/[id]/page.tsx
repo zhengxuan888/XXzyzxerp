@@ -174,7 +174,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           状态：{zh(order.status)}
         </p>
         <p className="text-sm text-gray-600">
-          订单金额：{formatMoneyCents(order.productValueCents + order.shippingFeeCents, order.currency)} | COD应收：
+          申报金额：{formatMoneyCents(order.productValueCents, order.declarationCurrency)} | COD应收：
           {formatMoneyCents(order.codAmountCents, order.currency)}
         </p>
         <p className="text-sm text-gray-600">创建人：{order.creatorUser?.fullName ?? order.creatorUser?.username}</p>

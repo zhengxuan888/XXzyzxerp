@@ -7,6 +7,7 @@ import { createOrderAccessPlan } from "@/lib/order-access";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { currencyForCountry } from "@/lib/order-country-currency";
+import { DECLARATION_CURRENCY, declarationAmountEurCents } from "@/lib/order-declaration";
 import { writeAuditLog } from "@/lib/audit";
 import { fail, ok, paginated, parsePagination } from "@/lib/api-response";
 import { normalizeMoneyCents } from "@/lib/money";
@@ -235,7 +236,13 @@ export async function POST(request: NextRequest) {
     return fail("PACKAGE_WEIGHT_REQUIRED", "当前订单模板要求填写包裹重量。", 400);
   }
 
-  const productValue = items.reduce((sum: number, item: ParsedOrderItem) => sum + item.quantity * item.unitPriceCents, 0);
+  const orderCurrency = currencyForCountry(recipientCountryCode, typeof body.currency === "string" ? body.currency.trim().toUpperCase().slice(0, 3) : templateConfiguration.currency);
+  let productValue = 0;
+  try {
+    productValue = declarationAmountEurCents(codAmount, orderCurrency);
+  } catch {
+    return fail("DECLARATION_RATE_NOT_CONFIGURED", `暂未配置 ${orderCurrency} 到欧元的申报固定汇率。`, 400);
+  }
   if (!Number.isSafeInteger(productValue)) {
     return fail("MONEY_OVERFLOW", "Calculated product value exceeds safe integer range.", 400);
   }
@@ -275,7 +282,8 @@ export async function POST(request: NextRequest) {
         shopId,
         orderTemplateId: orderTemplate?.id,
         status: "DRAFT",
-        currency: currencyForCountry(recipientCountryCode, typeof body.currency === "string" ? body.currency.trim().toUpperCase().slice(0, 3) : templateConfiguration.currency),
+        currency: orderCurrency,
+        declarationCurrency: DECLARATION_CURRENCY,
         productValueCents: productValue,
         shippingFeeCents: shippingFee,
         codAmountCents: codAmount,
@@ -316,14 +324,14 @@ export async function POST(request: NextRequest) {
           capturedAt: new Date().toISOString(),
         } as Prisma.InputJsonValue : undefined,
         items: {
-          create: items.map((item: ParsedOrderItem) => ({
+          create: items.map((item: ParsedOrderItem, index: number) => ({
             productId: item.productId,
             skuId: item.skuId,
             stockControlled: Boolean(item.skuId),
             productName: item.productName,
             quantity: item.quantity,
-            unitPriceCents: item.unitPriceCents,
-            subtotalCents: item.quantity * item.unitPriceCents,
+            unitPriceCents: index === 0 ? Math.round(productValue / item.quantity) : 0,
+            subtotalCents: index === 0 ? productValue : 0,
           })),
         },
       },
@@ -404,17 +412,24 @@ export async function PUT(request: NextRequest) {
   if (Number.isNaN(orderedAt.getTime())) return fail("INVALID_ORDER_DATE", "订单日期格式不正确。", 400);
   const packageWeightGrams = Number(body.packageWeightGrams ?? 0);
   if (!Number.isSafeInteger(packageWeightGrams) || packageWeightGrams < 0) return fail("INVALID_PACKAGE_WEIGHT", "包裹重量格式不正确。", 400);
-  const productValueCents = item.quantity * item.unitPriceCents;
   const codAmountCents = normalizeMoneyCents(body.codAmountCents ?? 0);
   const shippingFeeCents = normalizeMoneyCents(body.shippingFeeCents ?? 0);
   const text = (value: unknown, max: number) => typeof value === "string" ? value.trim().slice(0, max) || null : null;
   const recipientCountryCode = text(body.recipientCountryCode, 3)?.toUpperCase() ?? target.recipientCountryCode;
+  const orderCurrency = currencyForCountry(recipientCountryCode ?? "", (text(body.currency, 3) ?? target.currency).toUpperCase());
+  let productValueCents = 0;
+  try {
+    productValueCents = declarationAmountEurCents(codAmountCents, orderCurrency);
+  } catch {
+    return fail("DECLARATION_RATE_NOT_CONFIGURED", `暂未配置 ${orderCurrency} 到欧元的申报固定汇率。`, 400);
+  }
   const row = await prisma.$transaction(async (tx) => {
     const updated = await tx.order.update({
       where: { id: target.id, status: "DRAFT" },
       data: {
         shopId, productValueCents, codAmountCents, shippingFeeCents,
-        currency: currencyForCountry(recipientCountryCode ?? target.recipientCountryCode ?? "", (text(body.currency, 3) ?? target.currency).toUpperCase()),
+        currency: orderCurrency,
+        declarationCurrency: DECLARATION_CURRENCY,
         orderedAt,
         recipientName, recipientPhone: text(body.recipientPhone, 100), recipientEmail: text(body.recipientEmail, 200)?.toLowerCase(),
         recipientCountryCode, recipientPostalCode: text(body.recipientPostalCode, 30),
@@ -427,7 +442,7 @@ export async function PUT(request: NextRequest) {
     await tx.orderItem.deleteMany({ where: { orderId: target.id } });
     await tx.orderItem.create({ data: {
       orderId: target.id, productId: sku.productId, skuId: sku.id, stockControlled: true,
-      productName: item.productName, quantity: item.quantity, unitPriceCents: item.unitPriceCents, subtotalCents: productValueCents,
+      productName: item.productName, quantity: item.quantity, unitPriceCents: Math.round(productValueCents / item.quantity), subtotalCents: productValueCents,
     } });
     await tx.customer.update({ where: { id: target.customerId }, data: {
       name: recipientName, contactName: recipientName, contactPhone: text(body.recipientPhone, 100), contactEmail: text(body.recipientEmail, 200)?.toLowerCase(),

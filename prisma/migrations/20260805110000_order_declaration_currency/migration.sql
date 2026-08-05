@@ -1,0 +1,2 @@
+ALTER TABLE "Order"
+ADD COLUMN "declarationCurrency" TEXT NOT NULL DEFAULT 'EUR';

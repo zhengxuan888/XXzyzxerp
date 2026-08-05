@@ -5,6 +5,7 @@ import { CalendarDays, Check, ChevronDown, CircleCheck, CircleHelp, CircleX, Loa
 import type { OrderTemplateConfiguration } from "@/lib/order-template";
 import AttachmentPanel from "@/components/admin/AttachmentPanel";
 import { currencyForCountry } from "@/lib/order-country-currency";
+import { declarationPreview } from "@/lib/order-declaration";
 
 type Option = { id: string; code: string; name: string };
 type ProductOption = Option & { skus: { id: string; code: string }[] };
@@ -58,6 +59,7 @@ export default function OrderEntryForm({
   const [smartMessage, setSmartMessage] = useState("");
   const [recipientCountryCode, setRecipientCountryCode] = useState("");
   const [codCurrency, setCodCurrency] = useState(defaultTemplate?.configuration.currency ?? "EUR");
+  const [codAmount, setCodAmount] = useState(((defaultTemplate?.configuration.defaultCodAmountCents ?? 0) / 100).toFixed(2));
   const template = templates.find((item) => item.id === templateId) ?? defaultTemplate;
   const config = template?.configuration;
   const today = new Date().toISOString().slice(0, 10);
@@ -113,7 +115,7 @@ export default function OrderEntryForm({
       skuId: selectedSkuId,
       productName: finalProductName,
       quantity: Number(data.get("quantity") ?? 1),
-      unitPriceCents: moneyToCents("unitPrice"),
+      unitPriceCents: 0,
       codAmountCents: moneyToCents("codAmount"),
       shippingFeeCents: moneyToCents("shippingFee"),
       currency: currencyForCountry(String(data.get("recipientCountryCode") ?? ""), String(data.get("currency") ?? defaultValues.currency)),
@@ -300,12 +302,8 @@ export default function OrderEntryForm({
             </div>
           </Field>
           <Field label="数量" required><input name="quantity" type="number" min="1" defaultValue="1" required className={input} /></Field>
-          <Field label={`申报金额（${codCurrency}）`}><input name="unitPrice" type="number" min="0" step="0.01" defaultValue="0.00" required className={input} /></Field>
-          <Field label="COD 币种">
-            <select name="currency" value={codCurrency} onChange={(event) => setCodCurrency(event.target.value)} className={input}>
-              {[["EUR", "EUR 欧元"], ["CNY", "CNY 人民币"], ["USD", "USD 美元"], ["GBP", "GBP 英镑"], ["PLN", "PLN 波兰兹罗提"], ["CZK", "CZK 捷克克朗"], ["HUF", "HUF 匈牙利福林"], ["RON", "RON 罗马尼亚列伊"], ["BGN", "BGN 保加利亚列弗"], ["SEK", "SEK 瑞典克朗"], ["DKK", "DKK 丹麦克朗"], ["NOK", "NOK 挪威克朗"], ["CHF", "CHF 瑞士法郎"]].map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
-          </Field>
+          <Field label="申报金额（EUR，自动）"><div><input name="unitPrice" readOnly value={declarationPreview(Number(codAmount || 0), codCurrency).toFixed(2)} className={`${input} bg-slate-50 font-semibold text-slate-700`} /><p className="mt-1 text-xs text-slate-400">COD 金额的 10%，按固定汇率换算</p></div></Field>
+          <Field label="COD 币种"><input name="currency" readOnly value={codCurrency} className={`${input} bg-slate-50 font-semibold text-slate-700`} /></Field>
           <Field label="订单日期"><input name="orderedAt" type="date" defaultValue={today} className={input} /></Field>
         </Section>
 
@@ -339,7 +337,7 @@ export default function OrderEntryForm({
         </Section>
 
         <Section title="支付与物流">
-          <Field label={`COD 金额（${codCurrency}）`} required={config?.requireCodAmount}><input name="codAmount" type="number" min="0" step="0.01" defaultValue={defaultValues.codAmount} key={`${templateId}-cod`} className={input} /></Field>
+          <Field label={`COD 金额（${codCurrency}）`} required={config?.requireCodAmount}><input name="codAmount" type="number" min="0" step="0.01" value={codAmount} onChange={(event) => setCodAmount(event.target.value)} className={input} /></Field>
           <Field label={`运费（${codCurrency}）`}><input name="shippingFee" type="number" min="0" step="0.01" defaultValue={defaultValues.shippingFee} key={`${templateId}-shipping`} className={input} /></Field>
           <Field label="付款方式">
             <div className="flex h-10 items-center gap-4 rounded-xl border border-rose-100 bg-white px-3 text-sm">

@@ -1,8 +1,8 @@
 "use client";
 
-import { ArrowRightLeft, CheckCircle2, ExternalLink, LoaderCircle, PackageCheck, Truck, Upload } from "lucide-react";
+import { ArrowRightLeft, CheckCircle2, ClipboardPaste, ExternalLink, ImagePlus, LoaderCircle, PackageCheck, Truck, Upload } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { type ClipboardEvent, useState } from "react";
 
 type QueueRow = {
   orderId: string;
@@ -65,6 +65,12 @@ export default function ShippingQuickQueue({ rows }: { rows: QueueRow[] }) {
       return;
     }
     window.location.reload();
+  }
+
+  function pastedImage(event: ClipboardEvent<HTMLDivElement>) {
+    return Array.from(event.clipboardData.items)
+      .find((item) => item.kind === "file" && item.type.startsWith("image/"))
+      ?.getAsFile() ?? null;
   }
 
   async function confirmShipment(row: QueueRow) {
@@ -176,12 +182,26 @@ export default function ShippingQuickQueue({ rows }: { rows: QueueRow[] }) {
                     <button disabled={busy} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-50">{busy ? <LoaderCircle size={16} className="animate-spin" /> : <Truck size={16} />}保存</button>
                   </form>
                 ) : step === "PROOF" ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700">
-                      {busy ? <LoaderCircle size={16} className="animate-spin" /> : <Upload size={16} />}上传发货凭证
+                  <div
+                    tabIndex={busy ? -1 : 0}
+                    role="button"
+                    aria-label={`为订单 ${row.orderNo} 拖入或粘贴发货截图`}
+                    onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }}
+                    onDrop={(event) => { event.preventDefault(); if (!busy) void uploadProof(row, event.dataTransfer.files?.[0] ?? null); }}
+                    onPaste={(event) => { const file = pastedImage(event); if (file && !busy) { event.preventDefault(); void uploadProof(row, file); } }}
+                    className="group flex min-h-24 items-center gap-3 rounded-xl border-2 border-dashed border-blue-200 bg-blue-50/40 px-4 py-3 outline-none transition hover:border-blue-400 hover:bg-blue-50 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  >
+                    <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-white text-blue-600 shadow-sm">
+                      {busy ? <LoaderCircle size={19} className="animate-spin" /> : <ImagePlus size={19} />}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-slate-800">拖入图片，或 Ctrl+V 粘贴截图</p>
+                      <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-slate-500"><span className="inline-flex items-center gap-1"><ClipboardPaste size={12} />支持截图粘贴</span><span>JPG / PNG / WebP</span></p>
+                    </div>
+                    <label className="inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700">
+                      <Upload size={14} />选择文件
                       <input type="file" className="sr-only" disabled={busy} accept=".png,.jpg,.jpeg,.webp,.pdf,.mp4,image/png,image/jpeg,image/webp,application/pdf,video/mp4" onChange={(event) => void uploadProof(row, event.target.files?.[0] ?? null)} />
                     </label>
-                    <span className="text-xs text-slate-400">图片、PDF 或视频</span>
                   </div>
                 ) : step === "TRANSFER" ? (
                   <p className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-medium text-violet-700">请先将窗口状态标记为“已转”，才能确认发货。</p>
