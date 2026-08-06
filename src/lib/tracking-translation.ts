@@ -1,6 +1,7 @@
 type TranslationRule = readonly [RegExp, string];
 
 const translationRules: TranslationRule[] = [
+  [/^delivery refused\s*-\s*return to sender\.?$/i, "客户拒收，快件退回寄件方"],
   [/^almacenado temporalmente\.?$/i, "临时存储"],
   [/^incidencia en el reparto\.?$/i, "派送中出现问题"],
   [/^en reparto\.?$/i, "派送中"],

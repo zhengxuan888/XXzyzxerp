@@ -7,17 +7,27 @@ import { translateTrackingDescription } from "@/lib/tracking-translation";
 const hasCjk = (value: string) => /[\u3400-\u9fff\uf900-\ufaff]/u.test(value);
 export const trackingTextHash = (value: string) => createHash("sha256").update(value.trim(), "utf8").digest("hex");
 
-export async function translateAndCacheTrackingText(businessUnitId: string, rawValue: string | null | undefined) {
+export async function translateAndCacheTrackingText(
+  businessUnitId: string,
+  rawValue: string | null | undefined,
+  options: { forceGoogle?: boolean } = {},
+) {
   const sourceText = rawValue?.trim();
   if (!sourceText || hasCjk(sourceText)) return sourceText ?? null;
   const verified = translateTrackingDescription(sourceText);
   const sourceHash = trackingTextHash(sourceText);
   const cached = await prisma.trackingTranslation.findUnique({ where: { businessUnitId_sourceHash: { businessUnitId, sourceHash } } });
-  if (cached) {
+  // Human-reviewed wording is authoritative and must never be replaced by an
+  // automatic provider, including during a full Google retranslation run.
+  if (cached?.provider === "MANUAL_VERIFIED") {
     await prisma.trackingTranslation.update({ where: { id: cached.id }, data: { useCount: { increment: 1 }, lastUsedAt: new Date() } }).catch(() => undefined);
     return cached.translatedText;
   }
-  if (verified) {
+  if (cached && !options.forceGoogle) {
+    await prisma.trackingTranslation.update({ where: { id: cached.id }, data: { useCount: { increment: 1 }, lastUsedAt: new Date() } }).catch(() => undefined);
+    return cached.translatedText;
+  }
+  if (verified && !options.forceGoogle) {
     await prisma.trackingTranslation.create({ data: { businessUnitId, sourceHash, sourceText, translatedText: verified, provider: "VERIFIED_DICTIONARY" } });
     return verified;
   }
