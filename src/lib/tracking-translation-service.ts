@@ -32,7 +32,10 @@ export async function translateAndCacheTrackingText(
     return verified;
   }
   const credential = await getGoogleTranslateCredential(businessUnitId);
-  if (!credential) return null;
+  if (!credential) {
+    if (options.forceGoogle) throw new Error("GOOGLE_TRANSLATE_NOT_CONFIGURED");
+    return null;
+  }
   const response = await fetch(`https://translation.googleapis.com/language/translate/v2?key=${encodeURIComponent(credential.apiKey)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
