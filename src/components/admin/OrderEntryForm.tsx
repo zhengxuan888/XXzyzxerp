@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useRef, useState } from "react";
-import { CalendarDays, Check, ChevronDown, CircleCheck, CircleHelp, CircleX, FileImage, ImagePlus, LoaderCircle, MailCheck, Package, Search, Sparkles, Upload, WalletCards } from "lucide-react";
+import { CalendarDays, Check, ChevronDown, CircleCheck, CircleHelp, CircleX, FileImage, ImagePlus, LoaderCircle, MailCheck, MapPinCheck, Package, Search, Sparkles, Upload, WalletCards } from "lucide-react";
 import type { OrderTemplateConfiguration } from "@/lib/order-template";
 import AttachmentPanel from "@/components/admin/AttachmentPanel";
 import { currencyForCountry } from "@/lib/order-country-currency";
@@ -10,6 +10,8 @@ import { declarationPreview } from "@/lib/order-declaration";
 type Option = { id: string; code: string; name: string };
 type ProductOption = Option & { skus: { id: string; code: string }[] };
 type TemplateOption = Option & { configuration: OrderTemplateConfiguration; isDefault: boolean };
+type AddressSuggestion = { countryCode: string; postalCode: string; region: string; city: string; address: string; formattedAddress: string };
+type AddressValidation = { status: "verified" | "review"; label: string; suggestion: AddressSuggestion; issues: string[] };
 
 const SKU_COLORS: Array<[string, string]> = [
   ["深蓝色", "#1e3a8a"], ["群青色", "#4338ca"], ["天蓝色", "#38bdf8"], ["蓝色", "#3b82f6"],
@@ -64,6 +66,9 @@ export default function OrderEntryForm({
   const ocrInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const [recipientCountryCode, setRecipientCountryCode] = useState("");
+  const [addressChecking, setAddressChecking] = useState(false);
+  const [addressValidation, setAddressValidation] = useState<AddressValidation | null>(null);
+  const [addressValidationMessage, setAddressValidationMessage] = useState("");
   const [codCurrency, setCodCurrency] = useState(defaultTemplate?.configuration.currency ?? "EUR");
   const [codAmount, setCodAmount] = useState(((defaultTemplate?.configuration.defaultCodAmountCents ?? 0) / 100).toFixed(2));
   const template = templates.find((item) => item.id === templateId) ?? defaultTemplate;
@@ -212,6 +217,47 @@ export default function OrderEntryForm({
     set("recipientPhone", phone ?? "");
     set("recipientAddress", address);
     setSmartMessage("已尝试填充收件人、邮箱、电话和地址，请人工核对后再提交。");
+  }
+
+  function formValue(name: string) {
+    const field = formRef.current?.elements.namedItem(name);
+    return field instanceof HTMLInputElement ? field.value.trim() : "";
+  }
+
+  function setFormValue(name: string, value: string) {
+    const field = formRef.current?.elements.namedItem(name);
+    if (!(field instanceof HTMLInputElement)) return;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    setter?.call(field, value);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    field.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  async function validateAddress() {
+    setAddressValidationMessage("");
+    setAddressValidation(null);
+    setAddressChecking(true);
+    try {
+      const response = await fetch("/api/mvp/address/validate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ countryCode: recipientCountryCode, postalCode: formValue("recipientPostalCode"), region: formValue("recipientRegion"), city: formValue("recipientCity"), address: formValue("recipientAddress") }) });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.error?.message || "地址验证失败");
+      setAddressValidation(payload.data as AddressValidation);
+    } catch (reason) {
+      setAddressValidationMessage(reason instanceof Error ? reason.message : "地址验证失败，请稍后重试。");
+    } finally {
+      setAddressChecking(false);
+    }
+  }
+
+  function applyAddressSuggestion() {
+    if (!addressValidation) return;
+    const suggestion = addressValidation.suggestion;
+    if (suggestion.countryCode) { setRecipientCountryCode(suggestion.countryCode); setCodCurrency(currencyForCountry(suggestion.countryCode, defaultValues.currency)); }
+    setFormValue("recipientPostalCode", suggestion.postalCode);
+    setFormValue("recipientRegion", suggestion.region);
+    setFormValue("recipientCity", suggestion.city);
+    setFormValue("recipientAddress", suggestion.address || suggestion.formattedAddress);
+    setAddressValidationMessage("已采用 Google 建议地址，请再核对一次。");
   }
 
   async function recognizeImage(file: File) {
@@ -398,6 +444,19 @@ export default function OrderEntryForm({
             <input name="recipientCity" required={config?.requireRecipientCity} className={input} placeholder="城市" />
           </Field>
           <Field label="详细地址" wide required={config?.requireRecipientAddress}><input name="recipientAddress" required={config?.requireRecipientAddress} className={input} placeholder="建议填写完整地址" /></Field>
+          <div className="md:col-span-4 rounded-xl border border-emerald-100 bg-emerald-50/40 p-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="button" onClick={() => void validateAddress()} disabled={addressChecking || !recipientCountryCode} className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">{addressChecking ? <LoaderCircle size={16} className="animate-spin" /> : <MapPinCheck size={16} />}{addressChecking ? "正在检测…" : "检测地址"}</button>
+              <span className="text-xs text-slate-500">用于核对邮编、城市和详细地址，不影响订单保存。</span>
+              {addressValidationMessage && <span className="text-xs font-medium text-emerald-700">{addressValidationMessage}</span>}
+            </div>
+            {addressValidation && <div className="mt-3 rounded-xl border border-emerald-200 bg-white p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${addressValidation.status === "verified" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{addressValidation.label}</span>{addressValidation.issues.length > 0 && <span className="text-xs text-amber-700">{addressValidation.issues.join("；")}</span>}</div>
+              <p className="mt-2 text-xs text-slate-500">Google 建议地址</p>
+              <p className="mt-1 text-sm font-medium leading-6 text-slate-900">{addressValidation.suggestion.formattedAddress || [addressValidation.suggestion.address, addressValidation.suggestion.city, addressValidation.suggestion.region, addressValidation.suggestion.postalCode].filter(Boolean).join("，")}</p>
+              <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={applyAddressSuggestion} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800">采用建议地址</button><button type="button" onClick={() => { setAddressValidation(null); setAddressValidationMessage("已保留原地址。"); }} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">保留原地址</button></div>
+            </div>}
+          </div>
         </Section>
 
         <Section title="支付与物流">

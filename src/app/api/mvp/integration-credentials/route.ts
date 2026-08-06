@@ -10,6 +10,7 @@ import {
   type FeishuCredential,
   type GoogleTranslateCredential,
   type GoogleVisionCredential,
+  type GoogleAddressValidationCredential,
   type Ship24Credential,
 } from "@/lib/integration-credentials";
 import { checkPermission } from "@/lib/permission";
@@ -32,17 +33,19 @@ export async function GET(request: NextRequest) {
   const result = await authorize(request);
   if ("response" in result) return result.response;
   const rows = await prisma.integrationCredential.findMany({
-    where: { businessUnitId: result.auth.membership.businessUnitId, providerKey: { in: ["SHIP24", "FEISHU", "GOOGLE_TRANSLATE", "GOOGLE_VISION"] } },
+    where: { businessUnitId: result.auth.membership.businessUnitId, providerKey: { in: ["SHIP24", "FEISHU", "GOOGLE_TRANSLATE", "GOOGLE_VISION", "GOOGLE_ADDRESS_VALIDATION"] } },
   });
   const ship24Row = rows.find((row) => row.providerKey === "SHIP24");
   const feishuRow = rows.find((row) => row.providerKey === "FEISHU");
   const googleRow = rows.find((row) => row.providerKey === "GOOGLE_TRANSLATE");
   const visionRow = rows.find((row) => row.providerKey === "GOOGLE_VISION");
+  const addressRow = rows.find((row) => row.providerKey === "GOOGLE_ADDRESS_VALIDATION");
   try {
     const ship24 = ship24Row ? decryptCredential<Ship24Credential>(ship24Row.encryptedPayload) : null;
     const feishu = feishuRow ? decryptCredential<FeishuCredential>(feishuRow.encryptedPayload) : null;
     const googleTranslate = googleRow ? decryptCredential<GoogleTranslateCredential>(googleRow.encryptedPayload) : null;
     const googleVision = visionRow ? decryptCredential<GoogleVisionCredential>(visionRow.encryptedPayload) : null;
+    const googleAddressValidation = addressRow ? decryptCredential<GoogleAddressValidationCredential>(addressRow.encryptedPayload) : null;
     return ok({
       ship24: {
         enabled: ship24Row?.isEnabled ?? false,
@@ -76,6 +79,12 @@ export async function GET(request: NextRequest) {
         apiKeyHint: secretHint(googleVision?.apiKey),
         updatedAt: visionRow?.updatedAt.toISOString() ?? null,
       },
+      googleAddressValidation: {
+        enabled: addressRow?.isEnabled ?? false,
+        configured: Boolean(googleAddressValidation?.apiKey),
+        apiKeyHint: secretHint(googleAddressValidation?.apiKey),
+        updatedAt: addressRow?.updatedAt.toISOString() ?? null,
+      },
     });
   } catch {
     return fail("CREDENTIAL_DECRYPTION_FAILED", "接口凭据无法解密，请检查服务器加密主密钥。", 503);
@@ -87,13 +96,14 @@ type UpdateBody = {
   feishu?: { enabled?: boolean; botWebhookUrl?: string; botSecret?: string; verificationToken?: string; clearBotSecret?: boolean; clearVerificationToken?: boolean };
   googleTranslate?: { enabled?: boolean; apiKey?: string };
   googleVision?: { enabled?: boolean; apiKey?: string };
+  googleAddressValidation?: { enabled?: boolean; apiKey?: string };
 };
 
 export async function PUT(request: NextRequest) {
   const result = await authorize(request);
   if ("response" in result) return result.response;
   const body = await request.json().catch(() => null) as UpdateBody | null;
-  if (!body || (!body.ship24 && !body.feishu && !body.googleTranslate && !body.googleVision)) return fail("INVALID_BODY", "请提交需要更新的接口配置。", 400);
+  if (!body || (!body.ship24 && !body.feishu && !body.googleTranslate && !body.googleVision && !body.googleAddressValidation)) return fail("INVALID_BODY", "请提交需要更新的接口配置。", 400);
   const businessUnitId = result.auth.membership.businessUnitId;
   const existing = await prisma.integrationCredential.findMany({ where: { businessUnitId } });
   const changedProviders: string[] = [];
@@ -170,6 +180,19 @@ export async function PUT(request: NextRequest) {
         changedProviders.push("GOOGLE_VISION");
         changedFields.GOOGLE_VISION = [body.googleVision.apiKey ? "apiKey" : null, body.googleVision.enabled !== undefined ? "enabled" : null].filter((value): value is string => Boolean(value));
       }
+      if (body.googleAddressValidation) {
+        const oldRow = existing.find((row) => row.providerKey === "GOOGLE_ADDRESS_VALIDATION");
+        const old = oldRow ? decryptCredential<GoogleAddressValidationCredential>(oldRow.encryptedPayload) : null;
+        const apiKey = body.googleAddressValidation.apiKey?.trim() || old?.apiKey || "";
+        if (body.googleAddressValidation.enabled && !apiKey) return Promise.reject(new Error("GOOGLE_ADDRESS_VALIDATION_API_KEY_REQUIRED"));
+        await tx.integrationCredential.upsert({
+          where: { businessUnitId_providerKey: { businessUnitId, providerKey: "GOOGLE_ADDRESS_VALIDATION" } },
+          create: { businessUnitId, providerKey: "GOOGLE_ADDRESS_VALIDATION", encryptedPayload: encryptCredential({ apiKey }), isEnabled: body.googleAddressValidation.enabled === true, updatedByUserId: result.auth.userId },
+          update: { encryptedPayload: encryptCredential({ apiKey }), isEnabled: body.googleAddressValidation.enabled ?? oldRow?.isEnabled ?? false, updatedByUserId: result.auth.userId },
+        });
+        changedProviders.push("GOOGLE_ADDRESS_VALIDATION");
+        changedFields.GOOGLE_ADDRESS_VALIDATION = [body.googleAddressValidation.apiKey ? "apiKey" : null, body.googleAddressValidation.enabled !== undefined ? "enabled" : null].filter((value): value is string => Boolean(value));
+      }
       await writeAuditLog({
         actorUserId: result.auth.userId,
         actorMembershipId: result.auth.membership.id,
@@ -191,6 +214,7 @@ export async function PUT(request: NextRequest) {
       FEISHU_CREDENTIAL_REQUIRED: "启用飞书前至少填写机器人 Webhook 或事件验证 Token。",
       GOOGLE_TRANSLATE_API_KEY_REQUIRED: "启用 Google 轨迹翻译前必须填写 API Key。",
       GOOGLE_VISION_API_KEY_REQUIRED: "启用 Google 图片识别前必须填写 API Key。",
+      GOOGLE_ADDRESS_VALIDATION_API_KEY_REQUIRED: "启用 Google 地址验证前必须填写 API Key。",
     };
     return fail(code, messages[code] ?? "接口配置保存失败。", 400);
   }

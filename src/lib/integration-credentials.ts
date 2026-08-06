@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 
 import { prisma } from "@/lib/prisma";
 
-export const INTEGRATION_PROVIDERS = ["SHIP24", "FEISHU", "GOOGLE_TRANSLATE", "GOOGLE_VISION"] as const;
+export const INTEGRATION_PROVIDERS = ["SHIP24", "FEISHU", "GOOGLE_TRANSLATE", "GOOGLE_VISION", "GOOGLE_ADDRESS_VALIDATION"] as const;
 export type IntegrationProvider = (typeof INTEGRATION_PROVIDERS)[number];
 
 export type Ship24Credential = {
@@ -19,8 +19,9 @@ export type FeishuCredential = {
 
 export type GoogleTranslateCredential = { apiKey: string };
 export type GoogleVisionCredential = { apiKey: string };
+export type GoogleAddressValidationCredential = { apiKey: string };
 
-type CredentialPayload = Ship24Credential | FeishuCredential | GoogleTranslateCredential | GoogleVisionCredential;
+type CredentialPayload = Ship24Credential | FeishuCredential | GoogleTranslateCredential | GoogleVisionCredential | GoogleAddressValidationCredential;
 
 function encryptionKey() {
   const secret = process.env.INTEGRATION_CREDENTIAL_MASTER_KEY?.trim();
@@ -92,4 +93,13 @@ export async function getGoogleVisionCredential(businessUnitId: string): Promise
   if (stored) return stored;
   const apiKey = process.env.GOOGLE_VISION_API_KEY?.trim();
   return apiKey ? { apiKey } : null;
+}
+
+export async function getGoogleAddressValidationCredential(businessUnitId: string): Promise<GoogleAddressValidationCredential | null> {
+  const stored = await getStoredCredential<GoogleAddressValidationCredential>(businessUnitId, "GOOGLE_ADDRESS_VALIDATION");
+  if (stored) return stored;
+  const apiKey = process.env.GOOGLE_ADDRESS_VALIDATION_API_KEY?.trim();
+  if (apiKey) return { apiKey };
+  // 同一 Google Cloud 项目启用多个 API 时可复用已加密保存的 Vision 密钥，避免管理员重复录入。
+  return getGoogleVisionCredential(businessUnitId);
 }
