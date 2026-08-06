@@ -368,7 +368,49 @@ export default function OrderEntryForm({
           </select>
         </div>
 
-        <Section title="订单信息">
+        <div className="mb-4 rounded-2xl border border-cyan-200 bg-gradient-to-br from-cyan-50/70 to-white p-3">
+          <div className="mb-3">
+            <h2 className="text-sm font-bold text-slate-950">录单辅助</h2>
+            <p className="mt-1 text-xs text-slate-500">先识别客户地址并添加沟通凭证，再填写下方录单信息。</p>
+          </div>
+          <div className="grid items-stretch gap-3 xl:grid-cols-2">
+            <div className="rounded-xl border border-blue-100 bg-blue-50/45 p-3">
+              <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-blue-800"><Sparkles size={15} />智能识别地址（请仔细核对）</div>
+              <input ref={ocrInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void recognizeImage(file); event.currentTarget.value = ""; }} />
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => ocrInputRef.current?.click()}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") ocrInputRef.current?.click(); }}
+                onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }}
+                onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files?.[0]; if (file) void recognizeImage(file); }}
+                onPaste={(event) => { const file = Array.from(event.clipboardData.items).find((item) => item.type.startsWith("image/"))?.getAsFile(); if (file) { event.preventDefault(); void recognizeImage(file); } }}
+                className="mb-3 flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-blue-300 bg-white px-4 py-3 text-center outline-none transition hover:border-blue-500 hover:bg-blue-50 focus:ring-2 focus:ring-blue-200"
+              >
+                {ocrBusy ? <LoaderCircle size={24} className="animate-spin text-blue-600" /> : <ImagePlus size={24} className="text-blue-600" />}
+                <p className="mt-2 text-sm font-semibold text-slate-800">{ocrBusy ? "正在识别图片…" : "拖入图片、粘贴截图，或点击选择文件"}</p>
+                <p className="mt-1 text-xs text-slate-500">JPG、PNG、WebP，最大 5MB；识别后不会自动提交订单</p>
+                {ocrFileName && <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-700"><FileImage size={13} />{ocrFileName}</span>}
+              </div>
+              <textarea value={smartAddress} onChange={(event) => setSmartAddress(event.target.value)} className="min-h-20 w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-100" placeholder="粘贴客户发来的姓名、电话、地址和邮箱，每行一项" />
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <button type="button" onClick={parseSmartAddress} disabled={!smartAddress.trim() || ocrBusy} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"><Check size={14} />确认并填入</button>
+                <button type="button" onClick={() => ocrInputRef.current?.click()} disabled={ocrBusy} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"><Upload size={14} />选择图片</button>
+                {smartMessage && <span className="text-xs text-emerald-700">{smartMessage}</span>}
+              </div>
+            </div>
+            <div className="min-w-0">
+              {!createdOrder ? (
+                <PendingProofPicker files={pendingProofs} onChange={setPendingProofs} canUpload={canUploadOrderProof} />
+              ) : (
+                <AttachmentPanel targetType="ORDER" targetId={createdOrder.id} canUpload={canUploadOrderProof} canDelete={canDeleteOrderProof} title="客户沟通凭证（提交核单前必传）" />
+              )}
+            </div>
+          </div>
+        </div>
+
+        <fieldset className="grid gap-3 rounded-2xl border border-amber-200/80 bg-amber-50/20 p-4 md:grid-cols-4">
+          <legend className="px-2 text-sm font-bold text-slate-950">录单信息</legend>
           <Field label="订单号">
             <input name="orderNo" readOnly value="保存后自动生成" className={`${input} bg-slate-50 text-slate-500`} aria-label="订单号（保存后自动生成）" />
           </Field>
@@ -416,47 +458,6 @@ export default function OrderEntryForm({
           <Field label="申报金额（EUR，自动）"><div><input name="unitPrice" readOnly value={declarationPreview(Number(codAmount || 0), codCurrency).toFixed(2)} className={`${input} bg-slate-50 font-semibold text-slate-700`} /><p className="mt-1 text-xs text-slate-400">COD 金额的 10%，按固定汇率换算</p></div></Field>
           <Field label="COD 币种"><input name="currency" readOnly value={codCurrency} className={`${input} bg-slate-50 font-semibold text-slate-700`} /></Field>
           <Field label="订单日期"><input name="orderedAt" type="date" defaultValue={today} className={input} /></Field>
-        </Section>
-
-        <Section title="收件信息">
-          <div className="md:col-span-4 rounded-xl border border-blue-100 bg-blue-50/45 p-3">
-            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-blue-800"><Sparkles size={15} />智能识别地址（请仔细核对）</div>
-            <input ref={ocrInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void recognizeImage(file); event.currentTarget.value = ""; }} />
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => ocrInputRef.current?.click()}
-              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") ocrInputRef.current?.click(); }}
-              onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }}
-              onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files?.[0]; if (file) void recognizeImage(file); }}
-              onPaste={(event) => { const file = Array.from(event.clipboardData.items).find((item) => item.type.startsWith("image/"))?.getAsFile(); if (file) { event.preventDefault(); void recognizeImage(file); } }}
-              className="mb-3 flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-blue-300 bg-white px-4 py-3 text-center outline-none transition hover:border-blue-500 hover:bg-blue-50 focus:ring-2 focus:ring-blue-200"
-            >
-              {ocrBusy ? <LoaderCircle size={24} className="animate-spin text-blue-600" /> : <ImagePlus size={24} className="text-blue-600" />}
-              <p className="mt-2 text-sm font-semibold text-slate-800">{ocrBusy ? "正在识别图片…" : "拖入图片、粘贴截图，或点击选择文件"}</p>
-              <p className="mt-1 text-xs text-slate-500">JPG、PNG、WebP，最大 5MB；识别后不会自动提交订单</p>
-              {ocrFileName && <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-700"><FileImage size={13} />{ocrFileName}</span>}
-            </div>
-            <textarea value={smartAddress} onChange={(event) => setSmartAddress(event.target.value)} className="min-h-20 w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-100" placeholder="粘贴客户发来的姓名、电话、地址和邮箱，每行一项" />
-            <div className="mt-2 flex flex-wrap items-center gap-3">
-              <button type="button" onClick={parseSmartAddress} disabled={!smartAddress.trim() || ocrBusy} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"><Check size={14} />确认并填入</button>
-              <button type="button" onClick={() => ocrInputRef.current?.click()} disabled={ocrBusy} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"><Upload size={14} />选择图片</button>
-              {smartMessage && <span className="text-xs text-emerald-700">{smartMessage}</span>}
-            </div>
-          </div>
-          <div className="md:col-span-4">
-            {!createdOrder ? (
-              <PendingProofPicker files={pendingProofs} onChange={setPendingProofs} canUpload={canUploadOrderProof} />
-            ) : (
-              <AttachmentPanel
-                targetType="ORDER"
-                targetId={createdOrder.id}
-                canUpload={canUploadOrderProof}
-                canDelete={canDeleteOrderProof}
-                title="客户沟通凭证（提交核单前必传）"
-              />
-            )}
-          </div>
           <Field label="收件人" required><input name="recipientName" required className={input} placeholder="收件人姓名" /></Field>
           <Field label="电话" required={config?.requireRecipientPhone}>
             <input name="recipientPhone" required={config?.requireRecipientPhone} className={input} placeholder="收件人联系电话" />
@@ -488,9 +489,6 @@ export default function OrderEntryForm({
               <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={applyAddressSuggestion} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800">采用建议地址</button><button type="button" onClick={() => { setAddressValidation(null); setAddressValidationMessage("已保留原地址。"); }} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">保留原地址</button></div>
             </div>}
           </div>
-        </Section>
-
-        <Section title="物流信息">
           <Field label={`COD 金额（${codCurrency}）`} required={config?.requireCodAmount}><input name="codAmount" type="number" min="0" step="0.01" value={codAmount} onChange={(event) => setCodAmount(event.target.value)} className={input} /></Field>
           <Field label={`运费（${codCurrency}）`}><input name="shippingFee" type="number" min="0" step="0.01" defaultValue={defaultValues.shippingFee} key={`${templateId}-shipping`} className={input} /></Field>
           <Field label="付款方式">
@@ -518,7 +516,7 @@ export default function OrderEntryForm({
               <input name={`custom_${field.key}`} type={field.type} required={field.required} className={input} />
             </Field>
           ))}
-        </Section>
+        </fieldset>
 
       </div>
 
