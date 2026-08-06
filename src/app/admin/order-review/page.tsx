@@ -37,6 +37,15 @@ function duplicateKey(order: { recipientEmail: string | null; recipientPhone: st
   return contact ? `${order.recipientCountryCode || "?"}:${contact}` : "";
 }
 
+function businessDateKey(value: Date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(value);
+}
+
 export default async function OrderReviewWorkbenchPage({ searchParams }: { searchParams: Promise<Params> }) {
   const session = await getSessionFromCookie();
   if (!session?.activeMembershipId) redirect("/login");
@@ -92,6 +101,7 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
         recipientPhone: true,
         customerWhatsapp: true,
         recipientCountryCode: true,
+        createdAt: true,
       },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     }),
@@ -104,16 +114,24 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
         siteId: true,
         creatorUserId: true,
         ownedByMembershipId: true,
+        recipientEmail: true,
+        recipientPhone: true,
+        customerWhatsapp: true,
+        recipientCountryCode: true,
+        createdAt: true,
       },
     }),
     prisma.country.findMany({ where: { isActive: true }, select: { code: true, name: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
   ]);
 
-  const customerHistoryCounts = new Map<string, number>();
+  const historyByContact = new Map<string, Date[]>();
   rawCustomerHistory.forEach((order) => {
-    customerHistoryCounts.set(order.customerId, (customerHistoryCounts.get(order.customerId) ?? 0) + 1);
+    const key = duplicateKey(order);
+    if (!key) return;
+    const dates = historyByContact.get(key) ?? [];
+    dates.push(order.createdAt);
+    historyByContact.set(key, dates);
   });
-  const repeatCustomers = new Set([...customerHistoryCounts].filter(([, count]) => count > 1).map(([customerId]) => customerId));
   const visibleEmployeeIds = [...new Set(candidateIndex.map((order) => order.creatorUserId))];
   const employees = visibleEmployeeIds.length
     ? await prisma.user.findMany({
@@ -123,17 +141,27 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
       })
     : [];
   const duplicateCounts = new Map<string, number>();
-  candidateIndex.forEach((order) => {
-    const key = duplicateKey(order);
-    if (key) duplicateCounts.set(key, (duplicateCounts.get(key) ?? 0) + 1);
+  rawCustomerHistory.forEach((order) => {
+    const contactKey = duplicateKey(order);
+    if (!contactKey) return;
+    const key = `${businessDateKey(order.createdAt)}:${contactKey}`;
+    duplicateCounts.set(key, (duplicateCounts.get(key) ?? 0) + 1);
   });
   const isDuplicate = (order: (typeof candidateIndex)[number]) => {
-    const key = duplicateKey(order);
+    const contactKey = duplicateKey(order);
+    if (!contactKey) return false;
+    const key = `${businessDateKey(order.createdAt)}:${contactKey}`;
     return Boolean(key && (duplicateCounts.get(key) ?? 0) > 1);
+  };
+  const isRepeat = (order: (typeof candidateIndex)[number]) => {
+    const key = duplicateKey(order);
+    if (!key || isDuplicate(order)) return false;
+    const orderDay = businessDateKey(order.createdAt);
+    return (historyByContact.get(key) ?? []).some((createdAt) => businessDateKey(createdAt) < orderDay);
   };
   const classified = {
     ALL: candidateIndex,
-    REPEAT: candidateIndex.filter((order) => repeatCustomers.has(order.customerId)),
+    REPEAT: candidateIndex.filter(isRepeat),
     DUPLICATE: candidateIndex.filter(isDuplicate),
   };
   const selected = classified[tab];
