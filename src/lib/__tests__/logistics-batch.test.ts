@@ -12,6 +12,7 @@ const order = {
   recipientRegion: "Lisbon",
   recipientCity: "Lisbon",
   recipientAddress: "Demo Street 1",
+  recipientFullAddress: "Demo Street 1, Lisbon, 1000-001, Portugal",
   codAmountCents: 2999,
   currency: "EUR",
   customerWhatsapp: "+351900000000",
@@ -25,6 +26,10 @@ describe("logistics export batch helpers", () => {
     expect(exportFieldValue(order, "custom:provider.sku")).toBe("PT-DEMO-01");
     expect(exportFieldValue(order, "codAmount")).toBe("29.99");
     expect(exportFieldValue(order, "constant:PP")).toBe("PP");
+    expect(exportFieldValue(order, "recipientFullAddress")).toBe("Demo Street 1, Lisbon, 1000-001, Portugal");
+    expect(exportFieldValue(order, "constant:Phone")).toBe("Phone");
+    expect(exportFieldValue(order, "constant:手机")).toBe("手机");
+    expect(exportFieldValue(order, "constant:HYBH-SJ-X")).toBe("HYBH-SJ-X");
   });
 
   it("uses a stable object hash for a batch row snapshot", () => {

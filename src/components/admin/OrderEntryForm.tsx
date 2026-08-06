@@ -145,6 +145,7 @@ export default function OrderEntryForm({
       recipientRegion: String(data.get("recipientRegion") ?? ""),
       recipientCity: String(data.get("recipientCity") ?? ""),
       recipientAddress: String(data.get("recipientAddress") ?? ""),
+      recipientFullAddress: String(data.get("recipientFullAddress") ?? data.get("recipientAddress") ?? ""),
       packageWeightGrams: Math.round(Number(data.get("packageWeightKg") || 0) * 1000),
       paymentMethod: String(data.get("paymentMethod") ?? defaultValues.paymentMethod),
       customerWhatsapp: String(data.get("customerWhatsapp") ?? ""),
@@ -234,6 +235,7 @@ export default function OrderEntryForm({
     set("recipientEmail", email ?? "");
     set("recipientPhone", phone ?? "");
     set("recipientAddress", address);
+    set("recipientFullAddress", smartAddress.trim());
     setSmartMessage("已尝试填充收件人、邮箱、电话和地址，请人工核对后再提交。");
   }
 
@@ -447,6 +449,7 @@ export default function OrderEntryForm({
             <input name="recipientCity" required={config?.requireRecipientCity} className={input} placeholder="城市" />
           </Field>
           <Field label="详细地址" wide required={config?.requireRecipientAddress}><input name="recipientAddress" required={config?.requireRecipientAddress} className={input} placeholder="建议填写完整地址" /></Field>
+          <Field label="完整原始地址（人工核对）" wide><input name="recipientFullAddress" className={input} placeholder="保留客户发来的完整地址，供导出与人工核对" /></Field>
           <div className="md:col-span-4 rounded-xl border border-emerald-100 bg-emerald-50/40 p-3">
             <div className="flex flex-wrap items-center gap-3">
               <button type="button" onClick={() => void validateAddress()} disabled={addressChecking || !recipientCountryCode} className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">{addressChecking ? <LoaderCircle size={16} className="animate-spin" /> : <MapPinCheck size={16} />}{addressChecking ? "正在检测…" : "检测地址"}</button>

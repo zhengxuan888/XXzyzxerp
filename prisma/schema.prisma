@@ -880,6 +880,7 @@ model Order {
   recipientRegion                     String?
   recipientCity                       String?
   recipientAddress                    String?
+  recipientFullAddress                String?
   packageWeightGrams                  Int?
   paymentMethod                       String?
   customerWhatsapp                    String?

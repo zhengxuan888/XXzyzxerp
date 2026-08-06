@@ -227,6 +227,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               {order.recipientAddress || "未填写"}
             </dd>
           </div>
+          <div className="sm:col-span-2 xl:col-span-4">
+            <dt className="text-xs font-semibold text-slate-500">完整原始地址（人工核对）</dt>
+            <dd className="mt-1 break-words font-medium text-slate-900">
+              {order.recipientFullAddress || order.recipientAddress || "未填写"}
+            </dd>
+          </div>
           {order.note && (
             <div className="sm:col-span-2 xl:col-span-4">
               <dt className="text-xs font-semibold text-slate-500">订单备注</dt>
@@ -286,6 +292,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             orderedAt: format(order.orderedAt, "yyyy-MM-dd"), recipientName: order.recipientName ?? "", recipientPhone: order.recipientPhone ?? "",
             recipientEmail: order.recipientEmail ?? "", recipientCountryCode: order.recipientCountryCode ?? "", recipientPostalCode: order.recipientPostalCode ?? "",
             recipientRegion: order.recipientRegion ?? "", recipientCity: order.recipientCity ?? "", recipientAddress: order.recipientAddress ?? "",
+            recipientFullAddress: order.recipientFullAddress ?? order.recipientAddress ?? "",
             customerWhatsapp: order.customerWhatsapp ?? "", staffWhatsapp: order.staffWhatsapp ?? "", packageWeightGrams: order.packageWeightGrams ?? 0,
             paymentMethod: order.paymentMethod ?? "COD", logisticsChannel: order.logisticsChannel ?? "", note: order.note ?? "", returnReason: order.exceptionNote,
           }}

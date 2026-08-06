@@ -11,7 +11,7 @@ type InitialOrder = {
   quantity: number; unitPriceCents: number; codAmountCents: number; shippingFeeCents: number;
   currency: string; orderedAt: string; recipientName: string; recipientPhone: string;
   recipientEmail: string; recipientCountryCode: string; recipientPostalCode: string;
-  recipientRegion: string; recipientCity: string; recipientAddress: string;
+  recipientRegion: string; recipientCity: string; recipientAddress: string; recipientFullAddress: string;
   customerWhatsapp: string; staffWhatsapp: string; packageWeightGrams: number;
   paymentMethod: string; logisticsChannel: string; note: string; returnReason: string;
 };
@@ -46,6 +46,7 @@ export default function DraftOrderEditForm({ order, products, countries }: { ord
         recipientEmail: data.get("recipientEmail"), recipientCountryCode: data.get("recipientCountryCode"),
         recipientPostalCode: data.get("recipientPostalCode"), recipientRegion: data.get("recipientRegion"),
         recipientCity: data.get("recipientCity"), recipientAddress: data.get("recipientAddress"),
+        recipientFullAddress: data.get("recipientFullAddress"),
         customerWhatsapp: data.get("customerWhatsapp"), staffWhatsapp: data.get("staffWhatsapp"),
         packageWeightGrams: Math.round(Number(data.get("packageWeightKg") || 0) * 1000),
         paymentMethod: data.get("paymentMethod"), logisticsChannel: data.get("logisticsChannel"), note: data.get("note"),
@@ -78,6 +79,7 @@ export default function DraftOrderEditForm({ order, products, countries }: { ord
       <Label text="州/区域"><input name="recipientRegion" defaultValue={order.recipientRegion} className={field}/></Label>
       <Label text="城市"><input name="recipientCity" defaultValue={order.recipientCity} className={field}/></Label>
       <Label text="详细地址" wide><input name="recipientAddress" defaultValue={order.recipientAddress} className={field}/></Label>
+      <Label text="完整原始地址（人工核对）" wide><input name="recipientFullAddress" defaultValue={order.recipientFullAddress} className={field}/></Label>
       <Label text="客户 WhatsApp"><input name="customerWhatsapp" defaultValue={order.customerWhatsapp} className={field}/></Label>
       <Label text="员工 WhatsApp"><input name="staffWhatsapp" defaultValue={order.staffWhatsapp} className={field}/></Label>
       <Label text="重量（kg）"><input min="0" step="0.001" type="number" name="packageWeightKg" defaultValue={(order.packageWeightGrams / 1000).toString()} className={field}/></Label>

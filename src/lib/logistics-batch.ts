@@ -19,6 +19,7 @@ export type BatchExportOrder = {
   recipientRegion: string | null;
   recipientCity: string | null;
   recipientAddress: string | null;
+  recipientFullAddress?: string | null;
   codAmountCents: number;
   currency: string;
   customerWhatsapp: string | null;
@@ -56,6 +57,7 @@ export function exportFieldValue(order: BatchExportOrder, field: LogisticsExport
     recipientRegion: order.recipientRegion ?? "",
     recipientCity: order.recipientCity ?? "",
     recipientAddress: order.recipientAddress ?? "",
+    recipientFullAddress: order.recipientFullAddress ?? order.recipientAddress ?? "",
     productNames: order.items.map((item) => item.productName).join(" / "),
     quantity: order.items.reduce((sum, item) => sum + item.quantity, 0),
     codAmount: (order.codAmountCents / 100).toFixed(2),

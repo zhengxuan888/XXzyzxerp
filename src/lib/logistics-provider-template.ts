@@ -8,6 +8,7 @@ export const LOGISTICS_EXPORT_FIELDS = [
   "recipientRegion",
   "recipientCity",
   "recipientAddress",
+  "recipientFullAddress",
   "productNames",
   "quantity",
   "codAmount",

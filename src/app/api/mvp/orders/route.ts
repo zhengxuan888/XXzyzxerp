@@ -140,6 +140,7 @@ export async function POST(request: NextRequest) {
   if (!shopId) return fail("SHOP_ID_REQUIRED", "请填写比特窗口号（店铺 ID）。", 400);
   const recipientEmail = typeof body.recipientEmail === "string" ? body.recipientEmail.trim().toLowerCase() : "";
   const recipientAddress = typeof body.recipientAddress === "string" ? body.recipientAddress.trim() : "";
+  const recipientFullAddress = typeof body.recipientFullAddress === "string" ? body.recipientFullAddress.trim() : recipientAddress;
   const recipientCountryCode = typeof body.recipientCountryCode === "string" ? body.recipientCountryCode.trim() : "";
   const recipientPostalCode = typeof body.recipientPostalCode === "string" ? body.recipientPostalCode.trim() : "";
   const recipientRegion = typeof body.recipientRegion === "string" ? body.recipientRegion.trim() : "";
@@ -301,6 +302,7 @@ export async function POST(request: NextRequest) {
         recipientRegion: recipientRegion ? recipientRegion.slice(0, 100) : null,
         recipientCity: recipientCity ? recipientCity.slice(0, 100) : null,
         recipientAddress: recipientAddress || null,
+        recipientFullAddress: recipientFullAddress ? recipientFullAddress.slice(0, 1000) : null,
         packageWeightGrams,
         paymentMethod: typeof body.paymentMethod === "string" ? body.paymentMethod.trim().slice(0, 30) : templateConfiguration.paymentMethod,
         customerWhatsapp: typeof body.customerWhatsapp === "string" ? body.customerWhatsapp.trim().slice(0, 50) : null,
@@ -434,6 +436,7 @@ export async function PUT(request: NextRequest) {
         recipientName, recipientPhone: text(body.recipientPhone, 100), recipientEmail: text(body.recipientEmail, 200)?.toLowerCase(),
         recipientCountryCode, recipientPostalCode: text(body.recipientPostalCode, 30),
         recipientRegion: text(body.recipientRegion, 100), recipientCity: text(body.recipientCity, 100), recipientAddress: text(body.recipientAddress, 500),
+        recipientFullAddress: text(body.recipientFullAddress, 1000) ?? text(body.recipientAddress, 500),
         customerWhatsapp: text(body.customerWhatsapp, 50), staffWhatsapp: text(body.staffWhatsapp, 50), packageWeightGrams,
         paymentMethod: text(body.paymentMethod, 30), logisticsChannel: text(body.logisticsChannel, 50), note: text(body.note, 2000),
         exceptionNote: null,
