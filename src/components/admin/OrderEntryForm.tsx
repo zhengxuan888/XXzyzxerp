@@ -63,6 +63,7 @@ export default function OrderEntryForm({
   const [smartMessage, setSmartMessage] = useState("");
   const [ocrBusy, setOcrBusy] = useState(false);
   const [ocrFileName, setOcrFileName] = useState("");
+  const [pendingProofs, setPendingProofs] = useState<File[]>([]);
   const ocrInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const [recipientCountryCode, setRecipientCountryCode] = useState("");
@@ -109,6 +110,10 @@ export default function OrderEntryForm({
     }
     if (config?.requireSku && (!selectedProductId || !selectedSkuId)) {
       setError("当前订单模板要求选择关联库存商品和 SKU。");
+      return;
+    }
+    if (canUploadOrderProof && pendingProofs.length === 0) {
+      setError("请先添加客户沟通凭证，再确认订单。");
       return;
     }
     setSaving(true);
@@ -159,7 +164,20 @@ export default function OrderEntryForm({
       setSaving(false);
       return;
     }
-    setCreatedOrder({ id: result.data.id, orderNo: result.data.orderNo });
+    const order = { id: String(result.data.id), orderNo: String(result.data.orderNo) };
+    const uploadErrors: string[] = [];
+    for (const file of pendingProofs) {
+      const proofForm = new FormData();
+      proofForm.set("targetType", "ORDER");
+      proofForm.set("targetId", order.id);
+      proofForm.set("file", file);
+      const proofResponse = await fetch("/api/mvp/attachments", { method: "POST", body: proofForm });
+      const proofPayload = await proofResponse.json().catch(() => null);
+      if (!proofResponse.ok) uploadErrors.push(`${file.name}：${proofPayload?.error?.message ?? "上传失败"}`);
+    }
+    setPendingProofs([]);
+    setCreatedOrder(order);
+    if (uploadErrors.length) setError(`订单已保存，但部分凭证上传失败：${uploadErrors.join("；")}`);
     setSaving(false);
   }
 
@@ -178,7 +196,7 @@ export default function OrderEntryForm({
       const statsResponse = await fetch("/api/mvp/orders/success-stats", { cache: "no-store" });
       if (statsResponse.ok) setCelebrationStats(await statsResponse.json());
       setCelebration(true);
-      window.setTimeout(() => window.location.assign("/admin/orders"), 10000);
+      window.setTimeout(() => setCelebration(false), 10000);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "提交核单失败");
     } finally {
@@ -488,6 +506,18 @@ export default function OrderEntryForm({
             </Field>
           ))}
         </Section>
+
+        {!createdOrder ? (
+          <PendingProofPicker files={pendingProofs} onChange={setPendingProofs} canUpload={canUploadOrderProof} />
+        ) : (
+          <AttachmentPanel
+            targetType="ORDER"
+            targetId={createdOrder.id}
+            canUpload={canUploadOrderProof}
+            canDelete={canDeleteOrderProof}
+            title="客户沟通凭证（提交核单前必传）"
+          />
+        )}
       </div>
 
       {createdOrder && (
@@ -498,13 +528,6 @@ export default function OrderEntryForm({
               <p className="mt-1 text-xs text-emerald-800">请在当前页面上传客户沟通凭证，预览确认后再提交核单。</p>
             </div>
           </div>
-          <AttachmentPanel
-            targetType="ORDER"
-            targetId={createdOrder.id}
-            canUpload={canUploadOrderProof}
-            canDelete={canDeleteOrderProof}
-            title="客户沟通凭证（提交核单前必传）"
-          />
           <button
             type="button"
             onClick={() => void submitForReview()}
@@ -556,6 +579,36 @@ function Field({ label, required, wide, children }: { label: string; required?: 
       {children}
     </label>
   );
+}
+
+function PendingProofPicker({ files, onChange, canUpload }: { files: File[]; onChange: (files: File[]) => void; canUpload: boolean }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const [pickerError, setPickerError] = useState("");
+  const addFiles = (incoming: File[]) => {
+    const accepted = incoming.filter((file) => {
+      const limit = /^image\/(jpeg|png|webp)$/.test(file.type)
+        ? 5 * 1024 * 1024
+        : file.type === "application/pdf"
+          ? 10 * 1024 * 1024
+          : file.type === "video/mp4"
+            ? 50 * 1024 * 1024
+            : 0;
+      return limit > 0 && file.size <= limit;
+    });
+    setPickerError(accepted.length === incoming.length ? "" : "部分文件格式不支持或超过大小限制，未加入凭证列表。");
+    onChange([...files, ...accepted].slice(0, 10));
+  };
+  return <section className="mb-5 rounded-2xl border border-violet-200 bg-violet-50/35 p-4" aria-label="客户沟通凭证">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div><h2 className="flex items-center gap-2 font-bold text-slate-950"><FileImage size={17} className="text-violet-600" />客户沟通凭证 <b className="text-rose-500">*</b></h2><p className="mt-1 text-xs text-slate-500">录单时一并添加，确认订单后自动上传，无需跳转页面。</p></div>
+      {canUpload && <button type="button" onClick={() => inputRef.current?.click()} className="inline-flex h-10 items-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white hover:bg-violet-700"><Upload size={16} />选择文件</button>}
+      <input ref={inputRef} type="file" multiple className="sr-only" accept=".png,.jpg,.jpeg,.webp,.pdf,.mp4,image/png,image/jpeg,image/webp,application/pdf,video/mp4" onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.currentTarget.value = ""; }} />
+    </div>
+    {canUpload ? <div tabIndex={0} onClick={() => inputRef.current?.click()} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") inputRef.current?.click(); }} onDragEnter={(event) => { event.preventDefault(); setDragging(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setDragging(false)} onDrop={(event) => { event.preventDefault(); setDragging(false); addFiles(Array.from(event.dataTransfer.files)); }} onPaste={(event) => { const pasted = Array.from(event.clipboardData.items).map((item) => item.kind === "file" ? item.getAsFile() : null).filter((file): file is File => Boolean(file)); if (pasted.length) { event.preventDefault(); addFiles(pasted); } }} className={`mt-3 cursor-pointer rounded-xl border-2 border-dashed px-4 py-5 text-center text-sm outline-none transition focus:ring-2 focus:ring-violet-200 ${dragging ? "border-violet-500 bg-violet-100 text-violet-900" : "border-violet-200 bg-white text-slate-500 hover:border-violet-400"}`}>{dragging ? "松开即可添加凭证" : "拖入文件 · Ctrl+V 粘贴截图 · 点击选择文件"}<p className="mt-1 text-xs text-slate-400">图片 5MB、PDF 10MB、MP4 50MB，最多 10 个文件</p></div> : <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">当前角色没有上传订单凭证权限，请联系管理员。</p>}
+    {pickerError && <p className="mt-2 text-sm text-rose-600">{pickerError}</p>}
+    {files.length > 0 && <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{files.map((file, index) => <div key={`${file.name}-${file.size}-${index}`} className="flex min-w-0 items-center gap-2 rounded-xl border border-violet-100 bg-white px-3 py-2"><FileImage size={16} className="shrink-0 text-violet-600" /><span className="min-w-0 flex-1 truncate text-sm text-slate-700" title={file.name}>{file.name}</span><span className="text-xs text-slate-400">{(file.size / 1024).toFixed(0)}KB</span><button type="button" onClick={() => onChange(files.filter((_, fileIndex) => fileIndex !== index))} className="rounded-lg p-1 text-rose-500 hover:bg-rose-50" aria-label={`移除 ${file.name}`}><CircleX size={16} /></button></div>)}</div>}
+  </section>;
 }
 
 type EmailCheck = {
