@@ -127,7 +127,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const totalCount = await prisma.order.count({ where: scopedWhere as Record<string, unknown> });
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const page = Math.min(requestedPage, totalPages);
-  const [rows, statusGroups, templates, employeeOrderRows, countries] = await Promise.all([
+  const [rows, statusGroups, templates, employeeOrderRows, rawCountries, countryUsageGroups] = await Promise.all([
     prisma.order.findMany({
       where: scopedWhere as Record<string, unknown>,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -152,10 +152,20 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       select: { creatorUserId: true, creatorUser: { select: { username: true, fullName: true } } },
     }),
     prisma.country.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { code: true, name: true } }),
+    prisma.order.groupBy({
+      by: ["recipientCountryCode"],
+      where: { AND: [orderReadAccess.where, { businessUnitId: membership.businessUnitId, recipientCountryCode: { not: null } }] } as Record<string, unknown>,
+      _count: { _all: true },
+    }),
   ]);
   const employees = employeeOrderRows
     .map((row) => ({ id: row.creatorUserId, username: row.creatorUser.username, fullName: row.creatorUser.fullName }))
     .sort((a, b) => a.username.localeCompare(b.username));
+  const countryUsage = new Map(countryUsageGroups.map((group) => [group.recipientCountryCode?.toUpperCase(), group._count._all]));
+  const countries = rawCountries.toSorted((a, b) => {
+    const usageDifference = (countryUsage.get(b.code.toUpperCase()) ?? 0) - (countryUsage.get(a.code.toUpperCase()) ?? 0);
+    return usageDifference || a.name.localeCompare(b.name, "zh-CN");
+  });
 
   const myOrderStats = statusGroups.reduce((stats, group) => {
     stats.total += group._count._all;
