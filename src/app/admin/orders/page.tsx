@@ -102,8 +102,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     select: { id: true, code: true, name: true, skus: { where: { isActive: true }, orderBy: { code: "asc" } } },
   });
 
-  const sharedFilters = {
-    ...(employee ? { creatorUserId: employee } : {}),
+  const nonEmployeeFilters = {
     ...(country ? { recipientCountryCode: country } : {}),
     ...(product ? { items: { some: { productName: { contains: product, mode: "insensitive" as const } } } } : {}),
     ...(keyword ? {
@@ -117,9 +116,14 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     } : {}),
     ...((start || end) ? { createdAt: { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) } } : {}),
   };
+  const sharedFilters = {
+    ...(employee ? { creatorUserId: employee } : {}),
+    ...nonEmployeeFilters,
+  };
   const baseWhere = { businessUnitId: membership.businessUnitId, ...(status ? { status } : {}), ...sharedFilters };
   const scopedWhere = { AND: [orderReadAccess.where, baseWhere] };
   const statusScopeWhere = { AND: [orderReadAccess.where, { businessUnitId: membership.businessUnitId, ...sharedFilters }] };
+  const employeeScopeWhere = { AND: [orderReadAccess.where, { businessUnitId: membership.businessUnitId, ...nonEmployeeFilters }] };
   const totalCount = await prisma.order.count({ where: scopedWhere as Record<string, unknown> });
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const page = Math.min(requestedPage, totalPages);
@@ -142,7 +146,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       select: { id: true, code: true, name: true, configuration: true, isDefault: true },
     }),
     prisma.order.findMany({
-      where: statusScopeWhere,
+      where: employeeScopeWhere,
       distinct: ["creatorUserId"],
       orderBy: [{ creatorUserId: "asc" }, { id: "asc" }],
       select: { creatorUserId: true, creatorUser: { select: { username: true, fullName: true } } },
