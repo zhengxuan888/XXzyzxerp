@@ -1376,6 +1376,7 @@ model LogisticsWorkbenchSetting {
   syncIntervalMinutes        Int      @default(30)
   feishuNotificationsEnabled Boolean  @default(false)
   feishuHighPriorityOnly     Boolean  @default(true)
+  closeOrderPinHash          String?
   updatedByUserId            String?
   createdAt                  DateTime @default(now())
   updatedAt                  DateTime @updatedAt

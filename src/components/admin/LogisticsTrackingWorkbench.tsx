@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ExternalLink, Mail, MessageCircle, Package, Save, Search, Truck, UserRound } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ExternalLink, Mail, MessageCircle, OctagonX, Package, Save, Search, Truck, UserRound, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -129,6 +129,8 @@ export default function LogisticsTrackingWorkbench({
   const [confirmingDeliveredId, setConfirmingDeliveredId] = useState<string | null>(null);
   const [refundingId, setRefundingId] = useState<string | null>(null);
   const [deliveryMessage, setDeliveryMessage] = useState<Record<string, string>>({});
+  const [closeDialog, setCloseDialog] = useState<{ row: TrackingRow; reason: string; detail: string; pin: string; confirmReady: boolean } | null>(null);
+  const [closingId, setClosingId] = useState<string | null>(null);
   const queue = (urlSearchParams.get("queue") ?? "unhandled") as LogisticsQueueKey;
   const departmentId = urlSearchParams.get("departmentId") ?? "";
   const managerMembershipId = urlSearchParams.get("managerMembershipId") ?? "";
@@ -138,6 +140,23 @@ export default function LogisticsTrackingWorkbench({
   const destination = urlSearchParams.get("destination") ?? "";
   const ownerQueue = (urlSearchParams.get("owner") ?? "mine") as "all" | "mine" | "unassigned";
   const [claimedOwners, setClaimedOwners] = useState<Record<string, string>>({});
+  const closeOrder = async () => {
+    if (!closeDialog) return;
+    if (!closeDialog.confirmReady) {
+      setCloseDialog({ ...closeDialog, confirmReady: true });
+      return;
+    }
+    setClosingId(closeDialog.row.id);
+    const response = await fetch(`/api/mvp/shipments/${closeDialog.row.id}/close`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reason: closeDialog.reason, detail: closeDialog.detail, pin: closeDialog.pin }) });
+    const payload = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+    setClosingId(null);
+    if (!response.ok) {
+      setDeliveryMessage((current) => ({ ...current, [closeDialog.row.id]: payload?.error?.message ?? "结束订单失败" }));
+      return;
+    }
+    setCloseDialog(null);
+    router.refresh();
+  };
   const confirmDelivered = async (row: TrackingRow) => {
     if (!window.confirm(`第一次确认：订单 ${row.order.orderNo} 的客户确实已经收到货？`)) return;
     if (!window.confirm("第二次确认：将该订单标记为“成功签收”并结束物流跟进。确认继续？")) return;
@@ -238,6 +257,7 @@ export default function LogisticsTrackingWorkbench({
           {row.canAnnotate && <ClaimButton shipmentId={row.id} expectedUpdatedAt={row.updatedAt} currentMembershipId={currentMembershipId} ownerId={claimedOwners[row.id] ?? row.followUpOwner?.id ?? null} ownerName={claimedOwners[row.id] ? "我" : row.followUpOwner?.user.fullName || row.followUpOwner?.user.username || null} canReassign={canReassign} onClaimed={() => setClaimedOwners((current) => ({ ...current, [row.id]: currentMembershipId }))} />}
           {row.canAnnotate && row.status === "DELIVERED" && row.order.exceptionNote !== "人工确认成功签收" && row.order.exceptionNote !== "签收后退款" && <button type="button" disabled={confirmingDeliveredId === row.id} onClick={() => void confirmDelivered(row)} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"><CheckCircle2 size={16} />{confirmingDeliveredId === row.id ? "确认中…" : "人工确认签收"}</button>}
           {row.order.exceptionNote === "签收后退款" ? <span className="rounded-xl bg-rose-50 px-3 py-2 text-center text-xs font-semibold text-rose-700">签收退款</span> : row.order.exceptionNote === "人工确认成功签收" ? <><span className="rounded-xl bg-emerald-50 px-3 py-2 text-center text-xs font-semibold text-emerald-700">成功签收</span>{row.canAnnotate && <button type="button" disabled={refundingId === row.id} onClick={() => void markAfterDeliveryRefund(row)} className="inline-flex h-9 items-center justify-center rounded-xl border border-rose-200 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50">{refundingId === row.id ? "登记中…" : "签收后退款"}</button>}</> : row.status === "DELIVERED" && <span className="rounded-xl bg-amber-50 px-3 py-2 text-center text-xs font-semibold text-amber-800">待人工确认签收</span>}
+          {row.canAnnotate && row.status !== "CLOSED" && row.order.exceptionNote !== "人工确认成功签收" && row.order.exceptionNote !== "签收后退款" && <button type="button" onClick={() => setCloseDialog({ row, reason: "客户不读不回", detail: "", pin: "", confirmReady: false })} className="inline-flex h-9 items-center justify-center gap-1 rounded-xl border border-rose-200 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50"><OctagonX size={14} />结束订单</button>}
           {deliveryMessage[row.id] && <span className={`max-w-48 text-center text-xs ${deliveryMessage[row.id].startsWith("已") ? "text-emerald-700" : "text-rose-600"}`}>{deliveryMessage[row.id]}</span>}
           {row.canViewTimeline && <button type="button" onClick={() => setExpanded((value) => ({ ...value, [row.id]: !isOpen }))} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">{isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}{isOpen ? "收起轨迹" : `展开轨迹 ${row.eventTotal}`}</button>}
         </div>
@@ -246,6 +266,7 @@ export default function LogisticsTrackingWorkbench({
     </article>; })}
     {!rows.length && <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center text-sm text-slate-500">没有找到匹配的物流订单。</div>}
     {pagination.total > 0 && <footer className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2"><span>共 {pagination.total} 条</span><select value={pagination.pageSize} onChange={(event) => replaceQuery({ pageSize: event.target.value })} className="h-9 rounded-lg border border-slate-200 px-2"><option value={10}>10 / 页</option><option value={20}>20 / 页</option><option value={50}>50 / 页</option></select></div><div className="flex items-center gap-2"><span>第 {pagination.page}/{pagination.pageCount} 页</span><button type="button" disabled={pagination.page <= 1} onClick={() => replaceQuery({ page: String(pagination.page - 1) }, false)} className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 disabled:opacity-40"><ChevronLeft size={15} />上一页</button><button type="button" disabled={pagination.page >= pagination.pageCount} onClick={() => replaceQuery({ page: String(pagination.page + 1) }, false)} className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 disabled:opacity-40">下一页<ChevronRight size={15} /></button></div></footer>}
+    {closeDialog && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" onMouseDown={(event) => { if (event.currentTarget === event.target && !closingId) setCloseDialog(null); }}><section role="dialog" aria-modal="true" aria-labelledby="close-order-title" className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"><div className="flex items-start justify-between"><div><h2 id="close-order-title" className="text-lg font-bold text-slate-950">结束订单</h2><p className="mt-1 text-sm text-slate-500">{closeDialog.row.order.orderNo} · 结束后停止所有轨迹更新</p></div><button type="button" disabled={Boolean(closingId)} onClick={() => setCloseDialog(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={18} /></button></div><div className="mt-5 grid gap-4"><label className="grid gap-1 text-sm font-medium text-slate-700">结束原因<select value={closeDialog.reason} disabled={closeDialog.confirmReady} onChange={(event) => setCloseDialog({ ...closeDialog, reason: event.target.value, confirmReady: false })} className="h-11 rounded-xl border border-slate-200 px-3"><option>客户不读不回</option><option>无法派送</option><option>客户拒收</option><option>地址无法确认</option><option>其他</option></select></label>{closeDialog.reason === "其他" && <label className="grid gap-1 text-sm font-medium text-slate-700">具体原因<input value={closeDialog.detail} disabled={closeDialog.confirmReady} onChange={(event) => setCloseDialog({ ...closeDialog, detail: event.target.value, confirmReady: false })} maxLength={500} className="h-11 rounded-xl border border-slate-200 px-3" /></label>}<label className="grid gap-1 text-sm font-medium text-slate-700">4位确认码<input type="password" inputMode="numeric" maxLength={4} value={closeDialog.pin} disabled={closeDialog.confirmReady} onChange={(event) => setCloseDialog({ ...closeDialog, pin: event.target.value.replace(/\D/g, "").slice(0, 4), confirmReady: false })} className="h-11 rounded-xl border border-slate-200 px-3 text-center font-mono text-lg tracking-[0.5em]" placeholder="••••" /></label>{closeDialog.confirmReady && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-800">再次确认：订单将进入已结束，Ship24 自动同步和 Webhook 更新都会停止。</div>}<div className="flex justify-end gap-2"><button type="button" disabled={Boolean(closingId)} onClick={() => setCloseDialog(null)} className="h-10 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-600">取消</button><button type="button" disabled={Boolean(closingId) || !/^\d{4}$/.test(closeDialog.pin) || (closeDialog.reason === "其他" && !closeDialog.detail.trim())} onClick={() => void closeOrder()} className="h-10 rounded-xl bg-rose-600 px-4 text-sm font-semibold text-white disabled:opacity-40">{closingId ? "正在结束…" : closeDialog.confirmReady ? "确认结束订单" : "下一步确认"}</button></div></div></section></div>}
   </div>;
 }
 

@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   const eventKey = String(data.eventId ?? data.id ?? payload.eventId ?? "").trim();
   const status = String(data.statusMilestone ?? data.status ?? "UNKNOWN").toUpperCase();
   if (!trackingNo || !eventKey) return NextResponse.json({ ok: false, error: "trackingNumber and event id are required." }, { status: 400 });
-  const candidates = await prisma.shipment.findMany({ where: { trackingNo, status: { not: "PENDING" } }, select: { id: true, businessUnitId: true, status: true } });
+  const candidates = await prisma.shipment.findMany({ where: { trackingNo, status: { notIn: ["PENDING", "CLOSED"] } }, select: { id: true, businessUnitId: true, status: true } });
   let shipment: (typeof candidates)[number] | undefined;
   for (const candidate of candidates) {
     const credential = await getShip24Credential(candidate.businessUnitId);

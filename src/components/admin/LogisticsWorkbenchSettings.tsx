@@ -14,6 +14,24 @@ export default function LogisticsWorkbenchSettings({
   const [config, setConfig] = useState(initial);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [closePin, setClosePin] = useState("");
+  const [pinMessage, setPinMessage] = useState("");
+
+  async function saveClosePin() {
+    setPinMessage("");
+    if (!/^\d{4}$/.test(closePin)) {
+      setPinMessage("请输入4位数字确认码");
+      return;
+    }
+    const response = await fetch("/api/mvp/logistics-workbench-settings/close-pin", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: closePin }) });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      setPinMessage(payload?.error?.message ?? "确认码保存失败");
+      return;
+    }
+    setClosePin("");
+    setPinMessage("结束订单确认码已更新");
+  }
 
   async function save() {
     setSaving(true);
@@ -38,6 +56,7 @@ export default function LogisticsWorkbenchSettings({
     {open && <div className="mt-4 space-y-4 border-t border-slate-100 pt-4">
       <label className="grid gap-1 text-sm"><span className="font-medium">快捷标签（每行一个）</span><textarea rows={6} value={config.quickTags.join("\n")} onChange={(event) => setConfig({ ...config, quickTags: event.target.value.split("\n") })} className="rounded-xl border border-slate-200 px-3 py-2" /></label>
       <label className="grid gap-1 text-sm"><span className="font-medium">Ship24 自动同步间隔（分钟，允许 5–1440）</span><input type="number" min={5} max={1440} value={config.syncIntervalMinutes} onChange={(event) => setConfig({ ...config, syncIntervalMinutes: Number(event.target.value) })} className="h-10 rounded-xl border border-slate-200 px-3" /></label>
+      <div className="grid gap-2 rounded-xl border border-rose-100 bg-rose-50/40 p-3 text-sm sm:grid-cols-[1fr_auto] sm:items-end"><label className="grid gap-1"><span className="font-medium">结束订单4位确认码</span><input type="password" inputMode="numeric" maxLength={4} value={closePin} onChange={(event) => setClosePin(event.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="输入新的4位数字" className="h-10 rounded-xl border border-slate-200 bg-white px-3" /><small className="text-slate-500">仅管理员可设置；系统只保存加密摘要，不显示原确认码。</small></label><button type="button" onClick={() => void saveClosePin()} className="h-10 rounded-xl border border-rose-200 bg-white px-4 font-semibold text-rose-700">更新确认码</button>{pinMessage && <p className="text-xs text-rose-700 sm:col-span-2">{pinMessage}</p>}</div>
       <div className="grid gap-2 rounded-xl border border-slate-200 p-3 sm:grid-cols-2">
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={config.feishuNotificationsEnabled} onChange={(event) => setConfig({ ...config, feishuNotificationsEnabled: event.target.checked })} /><span><strong>启用飞书物流提醒队列</strong><small className="block text-slate-500">仍需服务器配置机器人 Webhook；关闭时不会入队。</small></span></label>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={config.feishuHighPriorityOnly} onChange={(event) => setConfig({ ...config, feishuHighPriorityOnly: event.target.checked })} /><span><strong>仅提醒高优先级轨迹</strong><small className="block text-slate-500">建议开启，避免正常轨迹产生过多飞书消息。</small></span></label>

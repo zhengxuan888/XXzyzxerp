@@ -34,6 +34,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     targetMembershipId: shipment.order.ownedByMembershipId,
   });
   if (!permission.allowed) return fail("FORBIDDEN", "没有同步物流轨迹的权限。", 403);
+  if (shipment.status === "CLOSED") return fail("SHIPMENT_CLOSED", "订单已由售后结束，不再同步物流轨迹。", 409);
   if (!shipment.trackingNo) return fail("TRACKING_NO_REQUIRED", "请先填写物流单号。", 409);
 
   const body = await request.json().catch(() => null) as { provider?: string } | null;
