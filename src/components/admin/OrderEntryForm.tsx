@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
-import { CalendarDays, Check, ChevronDown, CircleCheck, CircleHelp, CircleX, LoaderCircle, MailCheck, Package, Search, Sparkles, WalletCards } from "lucide-react";
+import { FormEvent, useMemo, useRef, useState } from "react";
+import { CalendarDays, Check, ChevronDown, CircleCheck, CircleHelp, CircleX, FileImage, ImagePlus, LoaderCircle, MailCheck, Package, Search, Sparkles, Upload, WalletCards } from "lucide-react";
 import type { OrderTemplateConfiguration } from "@/lib/order-template";
 import AttachmentPanel from "@/components/admin/AttachmentPanel";
 import { currencyForCountry } from "@/lib/order-country-currency";
@@ -59,6 +59,10 @@ export default function OrderEntryForm({
   const [searchKeyword, setSearchKeyword] = useState("");
   const [smartAddress, setSmartAddress] = useState("");
   const [smartMessage, setSmartMessage] = useState("");
+  const [ocrBusy, setOcrBusy] = useState(false);
+  const [ocrFileName, setOcrFileName] = useState("");
+  const ocrInputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const [recipientCountryCode, setRecipientCountryCode] = useState("");
   const [codCurrency, setCodCurrency] = useState(defaultTemplate?.configuration.currency ?? "EUR");
   const [codAmount, setCodAmount] = useState(((defaultTemplate?.configuration.defaultCodAmountCents ?? 0) / 100).toFixed(2));
@@ -188,13 +192,15 @@ export default function OrderEntryForm({
   function parseSmartAddress() {
     const lines = smartAddress.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
     if (!lines.length) return;
-    const form = document.querySelector("form");
+    const form = formRef.current;
     if (!form) return;
     const set = (name: string, value: string) => {
       const field = form.elements.namedItem(name);
       if (field instanceof HTMLInputElement && value) {
-        field.value = value;
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        setter?.call(field, value);
         field.dispatchEvent(new Event("input", { bubbles: true }));
+        field.dispatchEvent(new Event("change", { bubbles: true }));
       }
     };
     const email = lines.find((line) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(line));
@@ -208,8 +214,44 @@ export default function OrderEntryForm({
     setSmartMessage("已尝试填充收件人、邮箱、电话和地址，请人工核对后再提交。");
   }
 
+  async function recognizeImage(file: File) {
+    setSmartMessage("");
+    if (![/^image\/jpeg$/, /^image\/png$/, /^image\/webp$/].some((pattern) => pattern.test(file.type))) {
+      setSmartMessage("仅支持 JPG、PNG 或 WebP 图片。");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setSmartMessage("图片不能超过 5MB。");
+      return;
+    }
+    setOcrBusy(true);
+    setOcrFileName(file.name || "粘贴的截图");
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("图片读取失败"));
+        reader.readAsDataURL(file);
+      });
+      const imageBase64 = dataUrl.split(",", 2)[1] || "";
+      const response = await fetch("/api/mvp/vision/ocr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64, mimeType: file.type }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.error?.message || "图片识别失败");
+      setSmartAddress(String(payload?.data?.text || ""));
+      setSmartMessage("图片文字已识别。请先检查识别结果，再点击“确认并填入”。");
+    } catch (reason) {
+      setSmartMessage(reason instanceof Error ? reason.message : "图片识别失败，请稍后重试。");
+    } finally {
+      setOcrBusy(false);
+    }
+  }
+
   return (
-    <form onSubmit={submit} className="relative space-y-4 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-surface)] p-4 shadow-[var(--elevation-card)]">
+    <form ref={formRef} onSubmit={submit} className="relative space-y-4 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-surface)] p-4 shadow-[var(--elevation-card)]">
       {celebration && <div className="fixed inset-0 z-[90] grid place-items-center overflow-hidden bg-slate-950/35 p-4 backdrop-blur-sm" role="status">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_25%_25%,rgba(251,191,36,.35),transparent_20%),radial-gradient(circle_at_75%_20%,rgba(59,130,246,.28),transparent_18%),radial-gradient(circle_at_50%_80%,rgba(16,185,129,.26),transparent_20%)] animate-pulse" />
         <div className="relative w-full max-w-xl rounded-3xl border border-amber-200 bg-white p-8 text-center shadow-2xl">
@@ -315,9 +357,26 @@ export default function OrderEntryForm({
         <Section title="收件信息">
           <div className="md:col-span-4 rounded-xl border border-blue-100 bg-blue-50/45 p-3">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-blue-800"><Sparkles size={15} />智能识别地址（请仔细核对）</div>
+            <input ref={ocrInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void recognizeImage(file); event.currentTarget.value = ""; }} />
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => ocrInputRef.current?.click()}
+              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") ocrInputRef.current?.click(); }}
+              onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }}
+              onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files?.[0]; if (file) void recognizeImage(file); }}
+              onPaste={(event) => { const file = Array.from(event.clipboardData.items).find((item) => item.type.startsWith("image/"))?.getAsFile(); if (file) { event.preventDefault(); void recognizeImage(file); } }}
+              className="mb-3 flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-blue-300 bg-white px-4 py-3 text-center outline-none transition hover:border-blue-500 hover:bg-blue-50 focus:ring-2 focus:ring-blue-200"
+            >
+              {ocrBusy ? <LoaderCircle size={24} className="animate-spin text-blue-600" /> : <ImagePlus size={24} className="text-blue-600" />}
+              <p className="mt-2 text-sm font-semibold text-slate-800">{ocrBusy ? "正在识别图片…" : "拖入图片、粘贴截图，或点击选择文件"}</p>
+              <p className="mt-1 text-xs text-slate-500">JPG、PNG、WebP，最大 5MB；识别后不会自动提交订单</p>
+              {ocrFileName && <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-700"><FileImage size={13} />{ocrFileName}</span>}
+            </div>
             <textarea value={smartAddress} onChange={(event) => setSmartAddress(event.target.value)} className="min-h-20 w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-100" placeholder="粘贴客户发来的姓名、电话、地址和邮箱，每行一项" />
             <div className="mt-2 flex flex-wrap items-center gap-3">
-              <button type="button" onClick={parseSmartAddress} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800">识别并填充</button>
+              <button type="button" onClick={parseSmartAddress} disabled={!smartAddress.trim() || ocrBusy} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"><Check size={14} />确认并填入</button>
+              <button type="button" onClick={() => ocrInputRef.current?.click()} disabled={ocrBusy} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"><Upload size={14} />选择图片</button>
               {smartMessage && <span className="text-xs text-emerald-700">{smartMessage}</span>}
             </div>
           </div>

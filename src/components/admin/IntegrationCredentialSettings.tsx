@@ -7,6 +7,7 @@ type Status = {
   ship24: { enabled: boolean; configured: boolean; apiKeyHint: string | null; baseUrl: string; webhookSecretConfigured: boolean; webhookSecretHint: string | null; updatedAt: string | null };
   feishu: { enabled: boolean; configured: boolean; botWebhookUrlConfigured: boolean; botWebhookUrlHint: string | null; botSecretConfigured: boolean; botSecretHint: string | null; verificationTokenConfigured: boolean; verificationTokenHint: string | null; updatedAt: string | null };
   googleTranslate: { enabled: boolean; configured: boolean; apiKeyHint: string | null; updatedAt: string | null };
+  googleVision: { enabled: boolean; configured: boolean; apiKeyHint: string | null; updatedAt: string | null };
 };
 
 const inputClass = "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
@@ -27,11 +28,12 @@ function SecretField({ label, hint, value, onChange, placeholder }: { label: str
 export default function IntegrationCredentialSettings() {
   const [status, setStatus] = useState<Status | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState<"SHIP24" | "FEISHU" | "GOOGLE_TRANSLATE" | null>(null);
+  const [saving, setSaving] = useState<"SHIP24" | "FEISHU" | "GOOGLE_TRANSLATE" | "GOOGLE_VISION" | null>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [ship24, setShip24] = useState({ enabled: false, apiKey: "", baseUrl: "https://api.ship24.com", webhookSecret: "" });
   const [feishu, setFeishu] = useState({ enabled: false, botWebhookUrl: "", botSecret: "", verificationToken: "" });
   const [googleTranslate, setGoogleTranslate] = useState({ enabled: false, apiKey: "" });
+  const [googleVision, setGoogleVision] = useState({ enabled: false, apiKey: "" });
 
   async function load() {
     setLoading(true);
@@ -47,6 +49,7 @@ export default function IntegrationCredentialSettings() {
     setShip24((current) => ({ ...current, enabled: next.ship24.enabled, baseUrl: next.ship24.baseUrl }));
     setFeishu((current) => ({ ...current, enabled: next.feishu.enabled }));
     setGoogleTranslate((current) => ({ ...current, enabled: next.googleTranslate.enabled }));
+    setGoogleVision((current) => ({ ...current, enabled: next.googleVision.enabled }));
   }
 
   useEffect(() => {
@@ -63,13 +66,14 @@ export default function IntegrationCredentialSettings() {
         setShip24((current) => ({ ...current, enabled: next.ship24.enabled, baseUrl: next.ship24.baseUrl }));
         setFeishu((current) => ({ ...current, enabled: next.feishu.enabled }));
         setGoogleTranslate((current) => ({ ...current, enabled: next.googleTranslate.enabled }));
+        setGoogleVision((current) => ({ ...current, enabled: next.googleVision.enabled }));
       });
   }, []);
 
-  async function save(provider: "SHIP24" | "FEISHU" | "GOOGLE_TRANSLATE") {
+  async function save(provider: "SHIP24" | "FEISHU" | "GOOGLE_TRANSLATE" | "GOOGLE_VISION") {
     setSaving(provider);
     setMessage(null);
-    const body = provider === "SHIP24" ? { ship24 } : provider === "FEISHU" ? { feishu } : { googleTranslate };
+    const body = provider === "SHIP24" ? { ship24 } : provider === "FEISHU" ? { feishu } : provider === "GOOGLE_TRANSLATE" ? { googleTranslate } : { googleVision };
     const response = await fetch("/api/mvp/integration-credentials", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -84,7 +88,9 @@ export default function IntegrationCredentialSettings() {
     setShip24((current) => ({ ...current, apiKey: "", webhookSecret: "" }));
     setFeishu((current) => ({ ...current, botWebhookUrl: "", botSecret: "", verificationToken: "" }));
     setGoogleTranslate((current) => ({ ...current, apiKey: "" }));
-    setMessage({ type: "success", text: `${provider === "SHIP24" ? "Ship24" : "飞书"}接口配置已安全保存并立即生效。` });
+    setGoogleVision((current) => ({ ...current, apiKey: "" }));
+    const providerLabel = provider === "SHIP24" ? "Ship24" : provider === "FEISHU" ? "飞书" : provider === "GOOGLE_TRANSLATE" ? "Google 翻译" : "Google 图片识别";
+    setMessage({ type: "success", text: `${providerLabel}接口配置已安全保存并立即生效。` });
     await load();
   }
 
@@ -97,7 +103,7 @@ export default function IntegrationCredentialSettings() {
       <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700"><ShieldCheck size={14} />数据库加密存储</span>
     </div>
     {loading ? <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-slate-500"><Loader2 className="animate-spin" size={18} />正在读取接口状态…</div> :
-      <div className="grid divide-y divide-slate-100 xl:grid-cols-3 xl:divide-x xl:divide-y-0">
+      <div className="grid divide-y divide-slate-100 lg:grid-cols-2 lg:divide-x lg:divide-y-0 xl:grid-cols-4">
         <div className="space-y-4 p-5">
           <div className="flex items-center justify-between"><div><h3 className="font-semibold text-slate-900">Ship24</h3><p className="text-xs text-slate-500">物流轨迹同步与 Webhook 验签</p></div>{status?.ship24.configured && <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700"><CheckCircle2 size={14} />已配置</span>}</div>
           <label className="flex items-center gap-2 text-sm font-medium text-slate-700"><input type="checkbox" checked={ship24.enabled} onChange={(event) => setShip24({ ...ship24, enabled: event.target.checked })} className="h-4 w-4 accent-amber-600" />启用 Ship24 接口</label>
@@ -120,6 +126,17 @@ export default function IntegrationCredentialSettings() {
           <SecretField label="API Key" hint={status?.googleTranslate.apiKeyHint ?? null} value={googleTranslate.apiKey} onChange={(apiKey) => setGoogleTranslate({ ...googleTranslate, apiKey })} placeholder="填写 Google Cloud Translation API Key" />
           <p className="text-xs leading-5 text-slate-500">仅由服务器调用；保留轨迹原文，译文写入缓存，人工核对结果优先。</p>
           <button type="button" disabled={saving !== null} onClick={() => void save("GOOGLE_TRANSLATE")} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50">{saving === "GOOGLE_TRANSLATE" && <Loader2 className="animate-spin" size={16} />}保存 Google 翻译</button>
+        </div>
+        <div className="space-y-4 p-5">
+          <div className="flex items-center justify-between"><div><h3 className="font-semibold text-slate-900">Google 图片识别</h3><p className="text-xs text-slate-500">识别客户截图中的收件信息</p></div>{status?.googleVision.configured && <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700"><CheckCircle2 size={14} />已配置</span>}</div>
+          <label className="flex items-center gap-2 text-sm font-medium text-slate-700"><input type="checkbox" checked={googleVision.enabled} onChange={(event) => setGoogleVision({ ...googleVision, enabled: event.target.checked })} className="h-4 w-4 accent-amber-600" />启用 Google Cloud Vision</label>
+          <SecretField label="API Key" hint={status?.googleVision.apiKeyHint ?? null} value={googleVision.apiKey} onChange={(apiKey) => setGoogleVision({ ...googleVision, apiKey })} placeholder="填写启用 Cloud Vision API 的密钥" />
+          <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-xs leading-5 text-blue-900">
+            <p className="font-semibold">使用方式</p>
+            <p>员工在录单页拖入图片、粘贴截图或选择文件。系统只提取文字并生成字段预览，员工确认后才写入订单。</p>
+            <p className="mt-1 text-blue-700">支持 JPG、PNG、WebP，单张不超过 5MB；不会自动提交订单。</p>
+          </div>
+          <button type="button" disabled={saving !== null} onClick={() => void save("GOOGLE_VISION")} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">{saving === "GOOGLE_VISION" && <Loader2 className="animate-spin" size={16} />}保存图片识别</button>
         </div>
       </div>}
     {message && <div role="status" className={`border-t px-5 py-3 text-sm ${message.type === "success" ? "border-emerald-100 bg-emerald-50 text-emerald-800" : "border-red-100 bg-red-50 text-red-700"}`}>{message.text}</div>}

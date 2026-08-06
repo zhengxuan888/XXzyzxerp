@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 
 import { prisma } from "@/lib/prisma";
 
-export const INTEGRATION_PROVIDERS = ["SHIP24", "FEISHU", "GOOGLE_TRANSLATE"] as const;
+export const INTEGRATION_PROVIDERS = ["SHIP24", "FEISHU", "GOOGLE_TRANSLATE", "GOOGLE_VISION"] as const;
 export type IntegrationProvider = (typeof INTEGRATION_PROVIDERS)[number];
 
 export type Ship24Credential = {
@@ -18,8 +18,9 @@ export type FeishuCredential = {
 };
 
 export type GoogleTranslateCredential = { apiKey: string };
+export type GoogleVisionCredential = { apiKey: string };
 
-type CredentialPayload = Ship24Credential | FeishuCredential | GoogleTranslateCredential;
+type CredentialPayload = Ship24Credential | FeishuCredential | GoogleTranslateCredential | GoogleVisionCredential;
 
 function encryptionKey() {
   const secret = process.env.INTEGRATION_CREDENTIAL_MASTER_KEY?.trim();
@@ -83,5 +84,12 @@ export async function getGoogleTranslateCredential(businessUnitId: string): Prom
   const stored = await getStoredCredential<GoogleTranslateCredential>(businessUnitId, "GOOGLE_TRANSLATE");
   if (stored) return stored;
   const apiKey = process.env.GOOGLE_TRANSLATE_API_KEY?.trim();
+  return apiKey ? { apiKey } : null;
+}
+
+export async function getGoogleVisionCredential(businessUnitId: string): Promise<GoogleVisionCredential | null> {
+  const stored = await getStoredCredential<GoogleVisionCredential>(businessUnitId, "GOOGLE_VISION");
+  if (stored) return stored;
+  const apiKey = process.env.GOOGLE_VISION_API_KEY?.trim();
   return apiKey ? { apiKey } : null;
 }
