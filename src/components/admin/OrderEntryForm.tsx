@@ -370,43 +370,14 @@ export default function OrderEntryForm({
 
         <div className="mb-4 rounded-2xl border border-cyan-200 bg-gradient-to-br from-cyan-50/70 to-white p-3">
           <div className="mb-3">
-            <h2 className="text-sm font-bold text-slate-950">录单辅助</h2>
-            <p className="mt-1 text-xs text-slate-500">先识别客户地址并添加沟通凭证，再填写下方录单信息。</p>
+            <h2 className="text-sm font-bold text-slate-950">客户沟通凭证</h2>
+            <p className="mt-1 text-xs text-slate-500">录单时一并添加，确认订单后自动上传。</p>
           </div>
-          <div className="grid items-stretch gap-3 xl:grid-cols-2">
-            <div className="rounded-xl border border-blue-100 bg-blue-50/45 p-3">
-              <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-blue-800"><Sparkles size={15} />智能识别地址（请仔细核对）</div>
-              <input ref={ocrInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void recognizeImage(file); event.currentTarget.value = ""; }} />
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => ocrInputRef.current?.click()}
-                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") ocrInputRef.current?.click(); }}
-                onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }}
-                onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files?.[0]; if (file) void recognizeImage(file); }}
-                onPaste={(event) => { const file = Array.from(event.clipboardData.items).find((item) => item.type.startsWith("image/"))?.getAsFile(); if (file) { event.preventDefault(); void recognizeImage(file); } }}
-                className="mb-3 flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-blue-300 bg-white px-4 py-3 text-center outline-none transition hover:border-blue-500 hover:bg-blue-50 focus:ring-2 focus:ring-blue-200"
-              >
-                {ocrBusy ? <LoaderCircle size={24} className="animate-spin text-blue-600" /> : <ImagePlus size={24} className="text-blue-600" />}
-                <p className="mt-2 text-sm font-semibold text-slate-800">{ocrBusy ? "正在识别图片…" : "拖入图片、粘贴截图，或点击选择文件"}</p>
-                <p className="mt-1 text-xs text-slate-500">JPG、PNG、WebP，最大 5MB；识别后不会自动提交订单</p>
-                {ocrFileName && <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-700"><FileImage size={13} />{ocrFileName}</span>}
-              </div>
-              <textarea value={smartAddress} onChange={(event) => setSmartAddress(event.target.value)} className="min-h-20 w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-100" placeholder="粘贴客户发来的姓名、电话、地址和邮箱，每行一项" />
-              <div className="mt-2 flex flex-wrap items-center gap-3">
-                <button type="button" onClick={parseSmartAddress} disabled={!smartAddress.trim() || ocrBusy} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"><Check size={14} />确认并填入</button>
-                <button type="button" onClick={() => ocrInputRef.current?.click()} disabled={ocrBusy} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"><Upload size={14} />选择图片</button>
-                {smartMessage && <span className="text-xs text-emerald-700">{smartMessage}</span>}
-              </div>
-            </div>
-            <div className="min-w-0">
-              {!createdOrder ? (
-                <PendingProofPicker files={pendingProofs} onChange={setPendingProofs} canUpload={canUploadOrderProof} />
-              ) : (
-                <AttachmentPanel targetType="ORDER" targetId={createdOrder.id} canUpload={canUploadOrderProof} canDelete={canDeleteOrderProof} title="客户沟通凭证（提交核单前必传）" />
-              )}
-            </div>
-          </div>
+          {!createdOrder ? (
+            <PendingProofPicker files={pendingProofs} onChange={setPendingProofs} canUpload={canUploadOrderProof} />
+          ) : (
+            <AttachmentPanel targetType="ORDER" targetId={createdOrder.id} canUpload={canUploadOrderProof} canDelete={canDeleteOrderProof} title="客户沟通凭证（提交核单前必传）" />
+          )}
         </div>
 
         <fieldset className="grid gap-3 rounded-2xl border border-amber-200/80 bg-amber-50/20 p-4 md:grid-cols-4">
