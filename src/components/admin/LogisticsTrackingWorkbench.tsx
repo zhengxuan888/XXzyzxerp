@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ExternalLink, Mail, MessageCircle, OctagonX, Package, Save, Search, Truck, UserRound, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ExternalLink, Mail, MessageCircle, OctagonX, Package, RefreshCw, Save, Search, Truck, UserRound, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -131,6 +131,9 @@ export default function LogisticsTrackingWorkbench({
   const [deliveryMessage, setDeliveryMessage] = useState<Record<string, string>>({});
   const [closeDialog, setCloseDialog] = useState<{ row: TrackingRow; reason: string; detail: string; pin: string; confirmReady: boolean } | null>(null);
   const [closingId, setClosingId] = useState<string | null>(null);
+  const [syncingList, setSyncingList] = useState(false);
+  const [syncProgress, setSyncProgress] = useState(0);
+  const [syncMessage, setSyncMessage] = useState("");
   const queue = (urlSearchParams.get("queue") ?? "unhandled") as LogisticsQueueKey;
   const departmentId = urlSearchParams.get("departmentId") ?? "";
   const managerMembershipId = urlSearchParams.get("managerMembershipId") ?? "";
@@ -200,6 +203,7 @@ export default function LogisticsTrackingWorkbench({
     router.replace(`/admin/shipments${next.size ? `?${next.toString()}` : ""}`);
   };
   const pagedRows = rows;
+  const syncableRows = pagedRows.filter((row) => row.canAnnotate && row.status !== "CLOSED");
   const countFor = (key: LogisticsQueueKey) => queueCounts[key] ?? 0;
   const toneFor = (key: LogisticsQueueKey) => key === "critical" || key === "exception" || key === "signed_refund" ? "border-rose-200 bg-rose-50 text-rose-900" : key === "high" || key === "out_for_delivery" ? "border-amber-200 bg-amber-50 text-amber-900" : key === "normal" || key === "delivered" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : key === "unhandled" || key === "returning" ? "border-violet-200 bg-violet-50 text-violet-900" : key === "in_transit" ? "border-sky-200 bg-sky-50 text-sky-900" : "border-slate-200 bg-white text-slate-900";
   const queueCards = config.cards.filter((card) => card.isVisible).map((card) => ({ ...card, count: countFor(card.key), tone: toneFor(card.key) }));
@@ -213,11 +217,52 @@ export default function LogisticsTrackingWorkbench({
   ];
   const { departments, managers, creators, statuses: shipmentStatuses, carriers, destinations } = filterOptions;
 
+  const syncCurrentList = async () => {
+    if (syncingList || !syncableRows.length) return;
+    setSyncingList(true);
+    setSyncProgress(0);
+    setSyncMessage("");
+    let succeeded = 0;
+    let failed = 0;
+    let inserted = 0;
+    const pending = [...syncableRows];
+    const workers = Array.from({ length: Math.min(3, pending.length) }, async () => {
+      while (pending.length) {
+        const row = pending.shift();
+        if (!row) break;
+        try {
+          const response = await fetch(`/api/mvp/shipments/${row.id}/sync`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: "{}",
+          });
+          const payload = await response.json().catch(() => null) as { data?: { inserted?: number } } | null;
+          if (!response.ok) failed += 1;
+          else {
+            succeeded += 1;
+            inserted += payload?.data?.inserted ?? 0;
+          }
+        } catch {
+          failed += 1;
+        } finally {
+          setSyncProgress((value) => value + 1);
+        }
+      }
+    });
+    await Promise.all(workers);
+    setSyncingList(false);
+    setSyncMessage(`同步完成：成功 ${succeeded} 单，新增 ${inserted} 条轨迹${failed ? `，失败 ${failed} 单` : ""}`);
+    router.refresh();
+  };
+
   return <div className="space-y-4">
     <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div><div className="flex items-center gap-2 text-violet-700"><Truck size={20} /><span className="text-sm font-semibold">物流与售后</span></div><h1 className="mt-2 text-2xl font-bold text-slate-950">物流追踪工作台</h1><p className="mt-1 text-sm text-slate-500">集中查看客户、订单、产品与物流轨迹；每条轨迹都可以单独备注、打标签和标记处理完成。</p></div>
-        <form onSubmit={(event) => { event.preventDefault(); replaceQuery({ q: keyword.trim() || null }); }} className="flex h-11 w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 focus-within:border-violet-400 focus-within:ring-4 focus-within:ring-violet-100 lg:max-w-md"><Search size={17} className="text-slate-400" /><input value={keyword} onChange={(event) => setKeyword(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder={canViewTrackingNo ? "订单号、物流单号、客户、销售、产品" : "订单号、客户、销售、产品"} /><button type="submit" className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white">搜索</button></form>
+        <div className="flex w-full flex-col items-stretch gap-2 sm:flex-row sm:items-center lg:max-w-2xl lg:justify-end">
+          {syncableRows.length > 0 && <div className="flex flex-col items-start gap-1"><button type="button" disabled={syncingList} onClick={() => void syncCurrentList()} className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 text-sm font-semibold text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"><RefreshCw size={16} className={syncingList ? "animate-spin" : ""} />{syncingList ? `同步中 ${syncProgress}/${syncableRows.length}` : "刷新 / 同步"}</button>{syncMessage && <span className={`max-w-72 text-xs ${syncMessage.includes("失败") ? "text-amber-700" : "text-emerald-700"}`}>{syncMessage}</span>}</div>}
+          <form onSubmit={(event) => { event.preventDefault(); replaceQuery({ q: keyword.trim() || null }); }} className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 focus-within:border-violet-400 focus-within:ring-4 focus-within:ring-violet-100"><Search size={17} className="text-slate-400" /><input value={keyword} onChange={(event) => setKeyword(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder={canViewTrackingNo ? "订单号、物流单号、客户、销售、产品" : "订单号、客户、销售、产品"} /><button type="submit" className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white">搜索</button></form>
+        </div>
       </div>
     </header>
     <section className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 xl:grid-cols-6">
