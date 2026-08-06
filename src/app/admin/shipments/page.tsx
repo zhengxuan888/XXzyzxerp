@@ -2,7 +2,6 @@
 
 import LogisticsTrackingWorkbench from "@/components/admin/LogisticsTrackingWorkbench";
 import LogisticsWorkbenchSettings from "@/components/admin/LogisticsWorkbenchSettings";
-import AfterSalesDailyReport from "@/components/admin/AfterSalesDailyReport";
 import { ShipmentStatus, type Prisma } from "@prisma/client";
 import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
@@ -505,7 +504,6 @@ export default async function ShipmentsPage({
       filterOptions={{ departments, managers, creators, statuses, carriers, destinations }}
       rows={presentationRows}
     />
-    <AfterSalesDailyReport />
     </div>
   );
 }
