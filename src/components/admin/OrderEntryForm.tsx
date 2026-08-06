@@ -351,8 +351,8 @@ export default function OrderEntryForm({
         <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
           <CircleHelp size={18} className="mt-0.5 shrink-0 text-amber-600" />
           <div>
-            <p className="font-semibold">录单后请补充客户沟通凭证</p>
-            <p className="mt-1 text-xs leading-5 text-amber-800">新客直接按本次收件信息录入；订单保存后可在当前页面上传客户聊天截图、PDF 或视频，上传完成后才能提交核单。</p>
+            <p className="font-semibold">录单时请一并添加客户沟通凭证</p>
+            <p className="mt-1 text-xs leading-5 text-amber-800">订单信息、收件信息、物流信息与客户沟通凭证均在当前板块填写，确认订单后自动保存和上传。</p>
           </div>
         </div>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200/80 bg-amber-50/70 px-3 py-2">
@@ -444,6 +444,19 @@ export default function OrderEntryForm({
               {smartMessage && <span className="text-xs text-emerald-700">{smartMessage}</span>}
             </div>
           </div>
+          <div className="md:col-span-4">
+            {!createdOrder ? (
+              <PendingProofPicker files={pendingProofs} onChange={setPendingProofs} canUpload={canUploadOrderProof} />
+            ) : (
+              <AttachmentPanel
+                targetType="ORDER"
+                targetId={createdOrder.id}
+                canUpload={canUploadOrderProof}
+                canDelete={canDeleteOrderProof}
+                title="客户沟通凭证（提交核单前必传）"
+              />
+            )}
+          </div>
           <Field label="收件人" required><input name="recipientName" required className={input} placeholder="收件人姓名" /></Field>
           <Field label="电话" required={config?.requireRecipientPhone}>
             <input name="recipientPhone" required={config?.requireRecipientPhone} className={input} placeholder="收件人联系电话" />
@@ -477,7 +490,7 @@ export default function OrderEntryForm({
           </div>
         </Section>
 
-        <Section title="支付与物流">
+        <Section title="物流信息">
           <Field label={`COD 金额（${codCurrency}）`} required={config?.requireCodAmount}><input name="codAmount" type="number" min="0" step="0.01" value={codAmount} onChange={(event) => setCodAmount(event.target.value)} className={input} /></Field>
           <Field label={`运费（${codCurrency}）`}><input name="shippingFee" type="number" min="0" step="0.01" defaultValue={defaultValues.shippingFee} key={`${templateId}-shipping`} className={input} /></Field>
           <Field label="付款方式">
@@ -507,17 +520,6 @@ export default function OrderEntryForm({
           ))}
         </Section>
 
-        {!createdOrder ? (
-          <PendingProofPicker files={pendingProofs} onChange={setPendingProofs} canUpload={canUploadOrderProof} />
-        ) : (
-          <AttachmentPanel
-            targetType="ORDER"
-            targetId={createdOrder.id}
-            canUpload={canUploadOrderProof}
-            canDelete={canDeleteOrderProof}
-            title="客户沟通凭证（提交核单前必传）"
-          />
-        )}
       </div>
 
       {createdOrder && (
@@ -525,7 +527,7 @@ export default function OrderEntryForm({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-sm font-semibold text-emerald-900">订单已保存：{createdOrder.orderNo}</p>
-              <p className="mt-1 text-xs text-emerald-800">请在当前页面上传客户沟通凭证，预览确认后再提交核单。</p>
+              <p className="mt-1 text-xs text-emerald-800">客户沟通凭证已随订单上传，可直接预览确认并提交核单。</p>
             </div>
           </div>
           <button
