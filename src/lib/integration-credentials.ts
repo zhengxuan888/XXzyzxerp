@@ -92,7 +92,9 @@ export async function getGoogleVisionCredential(businessUnitId: string): Promise
   const stored = await getStoredCredential<GoogleVisionCredential>(businessUnitId, "GOOGLE_VISION");
   if (stored) return stored;
   const apiKey = process.env.GOOGLE_VISION_API_KEY?.trim();
-  return apiKey ? { apiKey } : null;
+  if (apiKey) return { apiKey };
+  // 同一 Google Cloud 项目启用多个 API 时可复用已加密保存的翻译密钥。
+  return getGoogleTranslateCredential(businessUnitId);
 }
 
 export async function getGoogleAddressValidationCredential(businessUnitId: string): Promise<GoogleAddressValidationCredential | null> {
