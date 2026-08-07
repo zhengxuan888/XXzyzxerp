@@ -144,9 +144,9 @@ export default function AfterSalesDailyReport() {
     setGenerating(true);
     try {
       await downloadReportImage(data);
-      setMessage({ type: "success", text: "群报图片已生成并下载，可以直接发送到工作群。" });
+      setMessage({ type: "success", text: "日报图片已生成并下载。" });
     } catch {
-      setMessage({ type: "error", text: "群报图片生成失败，请刷新页面后重试。" });
+      setMessage({ type: "error", text: "日报图片生成失败，请刷新页面后重试。" });
     } finally {
       setGenerating(false);
     }
@@ -155,7 +155,7 @@ export default function AfterSalesDailyReport() {
   return <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
     <header className="flex flex-col gap-3 border-b border-slate-100 bg-gradient-to-r from-amber-50 via-white to-emerald-50 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
       <div className="flex items-start gap-3"><span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white"><Truck size={19} /></span><div><p className="text-xs font-semibold text-amber-700">物流与售后 · {data?.businessUnitName ?? "当前业务板块"}</p><h2 className="text-lg font-bold text-slate-950">售后统一日报</h2><p className="text-xs text-slate-500">{data?.date ?? "今日"}</p></div></div>
-      <div className="flex flex-wrap gap-2"><label className="flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600"><span>查看日期</span><input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} className="bg-transparent text-slate-900 outline-none" aria-label="售后日报日期" /></label><button type="button" onClick={() => void load()} disabled={loading} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><RefreshCw size={15} className={loading ? "animate-spin" : ""} />刷新</button><button type="button" onClick={() => void generateReportImage()} disabled={!data || generating} className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50">{generating ? <Loader2 size={15} className="animate-spin" /> : <ImageDown size={15} />}生成群报图片</button></div>
+      <div className="flex flex-wrap gap-2"><label className="flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600"><span>筛选日期</span><input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} className="bg-transparent text-slate-900 outline-none" aria-label="售后日报日期" /></label><button type="button" onClick={() => void load()} disabled={loading} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><RefreshCw size={15} className={loading ? "animate-spin" : ""} />刷新</button><button type="button" onClick={() => void generateReportImage()} disabled={!data || generating} className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50">{generating ? <Loader2 size={15} className="animate-spin" /> : <ImageDown size={15} />}生成日报图片</button></div>
     </header>
     {loading && !data ? <div className="flex min-h-44 items-center justify-center gap-2 text-sm text-slate-500"><Loader2 size={18} className="animate-spin" />正在汇总今日数据…</div> : <>
       <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-3 lg:grid-cols-6">{summaryCards.map(([key, label]) => <article key={key} className="bg-white px-4 py-3"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-2xl font-bold text-slate-950">{data?.summary[key] ?? 0}<span className="ml-1 text-xs font-medium text-slate-400">单</span></p></article>)}</div>
