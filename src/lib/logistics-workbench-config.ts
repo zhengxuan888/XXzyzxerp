@@ -6,6 +6,7 @@ export const logisticsQueueKeys = [
   "out_for_delivery",
   "delivered",
   "signed_refund",
+  "closed",
   "pending_delivery_confirmation",
   "due_today",
   "problem",
@@ -52,6 +53,7 @@ export const defaultLogisticsWorkbenchConfig: LogisticsWorkbenchConfig = {
     { key: "out_for_delivery", label: "派送中", isVisible: true, sortOrder: 30, matches: [] },
     { key: "delivered", label: "成功签收", isVisible: true, sortOrder: 40, matches: [] },
     { key: "signed_refund", label: "签收退款", isVisible: true, sortOrder: 45, matches: [] },
+    { key: "closed", label: "已结束", isVisible: true, sortOrder: 46, matches: [] },
     { key: "pending_delivery_confirmation", label: "待确认签收", isVisible: false, sortOrder: 46, matches: [] },
     { key: "due_today", label: "今日需跟进", isVisible: false, sortOrder: 47, matches: [] },
     { key: "problem", label: "物流问题", isVisible: false, sortOrder: 48, matches: [] },
@@ -92,7 +94,7 @@ export function parseLogisticsWorkbenchConfig(raw: { quickTags?: unknown; cards?
     const fallback = defaultLogisticsWorkbenchConfig.cards.find((card) => card.key === key)!;
     byKey.set(key, {
       key,
-      label: key === "delivered" ? "成功签收" : key === "signed_refund" ? "签收退款" : typeof value.label === "string" && value.label.trim() ? value.label.trim().slice(0, 30) : fallback.label,
+      label: key === "delivered" ? "成功签收" : key === "signed_refund" ? "签收退款" : key === "closed" ? "已结束" : typeof value.label === "string" && value.label.trim() ? value.label.trim().slice(0, 30) : fallback.label,
       isVisible: value.isVisible !== false,
       sortOrder: Number.isSafeInteger(value.sortOrder) ? Number(value.sortOrder) : fallback.sortOrder,
       matches: Array.isArray(value.matches)

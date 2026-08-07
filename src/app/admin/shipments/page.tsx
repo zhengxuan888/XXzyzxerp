@@ -78,7 +78,8 @@ function matchesQueueSignals(
   if (queue === "unhandled") return row.unhandledEventCount > 0;
   if (queue === "in_transit") return ["PICKED_UP", "IN_TRANSIT"].includes(row.status);
   if (queue === "out_for_delivery") return row.status === "OUT_FOR_DELIVERY";
-  if (queue === "delivered") return ["DELIVERED", "CLOSED"].includes(row.status);
+  if (queue === "delivered") return row.status === "DELIVERED";
+  if (queue === "closed") return row.status === "CLOSED";
   if (queue === "exception") return row.status === "EXCEPTION";
   if (queue === "returning") return ["RETURNING", "RETURNED"].includes(row.status);
   if (!configuredMatches.length) return false;
@@ -333,10 +334,16 @@ export default async function ShipmentsPage({
     return searchable.includes(keyword);
   });
   const matchesCard = (row: (typeof baseFiltered)[number], key: LogisticsQueueKey) => {
-    if (key === "delivered") return row.status === "DELIVERED" && row.order.exceptionNote === "人工确认成功签收";
-    if (key === "signed_refund") return row.order.exceptionNote === "签收后退款";
-    if (key === "unhandled") return row._count.events > 0 && !row.latestFollowed;
-    if (key === "followed") return row._count.events > 0 && row.latestFollowed;
+    const isConfirmedDelivery = row.status === "DELIVERED" && row.order.exceptionNote === "人工确认成功签收";
+    const isSignedRefund = row.order.exceptionNote === "签收后退款";
+    const isClosed = row.status === "CLOSED";
+    const isTerminal = isConfirmedDelivery || isSignedRefund || isClosed;
+    if (key === "delivered") return isConfirmedDelivery;
+    if (key === "signed_refund") return isSignedRefund;
+    if (key === "closed") return isClosed;
+    if (key === "all") return !isTerminal;
+    if (key === "unhandled") return !isTerminal && row._count.events > 0 && !row.latestFollowed;
+    if (key === "followed") return !isTerminal && row._count.events > 0 && row.latestFollowed;
     if (key === "pending_delivery_confirmation") return row.status === "DELIVERED" && row.order.exceptionNote !== "人工确认成功签收" && row.order.exceptionNote !== "签收后退款";
     if (key === "due_today") {
       if (!row.nextFollowUpAt) return false;
