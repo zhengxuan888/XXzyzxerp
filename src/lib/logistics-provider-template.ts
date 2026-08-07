@@ -16,6 +16,7 @@ export const LOGISTICS_EXPORT_FIELDS = [
   "customerWhatsapp",
   "note",
   "salesName",
+  "productConfigurations",
   "productSkus",
   "unitPrice",
   "shippingRoute",

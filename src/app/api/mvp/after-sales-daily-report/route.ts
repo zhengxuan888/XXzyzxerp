@@ -11,7 +11,12 @@ export async function GET(request: NextRequest) {
   if (!auth) return fail("UNAUTHENTICATED", "请先登录。", 401);
   const read = await checkPermission({ userId: auth.userId, membershipId: auth.membership.id, actionKey: "shipment.read", targetBusinessUnitId: auth.membership.businessUnitId });
   if (!read.allowed) return fail("FORBIDDEN", "没有查看售后日报的权限。", 403);
-  const range = shanghaiReportRanges();
+  let range: ReturnType<typeof shanghaiReportRanges>;
+  try {
+    range = shanghaiReportRanges(new Date(), request.nextUrl.searchParams.get("date"));
+  } catch {
+    return fail("INVALID_REPORT_DATE", "日期格式无效，请重新选择。", 400);
+  }
   const candidates = await prisma.membership.findMany({
     where: { businessUnitId: auth.membership.businessUnitId, isActive: true, OR: [{ endedAt: null }, { endedAt: { gt: new Date() } }] },
     select: { id: true, userId: true, departmentId: true, siteId: true, user: { select: { fullName: true, username: true } }, department: { select: { name: true } } },
@@ -25,7 +30,7 @@ export async function GET(request: NextRequest) {
   const ids = visible.map((item) => item.id);
   const [orders, shipments, businessUnit] = await Promise.all([
     prisma.order.findMany({
-      where: { businessUnitId: auth.membership.businessUnitId, ownedByMembershipId: { in: ids }, orderedAt: { gte: range.previousMonthStart }, status: { notIn: ["DRAFT", "CANCELLED"] }, paymentMethod: { equals: "COD", mode: "insensitive" } },
+      where: { businessUnitId: auth.membership.businessUnitId, ownedByMembershipId: { in: ids }, orderedAt: { gte: range.previousMonthStart, lt: range.tomorrow }, status: { notIn: ["DRAFT", "CANCELLED"] }, paymentMethod: { equals: "COD", mode: "insensitive" } },
       select: { ownedByMembershipId: true, orderedAt: true },
     }),
     prisma.shipment.findMany({
@@ -46,10 +51,10 @@ export async function GET(request: NextRequest) {
       monthOrders: memberOrders.filter((order) => order.orderedAt >= range.monthStart).length,
       previousMonthOrders: memberOrders.filter((order) => order.orderedAt >= range.previousMonthStart && order.orderedAt < range.monthStart).length,
       todayShipped: memberShipments.filter((shipment) => isWithinReportRange(shipment.shippedAt, range.today, range.tomorrow)).length,
-      monthShipped: memberShipments.filter((shipment) => shipment.shippedAt && shipment.shippedAt >= range.monthStart).length,
+      monthShipped: memberShipments.filter((shipment) => shipment.shippedAt && shipment.shippedAt >= range.monthStart && shipment.shippedAt < range.tomorrow).length,
       previousMonthShipped: memberShipments.filter((shipment) => isWithinReportRange(shipment.shippedAt, range.previousMonthStart, range.monthStart)).length,
       todayDelivered: memberShipments.filter((shipment) => isWithinReportRange(shipment.deliveredAt, range.today, range.tomorrow)).length,
-      monthDelivered: memberShipments.filter((shipment) => shipment.deliveredAt && shipment.deliveredAt >= range.monthStart).length,
+      monthDelivered: memberShipments.filter((shipment) => shipment.deliveredAt && shipment.deliveredAt >= range.monthStart && shipment.deliveredAt < range.tomorrow).length,
       previousMonthDelivered: memberShipments.filter((shipment) => isWithinReportRange(shipment.deliveredAt, range.previousMonthStart, range.monthStart)).length,
     };
   }).filter((row) => row.todayOrders > 0 || row.monthOrders > 0 || row.previousMonthOrders > 0 || row.todayShipped > 0 || row.monthShipped > 0 || row.previousMonthShipped > 0 || row.todayDelivered > 0 || row.monthDelivered > 0 || row.previousMonthDelivered > 0);

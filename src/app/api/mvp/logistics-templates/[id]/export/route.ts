@@ -35,9 +35,14 @@ export async function POST(request: NextRequest, context: RouteContext<"/api/mvp
   });
   if (!template) return fail("TEMPLATE_NOT_FOUND", "物流商模板不存在或已停用。", 404);
   const configuration = parseLogisticsTemplateConfiguration(template.configuration);
-  const exportColumns = configuration.columns.some((column) => column.field === "salesName")
-    ? configuration.columns
-    : [...configuration.columns, { field: "salesName" as const, header: "录单员工" }];
+  const exportColumns = [...configuration.columns];
+  if (!exportColumns.some((column) => column.field === "salesName")) {
+    exportColumns.push({ field: "salesName", header: "录单员工" });
+  }
+  const needsProductConfiguration = ["HONGYA_IBERIA_DROPSHIP", "HONGYA_EAST_EU_DROPSHIP"].includes(template.code);
+  if (needsProductConfiguration && !exportColumns.some((column) => column.field === "productConfigurations")) {
+    exportColumns.push({ field: "productConfigurations", header: "具体型号配置" });
+  }
 
   const candidateOrders = await prisma.order.findMany({
     where: {

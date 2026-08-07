@@ -46,6 +46,7 @@ const defaultColumns = [
   "customerWhatsapp=WhatsApp",
   "note=备注",
   "salesName=录单员工",
+  "productConfigurations=具体型号配置",
 ].join("\n");
 
 const defaultReturnMappings = returnMappingLines(DEFAULT_RETURN_WORKBOOK_MAPPING);

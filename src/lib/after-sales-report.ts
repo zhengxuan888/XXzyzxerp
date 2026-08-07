@@ -1,5 +1,5 @@
-export function shanghaiReportRanges(now = new Date()) {
-  const local = new Date(now.getTime() + 8 * 60 * 60_000);
+export function shanghaiReportRanges(now = new Date(), selectedDate?: string | null) {
+  const local = selectedDate ? parseShanghaiDate(selectedDate) : new Date(now.getTime() + 8 * 60 * 60_000);
   const year = local.getUTCFullYear();
   const month = local.getUTCMonth();
   const day = local.getUTCDate();
@@ -11,6 +11,19 @@ export function shanghaiReportRanges(now = new Date()) {
     monthStart: at(year, month, 1),
     previousMonthStart: at(year, month - 1, 1),
   };
+}
+
+function parseShanghaiDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) throw new Error("INVALID_REPORT_DATE");
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const parsed = new Date(Date.UTC(year, month, day));
+  if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() !== month || parsed.getUTCDate() !== day) {
+    throw new Error("INVALID_REPORT_DATE");
+  }
+  return parsed;
 }
 
 export function isWithinReportRange(value: Date | null, start: Date, end: Date) {
