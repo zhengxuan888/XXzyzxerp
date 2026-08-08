@@ -1,21 +1,35 @@
 export const logisticsColorTags = [
-  { key: "in_transit", label: "在途", tags: ["在途"], tone: "border-slate-300 bg-transparent text-slate-700" },
-  { key: "transporting", label: "运输中", tags: ["运输中"], tone: "border-slate-300 bg-transparent text-slate-700" },
-  { key: "delivery_soon", label: "预计今明天送达", tags: ["预计今明天送达"], tone: "border-pink-200 bg-pink-50 text-pink-700" },
-  { key: "out_for_delivery", label: "派送中", tags: ["派送中"], tone: "border-pink-300 bg-pink-100 text-pink-800" },
-  { key: "ready_for_pickup", label: "到达代取", tags: ["到达代取", "到达待取"], tone: "border-blue-200 bg-blue-100 text-blue-800" },
-  { key: "delivered", label: "签收", tags: ["签收"], tone: "border-emerald-200 bg-emerald-50 text-emerald-700" },
-  { key: "refused", label: "拒收", tags: ["拒收"], tone: "border-red-300 bg-red-100 text-red-800" },
-  { key: "unread_no_reply", label: "不读不回", tags: ["不读不回"], tone: "border-yellow-300 bg-yellow-100 text-yellow-900" },
-  { key: "read_no_reply", label: "已读不回", tags: ["已读不回"], tone: "border-yellow-300 bg-yellow-100 text-yellow-900" },
-  { key: "delivery_failed", label: "派送失败", tags: ["派送失败"], tone: "border-yellow-300 bg-yellow-100 text-yellow-900" },
-  { key: "post_delivery_exception", label: "签收后异常", tags: ["签收后异常", "签收后退款"], tone: "border-purple-300 bg-purple-100 text-purple-800" },
+  { key: "in_transit", label: "在途", tags: ["在途"], tone: "border-slate-300 bg-transparent text-slate-700", cardTone: "border-slate-200 bg-white" },
+  { key: "transporting", label: "运输中", tags: ["运输中"], tone: "border-slate-300 bg-transparent text-slate-700", cardTone: "border-slate-200 bg-white" },
+  { key: "delivery_soon", label: "预计今明天送达", tags: ["预计今明天送达"], tone: "border-pink-200 bg-pink-50 text-pink-800", cardTone: "border-pink-200 bg-pink-50/40" },
+  { key: "out_for_delivery", label: "派送中", tags: ["派送中"], tone: "border-pink-300 bg-pink-100 text-pink-800", cardTone: "border-pink-300 bg-pink-50/50" },
+  { key: "ready_for_pickup", label: "到达代取", tags: ["到达代取", "到达待取"], tone: "border-blue-200 bg-blue-100 text-blue-800", cardTone: "border-blue-300 bg-blue-50/50" },
+  { key: "delivered", label: "签收", tags: ["签收"], tone: "border-emerald-200 bg-emerald-50 text-emerald-800", cardTone: "border-emerald-200 bg-emerald-50/50" },
+  { key: "refused", label: "拒收", tags: ["拒收"], tone: "border-red-300 bg-red-100 text-red-800", cardTone: "border-red-300 bg-red-50/50" },
+  { key: "unread_no_reply", label: "不读不回", tags: ["不读不回"], tone: "border-yellow-300 bg-yellow-100 text-yellow-900", cardTone: "border-yellow-300 bg-yellow-50/60" },
+  { key: "read_no_reply", label: "已读不回", tags: ["已读不回"], tone: "border-yellow-300 bg-yellow-100 text-yellow-900", cardTone: "border-yellow-300 bg-yellow-50/60" },
+  { key: "delivery_failed", label: "派送失败", tags: ["派送失败"], tone: "border-yellow-300 bg-yellow-100 text-yellow-900", cardTone: "border-yellow-300 bg-yellow-50/60" },
+  { key: "post_delivery_exception", label: "签收后异常", tags: ["签收后异常", "签收后退款"], tone: "border-purple-300 bg-purple-100 text-purple-800", cardTone: "border-purple-300 bg-purple-50/50" },
 ] as const;
 
 export type LogisticsColorTagKey = (typeof logisticsColorTags)[number]["key"];
 
 export const logisticsColorTagKeys = logisticsColorTags.map((tag) => tag.key);
 export const logisticsColorQuickTagLabels = logisticsColorTags.map((tag) => tag.label);
+
+const logisticsColorCardPriority: LogisticsColorTagKey[] = [
+  "post_delivery_exception",
+  "refused",
+  "delivered",
+  "delivery_failed",
+  "unread_no_reply",
+  "read_no_reply",
+  "ready_for_pickup",
+  "out_for_delivery",
+  "delivery_soon",
+  "transporting",
+  "in_transit",
+];
 
 const shanghaiDateFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Shanghai",
@@ -84,4 +98,10 @@ export function classifyLogisticsColorTags(input: {
 
 export function logisticsColorTagDefinition(key: string) {
   return logisticsColorTags.find((tag) => tag.key === key);
+}
+
+export function logisticsColorCardTone(keys: Iterable<string>) {
+  const selected = new Set(keys);
+  const primaryKey = logisticsColorCardPriority.find((key) => selected.has(key));
+  return primaryKey ? logisticsColorTagDefinition(primaryKey)?.cardTone ?? "border-slate-200 bg-white" : "border-slate-200 bg-white";
 }

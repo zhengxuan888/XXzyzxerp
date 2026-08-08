@@ -46,8 +46,27 @@ export type LogisticsWorkbenchConfig = {
   feishuHighPriorityOnly: boolean;
 };
 
+export const logisticsPriorityQuickTags: ReadonlyArray<{ key: LogisticsQueueKey; label: string; tone: string }> = [
+  { key: "critical", label: "跟进已超期", tone: "border-rose-200 bg-rose-50 text-rose-800" },
+  { key: "problem", label: "物流异常", tone: "border-rose-200 bg-rose-50 text-rose-800" },
+  { key: "pending_delivery_confirmation", label: "待人工确认签收", tone: "border-amber-200 bg-amber-50 text-amber-900" },
+  { key: "due_today", label: "今日需要跟进", tone: "border-amber-200 bg-amber-50 text-amber-900" },
+  { key: "out_for_delivery", label: "派送中", tone: "border-pink-300 bg-pink-100 text-pink-800" },
+  { key: "normal", label: "普通运输", tone: "border-slate-300 bg-transparent text-slate-700" },
+];
+
+export const logisticsPriorityQuickTagLabels = logisticsPriorityQuickTags.map((tag) => tag.label);
+export const logisticsFixedQuickTagLabels = [...new Set([...logisticsColorQuickTagLabels, ...logisticsPriorityQuickTagLabels])];
+
+export function logisticsQueueCardsForDisplay(config: LogisticsWorkbenchConfig) {
+  const priorityByKey = new Map(logisticsPriorityQuickTags.map((item) => [item.key, item]));
+  return config.cards
+    .filter((card) => card.key !== "exception" && (card.isVisible || priorityByKey.has(card.key)))
+    .map((card) => ({ ...card, label: priorityByKey.get(card.key)?.label ?? card.label }));
+}
+
 export const defaultLogisticsWorkbenchConfig: LogisticsWorkbenchConfig = {
-  quickTags: [...logisticsColorQuickTagLabels, "已通知客户", "无人接听", "等待客户回复", "地址已确认", "需再次跟进"],
+  quickTags: [...logisticsFixedQuickTagLabels, "已通知客户", "无人接听", "等待客户回复", "地址已确认", "需再次跟进"],
   cards: [
     { key: "all", label: "全部追踪", isVisible: true, sortOrder: 10, matches: [] },
     { key: "in_transit", label: "运输中", isVisible: true, sortOrder: 20, matches: [] },
@@ -55,9 +74,9 @@ export const defaultLogisticsWorkbenchConfig: LogisticsWorkbenchConfig = {
     { key: "delivered", label: "成功签收", isVisible: true, sortOrder: 40, matches: [] },
     { key: "signed_refund", label: "签收退款", isVisible: true, sortOrder: 45, matches: [] },
     { key: "closed", label: "已结束", isVisible: true, sortOrder: 46, matches: [] },
-    { key: "pending_delivery_confirmation", label: "待确认签收", isVisible: false, sortOrder: 46, matches: [] },
-    { key: "due_today", label: "今日需跟进", isVisible: false, sortOrder: 47, matches: [] },
-    { key: "problem", label: "物流问题", isVisible: false, sortOrder: 48, matches: [] },
+    { key: "pending_delivery_confirmation", label: "待人工确认签收", isVisible: false, sortOrder: 46, matches: [] },
+    { key: "due_today", label: "今日需要跟进", isVisible: false, sortOrder: 47, matches: [] },
+    { key: "problem", label: "物流异常", isVisible: false, sortOrder: 48, matches: [] },
     { key: "followed", label: "已跟进", isVisible: false, sortOrder: 49, matches: [] },
     { key: "unhandled", label: "未处理", isVisible: true, sortOrder: 50, matches: [] },
     { key: "exception", label: "物流异常", isVisible: true, sortOrder: 60, matches: [] },
@@ -72,7 +91,7 @@ export const defaultLogisticsWorkbenchConfig: LogisticsWorkbenchConfig = {
     { key: "other_exception", label: "其他异常", isVisible: true, sortOrder: 150, matches: ["EVENT:OTHER", "TAG:其他"] },
     { key: "critical", label: "跟进已超期", isVisible: true, sortOrder: 160, matches: [] },
     { key: "high", label: "需立即跟进", isVisible: true, sortOrder: 170, matches: [] },
-    { key: "normal", label: "正常运输", isVisible: false, sortOrder: 180, matches: [] },
+    { key: "normal", label: "普通运输", isVisible: false, sortOrder: 180, matches: [] },
   ],
   alertRules: DEFAULT_ALERT_RULES,
   syncIntervalMinutes: 30,
@@ -84,7 +103,7 @@ export function parseLogisticsWorkbenchConfig(raw: { quickTags?: unknown; cards?
   const configuredQuickTags = Array.isArray(raw?.quickTags)
     ? raw.quickTags.filter((item): item is string => typeof item === "string").map((item) => item.trim().slice(0, 30)).filter(Boolean)
     : defaultLogisticsWorkbenchConfig.quickTags;
-  const quickTags = [...new Set([...logisticsColorQuickTagLabels, ...configuredQuickTags])].slice(0, 40);
+  const quickTags = [...new Set([...logisticsFixedQuickTagLabels, ...configuredQuickTags])].slice(0, 40);
   const sourceCards = Array.isArray(raw?.cards) ? raw.cards : defaultLogisticsWorkbenchConfig.cards;
   const byKey = new Map<LogisticsQueueKey, LogisticsWorkbenchCard>();
   for (const item of sourceCards) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { classifyLogisticsColorTags, parseLogisticsColorTagKeys } from "@/lib/logistics-color-tags";
+import { classifyLogisticsColorTags, logisticsColorCardTone, parseLogisticsColorTagKeys } from "@/lib/logistics-color-tags";
 
 describe("logistics color tags", () => {
   it("combines system state, ETA, events, quick tags and post-delivery exceptions", () => {
@@ -49,5 +49,14 @@ describe("logistics color tags", () => {
       now: new Date("2026-08-08T16:30:00.000Z"),
       estimatedDeliveryAt: "2026-08-10T16:10:00.000Z",
     })).not.toContain("delivery_soon");
+  });
+
+  it("colors the shipment card from its highest-priority color tag", () => {
+    expect(logisticsColorCardTone(["out_for_delivery"])).toContain("border-pink-300");
+    expect(logisticsColorCardTone(["ready_for_pickup"])).toContain("border-blue-300");
+    expect(logisticsColorCardTone(["transporting", "post_delivery_exception"])).toContain("border-purple-300");
+    expect(logisticsColorCardTone(["read_no_reply", "delivered"])).toContain("border-emerald-200");
+    expect(logisticsColorCardTone(["post_delivery_exception", "delivered"])).toContain("border-purple-300");
+    expect(logisticsColorCardTone([])).toBe("border-slate-200 bg-white");
   });
 });
