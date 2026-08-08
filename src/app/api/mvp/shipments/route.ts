@@ -20,13 +20,16 @@ export async function GET(request: NextRequest) {
   if (!readAccess.allowed) return NextResponse.json({ error: "FORBIDDEN", reasons: ["PERMISSION_DENIED"] }, { status: 403 });
 
   const pagination = parsePagination(request);
-  const status = request.nextUrl.searchParams.get("status")?.trim().toUpperCase();
+  const statuses = [...new Set((request.nextUrl.searchParams.get("status") ?? "")
+    .split(",")
+    .map((status) => status.trim().toUpperCase())
+    .filter(Boolean))];
   const query = request.nextUrl.searchParams.get("q")?.trim();
   const where: Prisma.ShipmentWhereInput = {
     AND: [
       readAccess.where,
       {
-        ...(status ? { status: status as never } : {}),
+        ...(statuses.length ? { status: { in: statuses as never[] } } : {}),
         ...(query
           ? {
               OR: [

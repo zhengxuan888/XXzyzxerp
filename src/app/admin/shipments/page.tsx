@@ -115,9 +115,9 @@ export default async function ShipmentsPage({
   const overdueOnly = params.overdue === "1";
   const pageSize = [10, 20, 50].includes(Number(params.pageSize)) ? Number(params.pageSize) : 10;
   const requestedPage = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
-  const requestedStatus = Object.values(ShipmentStatus).includes(params.status as ShipmentStatus) && params.status !== "PENDING"
-    ? params.status as ShipmentStatus
-    : null;
+  const requestedStatuses = [...new Set((params.status ?? "").split(","))]
+    .filter((status): status is ShipmentStatus => Object.values(ShipmentStatus).includes(status as ShipmentStatus) && status !== "PENDING");
+  const requestedCreatorMembershipIds = [...new Set((params.creatorMembershipId ?? "").split(",").map((id) => id.trim()).filter(Boolean))];
   const requestedOwnerFilter = params.owner === "mine" || params.owner === "unassigned" || params.owner === "all" ? params.owner : null;
 
   const session = await getSessionFromCookie();
@@ -167,7 +167,7 @@ export default async function ShipmentsPage({
   // after the query because their rules are configuration- and scope-driven.
   const orderWhere: Prisma.OrderWhereInput = {
     ...(params.departmentId ? { departmentId: params.departmentId } : {}),
-    ...(params.creatorMembershipId ? { ownedByMembershipId: params.creatorMembershipId } : {}),
+    ...(requestedCreatorMembershipIds.length ? { ownedByMembershipId: { in: requestedCreatorMembershipIds } } : {}),
     ...(params.destination ? { recipientCountryCode: params.destination } : {}),
     ...(params.managerMembershipId ? { ownerMembership: { is: { managerMembershipId: params.managerMembershipId } } } : {}),
   };
@@ -175,7 +175,7 @@ export default async function ShipmentsPage({
     AND: [
       readAccess.where,
       {
-        status: requestedStatus ?? { not: "PENDING" },
+        status: requestedStatuses.length ? { in: requestedStatuses } : { not: "PENDING" },
         ...(params.carrier ? { carrier: params.carrier } : {}),
         ...(ownerFilter === "mine" ? { ownerMembershipId: membership.id } : {}),
         ...(ownerFilter === "unassigned" ? { ownerMembershipId: null } : {}),
