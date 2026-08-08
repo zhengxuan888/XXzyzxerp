@@ -64,7 +64,6 @@ function hasEquivalentColorStatus(status: string, keys: string[]) {
   if (status === "IN_TRANSIT") return keys.includes("transporting");
   if (status === "OUT_FOR_DELIVERY") return keys.some((key) => key === "out_for_delivery" || key === "ready_for_pickup");
   if (status === "DELIVERED") return keys.includes("delivered");
-  if (status === "EXCEPTION") return keys.some((key) => key === "refused" || key === "delivery_failed");
   return false;
 }
 

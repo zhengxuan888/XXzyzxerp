@@ -27,7 +27,7 @@ const PROVIDER_STATUS_ALIASES: Array<{ pattern: RegExp; eventType: string; statu
   { pattern: /REFUS|拒收/i, eventType: "REFUSED", status: "EXCEPTION", workStatus: "NEEDS_ATTENTION", priority: "HIGH" },
   { pattern: /RETURNED|已退回/i, eventType: "RETURNED", status: "RETURNED", workStatus: "RESOLVED", priority: "HIGH" },
   { pattern: /RETURN|退回/i, eventType: "RETURNING", status: "RETURNING", workStatus: "WAITING_CARRIER", priority: "HIGH" },
-  { pattern: /DELIVERY.?FAIL|FAILED.?DELIVERY|派送失败/i, eventType: "DELIVERY_FAILED", status: "EXCEPTION", workStatus: "NEEDS_ATTENTION", priority: "HIGH" },
+  { pattern: /DELIVERY.?FAIL|FAILED.?DELIVERY|FAILED.?ATTEMPT|DELIVERY.?ATTEMPTED|ATTEMPTED.?DELIVERY|派送失败/i, eventType: "DELIVERY_FAILED", status: "EXCEPTION", workStatus: "NEEDS_ATTENTION", priority: "HIGH" },
   { pattern: /FAIL|EXCEPTION|异常/i, eventType: "EXCEPTION", status: "EXCEPTION", workStatus: "NEEDS_ATTENTION", priority: "HIGH" },
   { pattern: /PICKED.?UP|已发出|揽收/i, eventType: "PICKED_UP", status: "PICKED_UP", workStatus: "MONITORING", priority: "NORMAL" },
   { pattern: /IN.?TRANSIT|运输中|转运/i, eventType: "IN_TRANSIT", status: "IN_TRANSIT", workStatus: "MONITORING", priority: "NORMAL" },
