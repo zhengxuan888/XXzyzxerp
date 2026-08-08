@@ -11,9 +11,9 @@ import { HIGH_PRIORITY_SHIPMENT_EVENTS, shipmentEventMeta } from "@/lib/logistic
 import { prisma } from "@/lib/prisma";
 import { formatMoneyCents } from "@/lib/money";
 import { getServerNowMs } from "@/lib/server-clock";
-import { logisticsQueueKeys, parseLogisticsWorkbenchConfig, type LogisticsQueueKey } from "@/lib/logistics-workbench-config";
+import { logisticsPriorityQuickTags, logisticsQueueKeys, matchesLogisticsQuickTagFilters, parseLogisticsQuickTagFilters, parseLogisticsWorkbenchConfig, type LogisticsQueueKey } from "@/lib/logistics-workbench-config";
 import { loadTrackingTranslations, trackingTextHash } from "@/lib/tracking-translation-service";
-import { classifyLogisticsColorTags, logisticsColorTagKeys, parseLogisticsColorTagKeys } from "@/lib/logistics-color-tags";
+import { classifyLogisticsColorTags, logisticsColorTagKeys, logisticsColorTags, parseLogisticsColorTagKeys } from "@/lib/logistics-color-tags";
 
 type Urgency = "critical" | "high" | "normal";
 
@@ -104,6 +104,7 @@ export default async function ShipmentsPage({
     carrier?: string;
     destination?: string;
     colorTags?: string;
+    quickTags?: string;
     owner?: string;
     page?: string;
     pageSize?: string;
@@ -162,6 +163,7 @@ export default async function ShipmentsPage({
   ]);
   if (!readAccess.allowed) redirect("/admin");
   const workbenchConfig = parseLogisticsWorkbenchConfig(workbenchSetting);
+  const requestedQuickTags = parseLogisticsQuickTagFilters(params.quickTags, workbenchConfig.quickTags);
   // 所有售后人员默认先看自己认领的任务；负责人可主动切换到全部或未分配。
   const ownerFilter = requestedOwnerFilter === "all" && !canReassign ? "mine" : (requestedOwnerFilter ?? "mine");
 
@@ -346,9 +348,7 @@ export default async function ShipmentsPage({
     ].filter(Boolean).join(" ").toLocaleLowerCase();
     return searchable.includes(keyword);
   });
-  const colorTagCounts = Object.fromEntries(logisticsColorTagKeys.map((key) => [key, baseFiltered.filter((row) => row.colorTagKeys.includes(key)).length]));
-  const colorFiltered = baseFiltered.filter((row) => !requestedColorTags.length || requestedColorTags.some((key) => row.colorTagKeys.includes(key)));
-  const matchesCard = (row: (typeof colorFiltered)[number], key: LogisticsQueueKey) => {
+  const matchesCard = (row: (typeof baseFiltered)[number], key: LogisticsQueueKey) => {
     const isConfirmedDelivery = row.status === "DELIVERED" && row.order.exceptionNote === "人工确认成功签收";
     const isSignedRefund = row.order.exceptionNote === "签收后退款";
     const isClosed = row.status === "CLOSED";
@@ -380,6 +380,26 @@ export default async function ShipmentsPage({
       queueSignals: row.canViewTimeline ? (queueSignals.get(row.id) ?? new Set<string>()) : new Set<string>(),
     }, key, configuredMatches);
   };
+  const colorKeyByQuickTag = new Map<string, (typeof logisticsColorTags)[number]["key"]>(
+    logisticsColorTags.map((tag) => [tag.label, tag.key]),
+  );
+  const priorityQueueByQuickTag = new Map(
+    logisticsPriorityQuickTags
+      .filter((tag) => !colorKeyByQuickTag.has(tag.label))
+      .map((tag) => [tag.label, tag.key] as const),
+  );
+  const quickTagFiltered = baseFiltered.filter((row) => {
+    if (!requestedQuickTags.length) return true;
+    if (row.canViewTimeline && matchesLogisticsQuickTagFilters(queueSignals.get(row.id) ?? [], requestedQuickTags)) return true;
+    return requestedQuickTags.some((tag) => {
+      const colorKey = colorKeyByQuickTag.get(tag);
+      if (colorKey) return row.colorTagKeys.includes(colorKey);
+      const priorityQueue = priorityQueueByQuickTag.get(tag);
+      return priorityQueue ? matchesCard(row, priorityQueue) : false;
+    });
+  });
+  const colorTagCounts = Object.fromEntries(logisticsColorTagKeys.map((key) => [key, quickTagFiltered.filter((row) => row.colorTagKeys.includes(key)).length]));
+  const colorFiltered = quickTagFiltered.filter((row) => !requestedColorTags.length || requestedColorTags.some((key) => row.colorTagKeys.includes(key)));
   const queueCounts = Object.fromEntries(
     workbenchConfig.cards.map((card) => [card.key, colorFiltered.filter((row) => matchesCard(row, card.key)).length]),
   ) as Partial<Record<LogisticsQueueKey, number>>;

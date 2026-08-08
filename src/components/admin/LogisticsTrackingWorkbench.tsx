@@ -1,12 +1,13 @@
 "use client";
 
-import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ExternalLink, Mail, MessageCircle, OctagonX, Package, RefreshCw, Save, Search, Truck, UserRound, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ExternalLink, Mail, MessageCircle, OctagonX, Package, RefreshCw, Save, Search, Tags, Truck, UserRound, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { logisticsPriorityQuickTags, logisticsQueueCardsForDisplay, type LogisticsQueueKey, type LogisticsWorkbenchConfig } from "@/lib/logistics-workbench-config";
+import { logisticsPriorityQuickTags, logisticsQueueCardGroups, logisticsQuickTagFilterLimit, logisticsQuickTagGroups, parseLogisticsQuickTagFilters, type LogisticsQueueKey, type LogisticsWorkbenchConfig } from "@/lib/logistics-workbench-config";
 import { translateTrackingDescription } from "@/lib/tracking-translation";
-import { logisticsColorCardTone, logisticsColorTagDefinition, logisticsColorTags, parseLogisticsColorTagKeys } from "@/lib/logistics-color-tags";
+import { logisticsColorCardTone, logisticsColorTagDefinition, logisticsColorTags, parseLogisticsColorTagKeys, type LogisticsColorTagKey } from "@/lib/logistics-color-tags";
+import { isShipmentSyncAllowed } from "@/lib/logistics/shipment-sync-policy";
 
 type Annotation = { note: string | null; tags: string[]; isHandled: boolean; handledAt: string | null; updatedAt: string; handledByMembership?: { user?: { fullName: string | null; username: string } } | null };
 type TrackingEvent = { id: string; occurredAt: string; eventType: string; statusMilestone: string | null; location: string | null; memo: string | null; memoTranslation: string | null; annotation: Annotation | null };
@@ -58,6 +59,53 @@ function colorTagTone(value: string) {
 function quickTagTone(label: string) {
   return logisticsColorTags.find((definition) => definition.tags.some((tag) => tag === label))?.tone
     ?? logisticsPriorityQuickTags.find((definition) => definition.label === label)?.tone;
+}
+
+function QuickTagButtons({
+  tags,
+  selectedTags,
+  onToggle,
+  disabled = false,
+  maxSelected,
+  dense = false,
+  ariaLabel,
+}: {
+  tags: Iterable<string>;
+  selectedTags: string[];
+  onToggle: (tag: string) => void;
+  disabled?: boolean;
+  maxSelected?: number;
+  dense?: boolean;
+  ariaLabel: string;
+}) {
+  const groups = logisticsQuickTagGroups(tags);
+  const selectionAtLimit = maxSelected !== undefined && selectedTags.length >= maxSelected;
+
+  return <div role="group" aria-label={ariaLabel} className="grid gap-2.5 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
+    {groups.map((group) => <div key={group.key} role="group" aria-label={group.label} className="min-w-0">
+      <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-slate-500">{group.label}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {group.tags.map((tag) => {
+          const active = selectedTags.includes(tag);
+          const tagTone = quickTagTone(tag);
+          const disabledByLimit = !active && selectionAtLimit;
+          return <button
+            key={tag}
+            type="button"
+            disabled={disabled || disabledByLimit}
+            aria-pressed={active}
+            aria-label={`${active ? "取消选择" : "选择"}${tag}`}
+            title={disabledByLimit ? `最多选择 ${maxSelected} 个标签` : undefined}
+            onClick={() => onToggle(tag)}
+            className={`inline-flex items-center gap-1 rounded-full border font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-40 ${dense ? "min-h-7 px-2 py-0.5 text-[11px]" : "min-h-9 px-2.5 py-1 text-xs"} ${tagTone ? `${tagTone} ${active ? "ring-2 ring-cyan-700 ring-offset-1" : "hover:brightness-95"}` : active ? "border-cyan-600 bg-cyan-50 text-cyan-900 ring-2 ring-cyan-700 ring-offset-1" : "border-slate-200 bg-white text-slate-600 hover:border-cyan-300 hover:text-cyan-800"}`}
+          >
+            {active && <CheckCircle2 size={dense ? 11 : 12} aria-hidden="true" />}
+            <span>{tag}</span>
+          </button>;
+        })}
+      </div>
+    </div>)}
+  </div>;
 }
 
 function hasEquivalentColorStatus(status: string, keys: string[]) {
@@ -202,6 +250,8 @@ export default function LogisticsTrackingWorkbench({
   const creatorMembershipIds = (urlSearchParams.get("creatorMembershipId") ?? "").split(",").filter(Boolean);
   const shipmentStatusesSelected = (urlSearchParams.get("status") ?? "").split(",").filter(Boolean);
   const selectedColorTags = parseLogisticsColorTagKeys(urlSearchParams.get("colorTags"));
+  const selectedQuickTags = parseLogisticsQuickTagFilters(urlSearchParams.get("quickTags"), config.quickTags);
+  const [quickTagFiltersOpen, setQuickTagFiltersOpen] = useState(selectedQuickTags.length > 0);
   const carrier = urlSearchParams.get("carrier") ?? "";
   const destination = urlSearchParams.get("destination") ?? "";
   const ownerQueue = (urlSearchParams.get("owner") ?? "mine") as "all" | "mine" | "unassigned";
@@ -265,11 +315,30 @@ export default function LogisticsTrackingWorkbench({
     if (resetPage) next.delete("page");
     router.replace(`/admin/shipments${next.size ? `?${next.toString()}` : ""}`);
   };
+  const toggleColorTagFilter = (key: LogisticsColorTagKey) => {
+    const next = selectedColorTags.includes(key)
+      ? selectedColorTags.filter((item) => item !== key)
+      : [...selectedColorTags, key];
+    replaceQuery({ colorTags: next.join(",") || null });
+  };
+  const toggleQuickTagFilter = (tag: string) => {
+    const next = selectedQuickTags.includes(tag)
+      ? selectedQuickTags.filter((item) => item !== tag)
+      : [...selectedQuickTags, tag].slice(0, logisticsQuickTagFilterLimit);
+    const updates: Record<string, string | null> = { quickTags: next.join(",") || null };
+    if (!selectedQuickTags.length && next.length && !urlSearchParams.has("queue")) updates.queue = "all";
+    replaceQuery(updates);
+  };
   const pagedRows = rows;
-  const syncableRows = pagedRows.filter((row) => row.canAnnotate && row.status !== "CLOSED");
+  const annotatableRows = pagedRows.filter((row) => row.canAnnotate);
+  const syncableRows = annotatableRows.filter((row) => isShipmentSyncAllowed({ status: row.status, orderExceptionNote: row.order.exceptionNote }));
+  const skippedFinishedRows = annotatableRows.length - syncableRows.length;
   const countFor = (key: LogisticsQueueKey) => queueCounts[key] ?? 0;
   const toneFor = (key: LogisticsQueueKey) => key === "critical" || key === "problem" || key === "signed_refund" ? "border-rose-200 bg-rose-50 text-rose-900" : key === "refused" ? "border-red-300 bg-red-50 text-red-900" : key === "delivery_failed" || key === "unread_no_reply" || key === "read_no_reply" || key === "pending_delivery_confirmation" || key === "due_today" || key === "high" ? "border-yellow-300 bg-yellow-50 text-yellow-950" : key === "out_for_delivery" ? "border-pink-300 bg-pink-50 text-pink-900" : key === "ready_for_pickup" ? "border-blue-300 bg-blue-50 text-blue-900" : key === "delivered" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : key === "unhandled" || key === "returning" ? "border-violet-200 bg-violet-50 text-violet-900" : "border-slate-200 bg-white text-slate-900";
-  const queueCards = logisticsQueueCardsForDisplay(config).map((card) => ({ ...card, count: countFor(card.key), tone: toneFor(card.key) }));
+  const queueGroups = logisticsQueueCardGroups(config).map((group) => ({
+    ...group,
+    cards: group.cards.map((card) => ({ ...card, count: countFor(card.key), tone: toneFor(card.key) })),
+  }));
   const { departments, managers, creators, statuses: shipmentStatuses, carriers, destinations, colorTagCounts } = filterOptions;
   const visibleCreators = creators.filter((creator) => (!departmentId || creator.departmentId === departmentId) && (!managerMembershipId || creator.managerMembershipId === managerMembershipId));
   const creatorName = (id: string) => creators.find((creator) => creator.id === id)?.name ?? id;
@@ -317,7 +386,7 @@ export default function LogisticsTrackingWorkbench({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div><div className="flex items-center gap-2 text-violet-700"><Truck size={20} /><span className="text-sm font-semibold">物流与售后</span></div><h1 className="mt-2 text-2xl font-bold text-slate-950">物流追踪工作台</h1><p className="mt-1 text-sm text-slate-500">集中查看客户、订单、产品与物流轨迹；每条轨迹都可以单独备注、打标签和标记处理完成。</p></div>
         <div className="flex w-full flex-col items-stretch gap-2 sm:flex-row sm:items-center lg:max-w-2xl lg:justify-end">
-          {syncableRows.length > 0 && <div className="flex flex-col items-start gap-1"><button type="button" disabled={syncingList} onClick={() => void syncCurrentList()} className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 text-sm font-semibold text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"><RefreshCw size={16} className={syncingList ? "animate-spin" : ""} />{syncingList ? `同步中 ${syncProgress}/${syncableRows.length}` : "刷新 / 同步"}</button>{syncMessage && <span className={`max-w-72 text-xs ${syncMessage.includes("失败") ? "text-amber-700" : "text-emerald-700"}`}>{syncMessage}</span>}</div>}
+          {annotatableRows.length > 0 && <div className="flex flex-col items-start gap-1"><button type="button" disabled={syncingList || !syncableRows.length} onClick={() => void syncCurrentList()} title="只同步当前页仍在跟进的订单" className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 text-sm font-semibold text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"><RefreshCw size={16} className={syncingList ? "animate-spin" : ""} />{syncingList ? `同步中 ${syncProgress}/${syncableRows.length}` : syncableRows.length ? `刷新在跟进 ${syncableRows.length} 单` : "本页无需同步"}</button>{skippedFinishedRows > 0 && <span className="max-w-72 text-xs font-medium text-slate-600">已结束或已确认签收，自动跳过 {skippedFinishedRows} 单</span>}{syncMessage && <span className={`max-w-72 text-xs ${syncMessage.includes("失败") ? "text-amber-700" : "text-emerald-700"}`}>{syncMessage}</span>}</div>}
           <form onSubmit={(event) => { event.preventDefault(); replaceQuery({ q: keyword.trim() || null }); }} className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 focus-within:border-violet-400 focus-within:ring-4 focus-within:ring-violet-100"><Search size={17} className="text-slate-400" /><input value={keyword} onChange={(event) => setKeyword(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder={canViewTrackingNo ? "订单号、物流单号、客户、销售、产品" : "订单号、客户、销售、产品"} /><button type="submit" className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white">搜索</button></form>
         </div>
       </div>
@@ -331,27 +400,75 @@ export default function LogisticsTrackingWorkbench({
       <label className="grid gap-1 text-xs font-medium text-slate-500">物流商<select value={carrier} onChange={(event) => replaceQuery({ carrier: event.target.value || null })} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部物流商</option>{carriers.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
       <label className="grid gap-1 text-xs font-medium text-slate-500">目的地<select value={destination} onChange={(event) => replaceQuery({ destination: event.target.value || null })} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="">全部目的地</option>{destinations.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
     </section>
-    <section aria-label="物流快捷筛选" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8">
-      {queueCards.map((card) => <button key={card.key} type="button" aria-pressed={queue === card.key} onClick={() => replaceQuery({ queue: card.key })} className={`flex min-h-14 items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 ${card.tone} ${queue === card.key ? "ring-2 ring-amber-500 ring-offset-2" : "hover:-translate-y-0.5"}`}><span className="min-w-0 text-xs font-semibold leading-tight">{card.label}</span><strong className="shrink-0 text-xl leading-none">{card.count}</strong></button>)}
+    <section aria-labelledby="color-condition-heading" className="rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm sm:px-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <h2 id="color-condition-heading" className="text-sm font-bold text-slate-800">颜色看货况</h2>
+          <p className="text-xs text-slate-500">可多选，匹配任一货况</p>
+        </div>
+        {selectedColorTags.length > 0 && <button type="button" onClick={() => replaceQuery({ colorTags: null })} className="min-h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-600 transition hover:border-cyan-400 hover:text-cyan-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600">清空货况</button>}
+      </div>
+      <div role="group" aria-label="按颜色货况筛选" className="mt-2 flex flex-wrap gap-1.5">
+        {logisticsColorTags.map((tag) => {
+          const active = selectedColorTags.includes(tag.key);
+          const count = colorTagCounts[tag.key] ?? 0;
+          return <button key={tag.key} type="button" aria-pressed={active} aria-label={`${active ? "取消选择" : "选择"}${tag.label}，${count} 单`} onClick={() => toggleColorTagFilter(tag.key)} className={`inline-flex min-h-9 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600 focus-visible:ring-offset-1 ${tag.tone} ${active ? "ring-2 ring-cyan-700 ring-offset-1" : "hover:brightness-95"}`}>
+            {active && <CheckCircle2 size={12} aria-hidden="true" />}
+            <span>{tag.label}</span>
+            <span aria-hidden="true" className="rounded-full bg-white/70 px-1.5 py-0.5 text-[10px] tabular-nums">{count}</span>
+          </button>;
+        })}
+      </div>
+    </section>
+    <section aria-label="物流快捷筛选" className="grid gap-3 lg:grid-cols-3">
+      {queueGroups.map((group) => <section key={group.key} aria-labelledby={`queue-group-${group.key}`} className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50/70 p-3 shadow-sm">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h2 id={`queue-group-${group.key}`} className="text-xs font-bold tracking-wide text-slate-700">{group.label}</h2>
+            <p className="mt-0.5 text-[11px] text-slate-600">{group.key === "progress" ? "看包裹当前进度" : group.key === "follow_up" ? "先处理今天任务" : "排查问题与售后"}</p>
+          </div>
+          <span className="text-[11px] font-medium text-slate-600">{group.cards.length} 项</span>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3">
+          {group.cards.map((card) => <button key={card.key} type="button" aria-pressed={queue === card.key} aria-label={`${card.label} ${card.count}`} onClick={() => replaceQuery({ queue: card.key })} className={`flex min-h-14 min-w-0 items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600 focus-visible:ring-offset-2 ${card.tone} ${queue === card.key ? "ring-2 ring-cyan-700 ring-offset-2" : "hover:-translate-y-0.5"}`}><span className="min-w-0 text-xs font-semibold leading-tight">{card.label}</span><strong className="shrink-0 text-lg leading-none tabular-nums">{card.count}</strong></button>)}
+        </div>
+      </section>)}
     </section>
     {!canViewTrackingNo && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">当前角色未配置“查看物流单号”权限，页面已隐藏物流单号。</p>}
     {!canViewTimeline && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">当前角色未配置“查看物流轨迹”权限，页面已隐藏全部轨迹。</p>}
     {canViewTimeline && !canAnnotate && <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">当前角色可查看物流轨迹，但未配置“处理物流轨迹”权限，备注和完成按钮已隐藏。</p>}
-    {canAnnotate && <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-3 text-sm">
+    {canViewTimeline && <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-3 text-sm">
       <div className="flex flex-wrap items-center gap-2">
+        {canAnnotate && <>
         <span className="font-semibold text-slate-700">跟进状态</span>
         {([["unhandled", "待跟进"], ["followed", "已跟进"]] as const).map(([value, label]) => <button key={value} type="button" onClick={() => replaceQuery({ queue: value })} className={`rounded-lg px-3 py-1.5 font-medium ${queue === value ? "bg-violet-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{label} {countFor(value)}</button>)}
         <span className="ml-2 font-semibold text-slate-700">任务范围</span>
         {canReassign && <button type="button" onClick={() => replaceQuery({ owner: "all" })} className={`rounded-lg px-3 py-1.5 font-medium ${ownerQueue === "all" ? "bg-violet-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>全部</button>}
         <button type="button" onClick={() => replaceQuery({ owner: "mine" })} className={`rounded-lg px-3 py-1.5 font-medium ${ownerQueue === "mine" ? "bg-violet-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>我的待办</button>
         <button type="button" onClick={() => replaceQuery({ owner: "unassigned" })} className={`rounded-lg px-3 py-1.5 font-medium ${ownerQueue === "unassigned" ? "bg-violet-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>未分配</button>
+        </>}
+        <button type="button" aria-expanded={quickTagFiltersOpen} aria-controls="logistics-quick-tag-filter-panel" onClick={() => setQuickTagFiltersOpen((current) => !current)} className={`inline-flex min-h-9 items-center gap-1.5 rounded-lg border px-3 py-1.5 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600 ${quickTagFiltersOpen || selectedQuickTags.length ? "border-cyan-300 bg-cyan-50 text-cyan-900" : "border-slate-200 bg-white text-slate-600 hover:border-cyan-300 hover:text-cyan-800"}`}>
+          <Tags size={14} aria-hidden="true" />快捷标签
+          {selectedQuickTags.length > 0 && <span aria-label={`已选 ${selectedQuickTags.length} 个`} className="rounded-full bg-cyan-800 px-1.5 py-0.5 text-[10px] leading-none text-white">{selectedQuickTags.length}</span>}
+          <ChevronDown size={14} aria-hidden="true" className={`transition ${quickTagFiltersOpen ? "rotate-180" : ""}`} />
+        </button>
       </div>
+      {quickTagFiltersOpen && <div id="logistics-quick-tag-filter-panel" className="border-t border-slate-200 pt-3">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-slate-500">多选时匹配任一标签，最多选择 {logisticsQuickTagFilterLimit} 个</p>
+          <div className="flex items-center gap-2">
+            {selectedQuickTags.length >= logisticsQuickTagFilterLimit && <span role="status" className="text-xs font-semibold text-amber-700">已达选择上限</span>}
+            {selectedQuickTags.length > 0 && <button type="button" onClick={() => replaceQuery({ quickTags: null })} className="min-h-8 rounded-lg border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-600 transition hover:border-cyan-400 hover:text-cyan-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600">清空标签</button>}
+          </div>
+        </div>
+        <QuickTagButtons tags={config.quickTags} selectedTags={selectedQuickTags} onToggle={toggleQuickTagFilter} maxSelected={logisticsQuickTagFilterLimit} ariaLabel="快捷标签筛选" />
+      </div>}
     </div>}
     {pagedRows.map((row) => { const isOpen = expanded[row.id] ?? false; return <article key={row.id} className={`overflow-hidden rounded-2xl border shadow-sm transition-colors ${logisticsColorCardTone(row.colorTagKeys)}`}>
       <div className="grid gap-4 p-4 xl:grid-cols-[1.2fr_1.3fr_1fr_auto] xl:items-center">
-        <div><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.urgency === "critical" ? "bg-rose-50 text-rose-800" : row.urgency === "high" ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-800"}`}>{row.urgencyLabel}</span>{!hasEquivalentColorStatus(row.status, row.colorTagKeys) && <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${trackingStatusTone(row.status)}`}>{trackingStatusLabel(row.status)}</span>}{row.colorTagKeys.map((key) => <span key={key} className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${colorTagTone(key)}`}>{colorTagLabel(key)}</span>)}{row.priorityTag !== "-" && <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">{row.priorityTag}</span>}</div><div className="mt-2 flex flex-wrap items-center gap-2"><p className="font-mono text-sm font-semibold text-slate-900">{row.trackingNo || "暂无物流单号"}</p>{row.trackingNo && <a href={`https://www.ship24.com/tracking?p=${encodeURIComponent(row.trackingNo)}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-violet-700 hover:underline">Ship24 查看<ExternalLink size={12} /></a>}</div><p className="mt-1 text-xs text-slate-500">{row.carrier || "未填写物流商"} · {row.order.recipientCountryCode || "目的地未知"} · {row.dueStatus}</p></div>
-        <div><div className="flex flex-wrap items-center gap-2"><Link href={`/admin/orders/${row.order.id}`} className="font-semibold text-violet-700 hover:underline">{row.order.orderNo}</Link><span className="rounded-md bg-slate-100 px-2 py-1 font-mono text-xs font-medium text-slate-700">窗口 ID：{row.order.shopId || "未填写"}</span></div><p className="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-slate-800"><MessageCircle size={14} className="text-emerald-600" />客户 WhatsApp：{row.order.customerWhatsapp || "未填写"}</p><div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span className="inline-flex items-center gap-1"><Mail size={13} />{row.order.recipientEmail || "-"}</span><span>{row.order.recipientPhone || "-"}</span></div></div>
-        <div><div className="flex items-start gap-2"><Package size={16} className="mt-0.5 shrink-0 text-slate-400" /><div className="text-sm text-slate-700">{row.order.items.map((item) => `${item.productName} × ${item.quantity}`).join("、") || "未记录产品"}</div></div><div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500"><span>COD：<strong className="text-slate-800">{row.order.codAmountLabel}</strong></span><span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-1 font-medium text-violet-700"><UserRound size={13} />销售：{row.order.creatorUser.fullName || row.order.creatorUser.username}</span></div></div>
+        <div><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.urgency === "critical" ? "bg-rose-50 text-rose-800" : row.urgency === "high" ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-800"}`}>{row.urgencyLabel}</span>{!hasEquivalentColorStatus(row.status, row.colorTagKeys) && <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${trackingStatusTone(row.status)}`}>{trackingStatusLabel(row.status)}</span>}{row.colorTagKeys.map((key) => <span key={key} className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${colorTagTone(key)}`}>{colorTagLabel(key)}</span>)}{row.priorityTag !== "-" && <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">{row.priorityTag}</span>}</div><div className="mt-2 flex flex-wrap items-center gap-2"><p className="font-mono text-sm font-semibold text-slate-900">{row.trackingNo || "暂无物流单号"}</p>{row.trackingNo && <a href={`https://www.ship24.com/tracking?p=${encodeURIComponent(row.trackingNo)}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-violet-700 hover:underline">Ship24 查看<ExternalLink size={12} /></a>}</div><p className="mt-1 text-xs text-slate-600">{row.carrier || "未填写物流商"} · {row.order.recipientCountryCode || "目的地未知"} · {row.dueStatus}</p></div>
+        <div><div className="flex flex-wrap items-center gap-2"><Link href={`/admin/orders/${row.order.id}`} className="font-semibold text-violet-700 hover:underline">{row.order.orderNo}</Link><span className="rounded-md bg-slate-100 px-2 py-1 font-mono text-xs font-medium text-slate-700">窗口 ID：{row.order.shopId || "未填写"}</span></div><p className="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-slate-800"><MessageCircle size={14} className="text-emerald-600" />客户 WhatsApp：{row.order.customerWhatsapp || "未填写"}</p><div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600"><span className="inline-flex items-center gap-1"><Mail size={13} />{row.order.recipientEmail || "-"}</span><span>{row.order.recipientPhone || "-"}</span></div></div>
+        <div><div className="flex items-start gap-2"><Package size={16} className="mt-0.5 shrink-0 text-slate-400" /><div className="text-sm text-slate-700">{row.order.items.map((item) => `${item.productName} × ${item.quantity}`).join("、") || "未记录产品"}</div></div><div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600"><span>COD：<strong className="text-slate-800">{row.order.codAmountLabel}</strong></span><span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-1 font-medium text-violet-700"><UserRound size={13} />销售：{row.order.creatorUser.fullName || row.order.creatorUser.username}</span></div></div>
         <div className="flex flex-col gap-2">
           {row.canAnnotate && <ClaimButton shipmentId={row.id} expectedUpdatedAt={row.updatedAt} currentMembershipId={currentMembershipId} ownerId={claimedOwners[row.id] ?? row.followUpOwner?.id ?? null} ownerName={claimedOwners[row.id] ? "我" : row.followUpOwner?.user.fullName || row.followUpOwner?.user.username || null} canReassign={canReassign} onClaimed={() => setClaimedOwners((current) => ({ ...current, [row.id]: currentMembershipId }))} />}
           {row.canAnnotate && row.status === "DELIVERED" && row.order.exceptionNote !== "人工确认成功签收" && row.order.exceptionNote !== "签收后退款" && <button type="button" disabled={confirmingDeliveredId === row.id} onClick={() => void confirmDelivered(row)} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"><CheckCircle2 size={16} />{confirmingDeliveredId === row.id ? "确认中…" : "人工确认签收"}</button>}
@@ -361,7 +478,7 @@ export default function LogisticsTrackingWorkbench({
           {row.canViewTimeline && <button type="button" onClick={() => setExpanded((value) => ({ ...value, [row.id]: !isOpen }))} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">{isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}{isOpen ? "收起轨迹" : `展开轨迹 ${row.eventTotal}`}</button>}
         </div>
       </div>
-      {row.canViewTimeline && row.events.length > 0 && <TrackingEventsPanel shipmentId={row.id} initialEvents={row.events} initialTotal={row.eventTotal} expanded={isOpen} canAnnotate={row.canAnnotate} canSync={row.canAnnotate} quickTags={config.quickTags} />}
+      {row.canViewTimeline && row.events.length > 0 && <TrackingEventsPanel shipmentId={row.id} initialEvents={row.events} initialTotal={row.eventTotal} expanded={isOpen} canAnnotate={row.canAnnotate} canSync={row.canAnnotate && isShipmentSyncAllowed({ status: row.status, orderExceptionNote: row.order.exceptionNote })} quickTags={config.quickTags} />}
     </article>; })}
     {!rows.length && <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center text-sm text-slate-500">没有找到匹配的物流订单。</div>}
     {pagination.total > 0 && <footer className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2"><span>共 {pagination.total} 条</span><select aria-label="每页条数" value={pagination.pageSize} onChange={(event) => replaceQuery({ pageSize: event.target.value })} className="h-9 rounded-lg border border-slate-200 px-2"><option value={10}>10 / 页</option><option value={20}>20 / 页</option><option value={50}>50 / 页</option></select></div><div className="flex items-center gap-2"><span>第 {pagination.page}/{pagination.pageCount} 页</span><button type="button" disabled={pagination.page <= 1} onClick={() => replaceQuery({ page: String(pagination.page - 1) }, false)} className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 disabled:opacity-40"><ChevronLeft size={15} />上一页</button><button type="button" disabled={pagination.page >= pagination.pageCount} onClick={() => replaceQuery({ page: String(pagination.page + 1) }, false)} className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 disabled:opacity-40">下一页<ChevronRight size={15} /></button></div></footer>}
@@ -518,7 +635,7 @@ function TrackingEventsPanel({
 
   const visibleEvents = expanded ? events : events.slice(0, 1);
   return <div className="border-t border-slate-200 bg-slate-50/60 p-4">
-    <div className="mb-2 text-xs font-medium text-slate-500">{expanded ? loading ? `正在加载全部 ${total} 条轨迹…` : `共 ${events.length} 条轨迹，轨迹区域可独立滚动` : "最新物流轨迹"}</div>
+    <div className="mb-2 text-xs font-medium text-slate-600">{expanded ? loading ? `正在加载全部 ${total} 条轨迹…` : `共 ${events.length} 条轨迹，轨迹区域可独立滚动` : "最新物流轨迹"}</div>
     {expanded && canAnnotate && <div className="mb-3 rounded-xl border border-violet-200 bg-violet-50 p-3">
       <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-violet-900">
         <span>批量处理</span><span className="rounded-full bg-white px-2 py-0.5 text-xs">已选 {selected.length} 条</span>
@@ -593,6 +710,6 @@ function EventEditor({ shipmentId, event, canAnnotate, quickTags, allowBatchSele
   return <section className={`rounded-xl border p-4 ${isHandled ? "border-emerald-200 bg-emerald-50/50" : "border-slate-200 bg-white"}`}>
     {canAnnotate && event.memo && (translationEditing ? <div className="mb-2 flex max-w-3xl flex-wrap items-center gap-2"><input value={manualTranslation} onChange={(inputEvent) => setManualTranslation(inputEvent.target.value)} maxLength={1000} className="h-9 min-w-64 flex-1 rounded-lg border border-violet-200 bg-white px-3 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100" placeholder="人工核对后的中文结果" /><button type="button" disabled={saving} onClick={() => void saveTranslation()} className="h-9 rounded-lg bg-violet-700 px-3 text-xs font-semibold text-white disabled:opacity-50">保存中文</button>{event.memoTranslation && <button type="button" onClick={() => { setManualTranslation(event.memoTranslation ?? ""); setTranslationEditing(false); }} className="h-9 px-2 text-xs text-slate-500">取消</button>}{translationMessage && <span className="text-xs text-violet-700">{translationMessage}</span>}</div> : <div className="mb-2 flex max-w-3xl items-center gap-2 text-sm"><span className="truncate text-violet-700"><strong>人工核对：</strong>{manualTranslation}</span><button type="button" onClick={() => setTranslationEditing(true)} className="shrink-0 text-xs font-semibold text-violet-700 hover:underline">修改</button></div>)}
     {canAnnotate && allowBatchSelection && <label className="mb-2 inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-600"><input type="checkbox" checked={selected} onChange={onToggleSelection} aria-label={`选择轨迹 ${event.eventType}`} className="size-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500" />加入批量处理</label>}
-    <div className="flex flex-col gap-3 lg:flex-row lg:items-start"><span className={`mt-1 size-3 shrink-0 rounded-full ${isHandled ? "bg-emerald-500" : /FAILED|EXCEPTION|ADDRESS|RETURN|REFUS/i.test(event.eventType) ? "bg-rose-500" : "bg-violet-500"}`} /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><strong className="text-sm text-slate-900">{eventLabel}</strong>{milestoneLabel && milestoneLabel !== eventLabel && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{milestoneLabel}</span>}<span className="text-xs text-slate-500">{new Date(event.occurredAt).toLocaleString("zh-CN")} · {event.location || "位置未知"}</span></div><p className="mt-1 text-sm font-medium text-slate-700">{event.memo || "暂无轨迹原文"}</p>{memoLabel !== event.memo && <p className="mt-1 text-sm text-violet-700"><span className="font-semibold">中文：</span>{memoLabel}</p>}{canAnnotate ? <><div className="mt-3 grid gap-2 lg:grid-cols-[1fr_0.7fr_auto]"><input value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} className="h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100" placeholder="记录本次联系客户的结果或处理备注" /><input value={tagsText} onChange={(e) => setTagsText(e.target.value)} className="h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100" placeholder="标签，用逗号分隔，如：已通知、无人接听" /><div className="flex gap-2"><button type="button" disabled={saving} onClick={() => save()} className="inline-flex h-10 items-center gap-1 rounded-lg bg-violet-700 px-3 text-sm font-semibold text-white disabled:opacity-50"><Save size={14} />保存</button><button type="button" disabled={saving} onClick={() => save(!isHandled)} className={`inline-flex h-10 items-center gap-1 rounded-lg px-3 text-sm font-semibold ${isHandled ? "bg-slate-200 text-slate-700" : "bg-emerald-700 text-white"}`}><CheckCircle2 size={14} />{isHandled ? "重新处理" : "标记完成"}</button></div></div><div className="mt-2 flex flex-wrap gap-2"><span className="text-xs font-medium text-slate-500">快捷标签：</span>{quickTags.map((tag) => { const tagTone = quickTagTone(tag); const active = currentTags.includes(tag); return <button key={tag} type="button" disabled={saving} aria-pressed={active} onClick={() => toggleQuickTag(tag)} className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition ${tagTone ? `${tagTone} ${active ? "ring-2 ring-violet-300 ring-offset-1" : "hover:brightness-95"}` : active ? "border-violet-400 bg-violet-50 text-violet-700" : "border-slate-200 bg-white text-slate-600 hover:border-violet-300"}`}>{tag}</button>; })}</div></> : <p className="mt-3 text-xs text-slate-500">当前角色仅可查看，不能填写备注或处理轨迹。</p>}<div className="mt-2 flex flex-wrap items-center gap-2 text-xs">{message && <span className={message === "已保存" ? "text-emerald-600" : "text-rose-600"}>{message}</span>}{handledBy && <span className="text-slate-500">处理人：{handledBy.fullName || handledBy.username}</span>}{handledAt && <span className="text-slate-500">处理时间：{new Date(handledAt).toLocaleString("zh-CN")}</span>}</div></div></div>
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-start"><span className={`mt-1 size-3 shrink-0 rounded-full ${isHandled ? "bg-emerald-500" : /FAILED|EXCEPTION|ADDRESS|RETURN|REFUS/i.test(event.eventType) ? "bg-rose-500" : "bg-violet-500"}`} /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><strong className="text-sm text-slate-900">{eventLabel}</strong>{milestoneLabel && milestoneLabel !== eventLabel && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{milestoneLabel}</span>}<span className="text-xs text-slate-500">{new Date(event.occurredAt).toLocaleString("zh-CN")} · {event.location || "位置未知"}</span></div><p className="mt-1 text-sm font-medium text-slate-700">{event.memo || "暂无轨迹原文"}</p>{memoLabel !== event.memo && <p className="mt-1 text-sm text-violet-700"><span className="font-semibold">中文：</span>{memoLabel}</p>}{canAnnotate ? <><div className="mt-3 grid gap-2 lg:grid-cols-[1fr_0.7fr_auto]"><input value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} className="h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100" placeholder="记录本次联系客户的结果或处理备注" /><input value={tagsText} onChange={(e) => setTagsText(e.target.value)} className="h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100" placeholder="标签，用逗号分隔，如：已通知、无人接听" /><div className="flex gap-2"><button type="button" disabled={saving} onClick={() => save()} className="inline-flex h-10 items-center gap-1 rounded-lg bg-violet-700 px-3 text-sm font-semibold text-white disabled:opacity-50"><Save size={14} />保存</button><button type="button" disabled={saving} onClick={() => save(!isHandled)} className={`inline-flex h-10 items-center gap-1 rounded-lg px-3 text-sm font-semibold ${isHandled ? "bg-slate-200 text-slate-700" : "bg-emerald-700 text-white"}`}><CheckCircle2 size={14} />{isHandled ? "重新处理" : "标记完成"}</button></div></div><div className="mt-2 rounded-lg border border-slate-200 bg-slate-50/70 p-2"><div className="mb-1.5 flex items-center justify-between gap-2"><span className="text-xs font-semibold text-slate-600">快捷标签</span><span className="text-[11px] font-medium text-slate-600">可多选</span></div><QuickTagButtons tags={quickTags} selectedTags={currentTags} onToggle={toggleQuickTag} disabled={saving} dense ariaLabel="轨迹快捷标签" /></div></> : <p className="mt-3 text-xs text-slate-500">当前角色仅可查看，不能填写备注或处理轨迹。</p>}<div className="mt-2 flex flex-wrap items-center gap-2 text-xs">{message && <span className={message === "已保存" ? "text-emerald-600" : "text-rose-600"}>{message}</span>}{handledBy && <span className="text-slate-500">处理人：{handledBy.fullName || handledBy.username}</span>}{handledAt && <span className="text-slate-500">处理时间：{new Date(handledAt).toLocaleString("zh-CN")}</span>}</div></div></div>
   </section>;
 }

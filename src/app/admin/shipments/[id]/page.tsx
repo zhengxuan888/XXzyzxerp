@@ -13,6 +13,7 @@ import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { zh } from "@/lib/i18n";
 import { formatMoneyCents } from "@/lib/money";
+import { isShipmentSyncAllowed } from "@/lib/logistics/shipment-sync-policy";
 
 export default async function ShipmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -61,6 +62,7 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
       order: {
         select: {
           orderNo: true,
+          exceptionNote: true,
           recipientName: true,
           recipientPhone: true,
           recipientEmail: true,
@@ -95,6 +97,7 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
     },
   });
   if (!shipment) notFound();
+  const syncAllowed = isShipmentSyncAllowed({ status: shipment.status, orderExceptionNote: shipment.order.exceptionNote });
 
   return (
     <div className="space-y-5">
@@ -121,7 +124,9 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
             <Info icon={<PackageCheck size={16} />} label="跟进记录" value={`${shipment.followUps.length} 条`} />
             <Info icon={<CalendarClock size={16} />} label="下次跟进" value={shipment.nextFollowUpAt ? new Date(shipment.nextFollowUpAt).toLocaleString("zh-CN") : "未安排"} />
           </div>
-          {canTrack.allowed && canViewTrackingNo.allowed && <ShipmentSyncButton shipmentId={shipment.id} />}
+          {canTrack.allowed && canViewTrackingNo.allowed && (syncAllowed
+            ? <ShipmentSyncButton shipmentId={shipment.id} />
+            : <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">物流跟进已结束</span>)}
         </div>
       </header>
 

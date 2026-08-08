@@ -57,12 +57,107 @@ export const logisticsPriorityQuickTags: ReadonlyArray<{ key: LogisticsQueueKey;
 
 export const logisticsPriorityQuickTagLabels = logisticsPriorityQuickTags.map((tag) => tag.label);
 export const logisticsFixedQuickTagLabels = [...new Set([...logisticsColorQuickTagLabels, ...logisticsPriorityQuickTagLabels])];
+export const logisticsQuickTagFilterLimit = 10;
+
+export type LogisticsQuickTagGroup = {
+  key: "logistics_status" | "follow_up" | "customer_communication";
+  label: "物流状态" | "跟进提醒" | "客户沟通";
+  tags: string[];
+};
+
+export function logisticsQuickTagGroups(tags: Iterable<string>): LogisticsQuickTagGroup[] {
+  const statusTags = new Set<string>(logisticsColorQuickTagLabels);
+  const followUpTags = new Set<string>(logisticsPriorityQuickTagLabels.filter((tag) => !statusTags.has(tag)));
+  const groups: LogisticsQuickTagGroup[] = [
+    { key: "logistics_status", label: "物流状态", tags: [] },
+    { key: "follow_up", label: "跟进提醒", tags: [] },
+    { key: "customer_communication", label: "客户沟通", tags: [] },
+  ];
+  const seen = new Set<string>();
+  for (const rawTag of tags) {
+    const tag = rawTag.trim();
+    if (!tag || seen.has(tag)) continue;
+    seen.add(tag);
+    if (statusTags.has(tag)) groups[0].tags.push(tag);
+    else if (followUpTags.has(tag)) groups[1].tags.push(tag);
+    else groups[2].tags.push(tag);
+  }
+  return groups.filter((group) => group.tags.length > 0);
+}
+
+export function parseLogisticsQuickTagFilters(value: string | null | undefined, allowedTags: Iterable<string>) {
+  const allowed = new Set(allowedTags);
+  return [...new Set((value ?? "").split(",").map((tag) => tag.trim()).filter((tag) => allowed.has(tag)))].slice(0, logisticsQuickTagFilterLimit);
+}
+
+export function matchesLogisticsQuickTagFilters(signals: Iterable<string>, selectedTags: Iterable<string>) {
+  const selected = [...selectedTags];
+  if (!selected.length) return true;
+  const normalizedSignals = new Set([...signals].map((signal) => signal.trim().toUpperCase()));
+  return selected.some((tag) => normalizedSignals.has(`TAG:${tag.trim().toUpperCase()}`));
+}
 
 export function logisticsQueueCardsForDisplay(config: LogisticsWorkbenchConfig) {
   const priorityByKey = new Map(logisticsPriorityQuickTags.map((item) => [item.key, item]));
   return config.cards
     .filter((card) => card.key !== "exception" && (card.isVisible || priorityByKey.has(card.key)))
     .map((card) => ({ ...card, label: priorityByKey.get(card.key)?.label ?? card.label }));
+}
+
+export type LogisticsQueueCardGroupKey = "progress" | "follow_up" | "exceptions";
+
+export const logisticsQueueCardGroupMetadata: ReadonlyArray<{
+  key: LogisticsQueueCardGroupKey;
+  label: "物流进度" | "跟进任务" | "异常与售后";
+}> = [
+  { key: "progress", label: "物流进度" },
+  { key: "follow_up", label: "跟进任务" },
+  { key: "exceptions", label: "异常与售后" },
+];
+
+const logisticsQueueCardGroupByKey: Record<LogisticsQueueKey, LogisticsQueueCardGroupKey> = {
+  all: "progress",
+  in_transit: "progress",
+  out_for_delivery: "progress",
+  ready_for_pickup: "progress",
+  delivered: "progress",
+  closed: "progress",
+  pending_delivery_confirmation: "follow_up",
+  due_today: "follow_up",
+  followed: "follow_up",
+  critical: "follow_up",
+  high: "follow_up",
+  unhandled: "follow_up",
+  normal: "follow_up",
+  signed_refund: "exceptions",
+  problem: "exceptions",
+  exception: "exceptions",
+  returning: "exceptions",
+  address_error: "exceptions",
+  delivery_failed: "exceptions",
+  refused: "exceptions",
+  read_no_reply: "exceptions",
+  unread_no_reply: "exceptions",
+  tracking_offline: "exceptions",
+  other_exception: "exceptions",
+};
+
+export type LogisticsQueueCardGroup = {
+  key: LogisticsQueueCardGroupKey;
+  label: (typeof logisticsQueueCardGroupMetadata)[number]["label"];
+  cards: LogisticsWorkbenchCard[];
+};
+
+export function logisticsQueueCardGroups(config: LogisticsWorkbenchConfig): LogisticsQueueCardGroup[] {
+  const groups = logisticsQueueCardGroupMetadata.map<LogisticsQueueCardGroup>((group) => ({ ...group, cards: [] }));
+  const groupByKey = new Map(groups.map((group) => [group.key, group]));
+  const seen = new Set<LogisticsQueueKey>();
+  for (const card of logisticsQueueCardsForDisplay(config)) {
+    if (seen.has(card.key)) continue;
+    seen.add(card.key);
+    groupByKey.get(logisticsQueueCardGroupByKey[card.key])?.cards.push(card);
+  }
+  return groups.filter((group) => group.cards.length > 0);
 }
 
 export const defaultLogisticsWorkbenchConfig: LogisticsWorkbenchConfig = {
