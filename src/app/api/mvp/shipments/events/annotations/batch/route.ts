@@ -40,7 +40,7 @@ export async function PATCH(request: NextRequest) {
         .filter((tag: unknown): tag is string => typeof tag === "string")
         .map((tag: string) => tag.trim().slice(0, 30))
         .filter(Boolean),
-    )].slice(0, 10)
+    )].slice(0, 40)
     : [];
   const isHandled = body?.isHandled !== false;
 

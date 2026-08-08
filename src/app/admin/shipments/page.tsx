@@ -13,6 +13,7 @@ import { formatMoneyCents } from "@/lib/money";
 import { getServerNowMs } from "@/lib/server-clock";
 import { logisticsQueueKeys, parseLogisticsWorkbenchConfig, type LogisticsQueueKey } from "@/lib/logistics-workbench-config";
 import { loadTrackingTranslations, trackingTextHash } from "@/lib/tracking-translation-service";
+import { classifyLogisticsColorTags, logisticsColorTagKeys, parseLogisticsColorTagKeys } from "@/lib/logistics-color-tags";
 
 type Urgency = "critical" | "high" | "normal";
 
@@ -57,7 +58,7 @@ function classifyUrgency(overdue: boolean, highPriority: boolean, followAt: Date
 }
 
 function urgencyBadge(urgency: Urgency) {
-  if (urgency === "critical") return "超期高风险";
+  if (urgency === "critical") return "跟进已超期";
   if (urgency === "high") return "需跟进";
   return "正常";
 }
@@ -102,6 +103,7 @@ export default async function ShipmentsPage({
     status?: string;
     carrier?: string;
     destination?: string;
+    colorTags?: string;
     owner?: string;
     page?: string;
     pageSize?: string;
@@ -118,6 +120,7 @@ export default async function ShipmentsPage({
   const requestedStatuses = [...new Set((params.status ?? "").split(","))]
     .filter((status): status is ShipmentStatus => Object.values(ShipmentStatus).includes(status as ShipmentStatus) && status !== "PENDING");
   const requestedCreatorMembershipIds = [...new Set((params.creatorMembershipId ?? "").split(",").map((id) => id.trim()).filter(Boolean))];
+  const requestedColorTags = parseLogisticsColorTagKeys(params.colorTags);
   const requestedOwnerFilter = params.owner === "mine" || params.owner === "unassigned" || params.owner === "all" ? params.owner : null;
 
   const session = await getSessionFromCookie();
@@ -196,6 +199,7 @@ export default async function ShipmentsPage({
       carrier: true,
       trackingNo: true,
       status: true,
+      estimatedDeliveryAt: true,
       nextFollowUpAt: true,
       createdAt: true,
       updatedAt: true,
@@ -289,6 +293,14 @@ export default async function ShipmentsPage({
       const isHighPriority =
         latest && HIGH_PRIORITY_SHIPMENT_EVENTS.includes(latest.eventType as keyof typeof shipmentEventMeta);
       const urgency = classifyUrgency(overdue, Boolean(isHighPriority), latestFollowAt, nowTs);
+      const colorTagKeys = classifyLogisticsColorTags({
+        status: row.status,
+        estimatedDeliveryAt: row.estimatedDeliveryAt,
+        orderExceptionNote: row.order.exceptionNote,
+        signals: timeline ? (queueSignals.get(row.id) ?? []) : [],
+        latestEventType: timeline ? latest?.eventType : null,
+        now: new Date(nowTs),
+      });
 
       return {
         ...row,
@@ -304,6 +316,7 @@ export default async function ShipmentsPage({
         urgency,
         urgencyLabel: urgencyBadge(urgency),
         priorityTag: isHighPriority ? "高优先级" : "-",
+        colorTagKeys,
         urgencyScore: urgencyScore(urgency),
         followUpAt: latestFollowAt ? new Date(latestFollowAt).toLocaleString("zh-CN") : "-",
         canViewTrackingNo: trackingNo,
@@ -333,7 +346,9 @@ export default async function ShipmentsPage({
     ].filter(Boolean).join(" ").toLocaleLowerCase();
     return searchable.includes(keyword);
   });
-  const matchesCard = (row: (typeof baseFiltered)[number], key: LogisticsQueueKey) => {
+  const colorTagCounts = Object.fromEntries(logisticsColorTagKeys.map((key) => [key, baseFiltered.filter((row) => row.colorTagKeys.includes(key)).length]));
+  const colorFiltered = baseFiltered.filter((row) => !requestedColorTags.length || requestedColorTags.some((key) => row.colorTagKeys.includes(key)));
+  const matchesCard = (row: (typeof colorFiltered)[number], key: LogisticsQueueKey) => {
     const isConfirmedDelivery = row.status === "DELIVERED" && row.order.exceptionNote === "人工确认成功签收";
     const isSignedRefund = row.order.exceptionNote === "签收后退款";
     const isClosed = row.status === "CLOSED";
@@ -366,9 +381,9 @@ export default async function ShipmentsPage({
     }, key, configuredMatches);
   };
   const queueCounts = Object.fromEntries(
-    workbenchConfig.cards.map((card) => [card.key, baseFiltered.filter((row) => matchesCard(row, card.key)).length]),
+    workbenchConfig.cards.map((card) => [card.key, colorFiltered.filter((row) => matchesCard(row, card.key)).length]),
   ) as Partial<Record<LogisticsQueueKey, number>>;
-  const filteredRows = baseFiltered.filter((row) => matchesCard(row, queue));
+  const filteredRows = colorFiltered.filter((row) => matchesCard(row, queue));
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const page = Math.min(requestedPage, pageCount);
   const pageRows = filteredRows.slice((page - 1) * pageSize, page * pageSize);
@@ -465,6 +480,7 @@ export default async function ShipmentsPage({
       urgency: row.urgency,
       urgencyLabel: row.urgencyLabel,
       priorityTag: row.priorityTag,
+      colorTagKeys: row.colorTagKeys,
       dueStatus: row.dueStatus,
       order: {
         ...detail.order,
@@ -508,7 +524,7 @@ export default async function ShipmentsPage({
       canReassign={canReassign.allowed}
       pagination={{ page, pageSize, total: filteredRows.length, pageCount }}
       queueCounts={queueCounts}
-      filterOptions={{ departments, managers, creators, statuses, carriers, destinations }}
+      filterOptions={{ departments, managers, creators, statuses, carriers, destinations, colorTagCounts }}
       rows={presentationRows}
     />
     </div>

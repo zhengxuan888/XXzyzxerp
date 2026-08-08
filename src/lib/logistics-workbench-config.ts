@@ -1,4 +1,5 @@
 import { DEFAULT_ALERT_RULES, type LogisticsAlertRule } from "@/lib/logistics";
+import { logisticsColorQuickTagLabels } from "@/lib/logistics-color-tags";
 
 export const logisticsQueueKeys = [
   "all",
@@ -46,7 +47,7 @@ export type LogisticsWorkbenchConfig = {
 };
 
 export const defaultLogisticsWorkbenchConfig: LogisticsWorkbenchConfig = {
-  quickTags: ["已通知客户", "无人接听", "等待客户回复", "地址已确认", "需再次跟进"],
+  quickTags: [...logisticsColorQuickTagLabels, "已通知客户", "无人接听", "等待客户回复", "地址已确认", "需再次跟进"],
   cards: [
     { key: "all", label: "全部追踪", isVisible: true, sortOrder: 10, matches: [] },
     { key: "in_transit", label: "运输中", isVisible: true, sortOrder: 20, matches: [] },
@@ -63,13 +64,13 @@ export const defaultLogisticsWorkbenchConfig: LogisticsWorkbenchConfig = {
     { key: "returning", label: "退回中/已退回", isVisible: true, sortOrder: 70, matches: [] },
     { key: "address_error", label: "地址错误", isVisible: true, sortOrder: 80, matches: ["EVENT:ADDRESS_ERROR", "TAG:地址错误"] },
     { key: "delivery_failed", label: "派送失败", isVisible: true, sortOrder: 90, matches: ["EVENT:DELIVERY_FAILED", "EVENT:CUSTOMER_ABSENT", "TAG:派送失败"] },
-    { key: "ready_for_pickup", label: "到达待取", isVisible: true, sortOrder: 100, matches: ["EVENT:READY_FOR_PICKUP", "EVENT:COD_READY", "TAG:到达待取"] },
+    { key: "ready_for_pickup", label: "到达代取", isVisible: true, sortOrder: 100, matches: ["EVENT:AVAILABLE_FOR_PICKUP", "EVENT:READY_FOR_PICKUP", "EVENT:COD_READY", "TAG:到达代取", "TAG:到达待取"] },
     { key: "refused", label: "拒收/退件", isVisible: true, sortOrder: 110, matches: ["EVENT:REFUSED", "EVENT:RETURNING", "EVENT:RETURNED", "TAG:拒收"] },
     { key: "read_no_reply", label: "已读不回", isVisible: true, sortOrder: 120, matches: ["TAG:已读不回"] },
     { key: "unread_no_reply", label: "不读不回", isVisible: true, sortOrder: 130, matches: ["TAG:不读不回"] },
     { key: "tracking_offline", label: "物流未上线", isVisible: true, sortOrder: 140, matches: ["NO_EVENTS"] },
     { key: "other_exception", label: "其他异常", isVisible: true, sortOrder: 150, matches: ["EVENT:OTHER", "TAG:其他"] },
-    { key: "critical", label: "超期高风险", isVisible: true, sortOrder: 160, matches: [] },
+    { key: "critical", label: "跟进已超期", isVisible: true, sortOrder: 160, matches: [] },
     { key: "high", label: "需立即跟进", isVisible: true, sortOrder: 170, matches: [] },
     { key: "normal", label: "正常运输", isVisible: false, sortOrder: 180, matches: [] },
   ],
@@ -80,9 +81,10 @@ export const defaultLogisticsWorkbenchConfig: LogisticsWorkbenchConfig = {
 };
 
 export function parseLogisticsWorkbenchConfig(raw: { quickTags?: unknown; cards?: unknown; alertRules?: unknown; syncIntervalMinutes?: unknown; feishuNotificationsEnabled?: unknown; feishuHighPriorityOnly?: unknown } | null | undefined): LogisticsWorkbenchConfig {
-  const quickTags = Array.isArray(raw?.quickTags)
-    ? [...new Set(raw.quickTags.filter((item): item is string => typeof item === "string").map((item) => item.trim().slice(0, 30)).filter(Boolean))].slice(0, 20)
+  const configuredQuickTags = Array.isArray(raw?.quickTags)
+    ? raw.quickTags.filter((item): item is string => typeof item === "string").map((item) => item.trim().slice(0, 30)).filter(Boolean)
     : defaultLogisticsWorkbenchConfig.quickTags;
+  const quickTags = [...new Set([...logisticsColorQuickTagLabels, ...configuredQuickTags])].slice(0, 40);
   const sourceCards = Array.isArray(raw?.cards) ? raw.cards : defaultLogisticsWorkbenchConfig.cards;
   const byKey = new Map<LogisticsQueueKey, LogisticsWorkbenchCard>();
   for (const item of sourceCards) {
@@ -94,7 +96,7 @@ export function parseLogisticsWorkbenchConfig(raw: { quickTags?: unknown; cards?
     const fallback = defaultLogisticsWorkbenchConfig.cards.find((card) => card.key === key)!;
     byKey.set(key, {
       key,
-      label: key === "delivered" ? "成功签收" : key === "signed_refund" ? "签收退款" : key === "closed" ? "已结束" : typeof value.label === "string" && value.label.trim() ? value.label.trim().slice(0, 30) : fallback.label,
+      label: key === "delivered" ? "成功签收" : key === "signed_refund" ? "签收退款" : key === "closed" ? "已结束" : key === "critical" ? "跟进已超期" : key === "ready_for_pickup" ? "到达代取" : typeof value.label === "string" && value.label.trim() ? value.label.trim().slice(0, 30) : fallback.label,
       isVisible: value.isVisible !== false,
       sortOrder: Number.isSafeInteger(value.sortOrder) ? Number(value.sortOrder) : fallback.sortOrder,
       matches: Array.isArray(value.matches)

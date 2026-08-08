@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { parseLogisticsWorkbenchConfig } from "@/lib/logistics-workbench-config";
+import { logisticsColorQuickTagLabels } from "@/lib/logistics-color-tags";
 
 describe("logistics workbench configuration", () => {
   it("sanitizes tags and keeps every stable queue key configurable", () => {
@@ -16,9 +17,9 @@ describe("logistics workbench configuration", () => {
       ],
       syncIntervalMinutes: 45,
     });
-    expect(config.quickTags).toEqual(["已通知"]);
-    expect(config.cards[0]).toMatchObject({ key: "critical", label: "立即处理", sortOrder: 1 });
-    expect(config.cards).toHaveLength(18);
+    expect(config.quickTags).toEqual([...logisticsColorQuickTagLabels, "已通知"]);
+    expect(config.cards[0]).toMatchObject({ key: "critical", label: "跟进已超期", sortOrder: 1 });
+    expect(config.cards).toHaveLength(24);
     expect(config.cards.map((card) => card.key)).toEqual(expect.arrayContaining([
       "all",
       "in_transit",
@@ -35,7 +36,14 @@ describe("logistics workbench configuration", () => {
       "other_exception",
     ]));
     expect(config.cards.find((card) => card.key === "address_error")?.matches).toContain("EVENT:ADDRESS_ERROR");
+    expect(config.cards.find((card) => card.key === "ready_for_pickup")).toMatchObject({ label: "到达代取" });
     expect(config.alertRules).toEqual([{ key: "ES", matches: ["西班牙", "Spain"], milestoneEvent: "IN_TRANSIT", silentWorkDaysBeforeMilestone: 2 }]);
     expect(config.syncIntervalMinutes).toBe(45);
+  });
+
+  it("keeps existing custom quick tags after adding the fixed color tags", () => {
+    const customTags = Array.from({ length: 20 }, (_, index) => `自定义${index + 1}`);
+    const config = parseLogisticsWorkbenchConfig({ quickTags: customTags });
+    expect(config.quickTags).toEqual([...logisticsColorQuickTagLabels, ...customTags]);
   });
 });
