@@ -14,6 +14,7 @@ import { getServerNowMs } from "@/lib/server-clock";
 import { logisticsPriorityQuickTags, logisticsQueueKeys, matchesLogisticsQuickTagFilters, parseLogisticsQuickTagFilters, parseLogisticsWorkbenchConfig, type LogisticsQueueKey } from "@/lib/logistics-workbench-config";
 import { loadTrackingTranslations, trackingTextHash } from "@/lib/tracking-translation-service";
 import { classifyLogisticsColorTags, logisticsColorTagKeys, logisticsColorTags, parseLogisticsColorTagKeys } from "@/lib/logistics-color-tags";
+import { buildShipmentSyncScope } from "@/lib/logistics/shipment-sync-scope";
 
 type Urgency = "critical" | "high" | "normal";
 
@@ -181,6 +182,8 @@ export default async function ShipmentsPage({
       readAccess.where,
       {
         status: requestedStatuses.length ? { in: requestedStatuses } : { not: "PENDING" },
+        trackingNo: { not: null },
+        NOT: { trackingNo: "" },
         ...(params.carrier ? { carrier: params.carrier } : {}),
         ...(ownerFilter === "mine" ? { ownerMembershipId: membership.id } : {}),
         ...(ownerFilter === "unassigned" ? { ownerMembershipId: null } : {}),
@@ -241,6 +244,33 @@ export default async function ShipmentsPage({
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
+  const syncCandidateRows = annotationAccess.allowed
+    ? await prisma.shipment.findMany({
+        where: {
+          AND: [
+            annotationAccess.where,
+            {
+              businessUnitId: membership.businessUnitId,
+              status: { not: "PENDING" },
+            },
+          ],
+        },
+        select: {
+          id: true,
+          trackingNo: true,
+          status: true,
+          order: { select: { exceptionNote: true } },
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      })
+    : [];
+  const syncScope = buildShipmentSyncScope(syncCandidateRows.map((row) => ({
+    id: row.id,
+    status: row.status,
+    orderExceptionNote: row.order.exceptionNote,
+    trackingNo: row.trackingNo,
+    canSync: true,
+  })));
   const unhandledEventGroups = candidateRows.length
     ? await prisma.shipmentEvent.groupBy({
         by: ["shipmentId"],
@@ -545,6 +575,7 @@ export default async function ShipmentsPage({
       pagination={{ page, pageSize, total: filteredRows.length, pageCount }}
       queueCounts={queueCounts}
       filterOptions={{ departments, managers, creators, statuses, carriers, destinations, colorTagCounts }}
+      syncScope={syncScope}
       rows={presentationRows}
     />
     </div>
