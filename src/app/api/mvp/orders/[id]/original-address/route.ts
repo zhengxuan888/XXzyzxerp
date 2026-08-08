@@ -3,6 +3,11 @@ import { NextRequest } from "next/server";
 import { requireAuthContext } from "@/lib/api-auth";
 import { fail, ok } from "@/lib/api-response";
 import { writeAuditLog } from "@/lib/audit";
+import {
+  CUSTOMER_ORIGINAL_ADDRESS_SOURCE,
+  hasCustomerOriginalAddress,
+  LEGACY_DERIVED_ADDRESS_SOURCE,
+} from "@/lib/order-address";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 
@@ -46,6 +51,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       creatorUserId: true,
       ownedByMembershipId: true,
       recipientFullAddress: true,
+      recipientFullAddressSource: true,
       shipments: { select: { id: true, siteId: true } },
     },
   });
@@ -74,7 +80,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
   if (!permissionDecisions.some((decision) => decision.allowed)) {
     return fail("FORBIDDEN", "当前岗位没有补录此订单原始地址的权限。", 403);
   }
-  if (order.recipientFullAddress?.trim()) {
+  if (hasCustomerOriginalAddress(order.recipientFullAddressSource)) {
     return fail("ORIGINAL_ADDRESS_ALREADY_CAPTURED", "完整原始地址已留存，不允许覆盖。", 409);
   }
 
@@ -83,9 +89,16 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       where: {
         id: order.id,
         businessUnitId: order.businessUnitId,
-        OR: [{ recipientFullAddress: null }, { recipientFullAddress: "" }],
+        OR: [
+          { recipientFullAddressSource: null },
+          { recipientFullAddressSource: "" },
+          { recipientFullAddressSource: LEGACY_DERIVED_ADDRESS_SOURCE },
+        ],
       },
-      data: { recipientFullAddress },
+      data: {
+        recipientFullAddress,
+        recipientFullAddressSource: CUSTOMER_ORIGINAL_ADDRESS_SOURCE,
+      },
     });
     if (result.count !== 1) return false;
 
@@ -102,6 +115,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         orderNo: order.orderNo,
         characterCount: recipientFullAddress.length,
         source: "manual_one_time_capture",
+        previousSource: order.recipientFullAddressSource,
+        replacedLegacyDerived: order.recipientFullAddressSource === LEGACY_DERIVED_ADDRESS_SOURCE,
       },
     }, tx);
     return true;

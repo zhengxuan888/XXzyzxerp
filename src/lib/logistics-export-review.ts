@@ -1,6 +1,7 @@
 import type { Worksheet } from "exceljs";
 
 import type { LogisticsTemplateColumn } from "@/lib/logistics-provider-template";
+import { hasCustomerOriginalAddress } from "@/lib/order-address";
 
 export const HONGYA_ADDRESS_REVIEW_TEMPLATE_CODES = [
   "HONGYA_IBERIA_DROPSHIP",
@@ -134,6 +135,7 @@ type AddressReviewOrder = {
   recipientPostalCode: string | null;
   recipientAddress: string | null;
   recipientFullAddress?: string | null;
+  recipientFullAddressSource?: string | null;
 };
 
 const requiredAddressFields: Array<[keyof AddressReviewOrder, string]> = [
@@ -143,8 +145,9 @@ const requiredAddressFields: Array<[keyof AddressReviewOrder, string]> = [
   ["recipientCity", "收件人城市"],
   ["recipientPostalCode", "收件人邮编"],
   ["recipientAddress", "收件人地址"],
-  ["recipientFullAddress", "完整原始地址"],
 ];
+
+const customerOriginalAddressLabel = "完整原始地址（需补录客户原文）";
 
 export type LogisticsAddressReviewIssue = {
   orderNo: string;
@@ -166,6 +169,13 @@ export function findLogisticsAddressReviewIssues(
       const value = order[field];
       return typeof value === "string" && value.trim() ? [] : [label];
     });
+    if (
+      typeof order.recipientFullAddress !== "string"
+      || !order.recipientFullAddress.trim()
+      || !hasCustomerOriginalAddress(order.recipientFullAddressSource)
+    ) {
+      missingFields.push(customerOriginalAddressLabel);
+    }
     return missingFields.length ? [{ orderNo: order.orderNo, missingFields }] : [];
   });
 }

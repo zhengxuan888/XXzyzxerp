@@ -17,6 +17,7 @@ test.describe.serial("物流敏感字段动态授权门禁", () => {
     recipientPostalCode: string | null;
     recipientAddress: string | null;
     recipientFullAddress: string | null;
+    recipientFullAddressSource: string | null;
   } | null = null;
 
   test.beforeAll(async () => {
@@ -32,6 +33,7 @@ test.describe.serial("物流敏感字段动态授权门禁", () => {
             recipientPostalCode: true,
             recipientAddress: true,
             recipientFullAddress: true,
+            recipientFullAddressSource: true,
           },
         },
       },
@@ -46,6 +48,7 @@ test.describe.serial("物流敏感字段动态授权门禁", () => {
         recipientPostalCode: "28009",
         recipientAddress: "Calle de Alcalá 123, 4º B",
         recipientFullAddress: originalAddress,
+        recipientFullAddressSource: "CUSTOMER_ORIGINAL",
       },
     });
   });
@@ -64,6 +67,7 @@ test.describe.serial("物流敏感字段动态授权门禁", () => {
           recipientPostalCode: orderSnapshot.recipientPostalCode,
           recipientAddress: orderSnapshot.recipientAddress,
           recipientFullAddress: orderSnapshot.recipientFullAddress,
+          recipientFullAddressSource: orderSnapshot.recipientFullAddressSource,
         },
       });
     }
@@ -117,7 +121,7 @@ test.describe.serial("物流敏感字段动态授权门禁", () => {
     await expect(page.getByRole("heading", { name: trackingNo })).toBeVisible();
     await expect(page.getByTestId("original-address-card")).toBeVisible();
     await expect(page.getByText(originalAddress, { exact: true })).toBeVisible();
-    await expect(page.getByText("原文已保留", { exact: true })).toBeVisible();
+    await expect(page.getByText("客户原文已保留", { exact: true })).toBeVisible();
     const allowedEvents = await page.request.get(`/api/mvp/shipments/${shipmentId}/events`);
     expect(allowedEvents.status(), await allowedEvents.text()).toBe(200);
     expect((await allowedEvents.json()).data.length).toBeGreaterThan(0);

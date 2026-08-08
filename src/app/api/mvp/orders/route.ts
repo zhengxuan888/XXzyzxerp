@@ -12,7 +12,11 @@ import { writeAuditLog } from "@/lib/audit";
 import { fail, ok, paginated, parsePagination } from "@/lib/api-response";
 import { normalizeMoneyCents } from "@/lib/money";
 import { parseOrderItems, parseSingleOrderItem, type ParsedOrderItem } from "@/lib/order-item-input";
-import { preserveOriginalAddress } from "@/lib/order-address";
+import {
+  CUSTOMER_ORIGINAL_ADDRESS_SOURCE,
+  hasCustomerOriginalAddress,
+  preserveOriginalAddress,
+} from "@/lib/order-address";
 import { allocateOrderNumber, OrderNumberingError } from "@/lib/order-numbering";
 import { parseOrderTemplateConfiguration, sanitizeOrderCustomValues } from "@/lib/order-template";
 
@@ -26,6 +30,8 @@ const ORDER_STATUSES = new Set<OrderStatus>([
   "COMPLETED",
   "CANCELLED",
 ]);
+
+class OriginalAddressCaptureConflictError extends Error {}
 
 function parseDateFilter(value: string | null, endOfDay = false) {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
@@ -307,6 +313,7 @@ export async function POST(request: NextRequest) {
         recipientCity: recipientCity ? recipientCity.slice(0, 100) : null,
         recipientAddress: recipientAddress || null,
         recipientFullAddress,
+        recipientFullAddressSource: CUSTOMER_ORIGINAL_ADDRESS_SOURCE,
         packageWeightGrams,
         paymentMethod: typeof body.paymentMethod === "string" ? body.paymentMethod.trim().slice(0, 30) : templateConfiguration.paymentMethod,
         customerWhatsapp: typeof body.customerWhatsapp === "string" ? body.customerWhatsapp.trim().slice(0, 50) : null,
@@ -433,23 +440,31 @@ export async function PUT(request: NextRequest) {
     null,
     body.recipientFullAddress,
   );
-  if (!target.recipientFullAddress && !proposedOriginalAddress) {
+  const originalAddressPreviouslyCaptured = hasCustomerOriginalAddress(target.recipientFullAddressSource);
+  if (!originalAddressPreviouslyCaptured && !proposedOriginalAddress) {
     return fail("RECIPIENT_FULL_ADDRESS_REQUIRED", "请先补录客户提供的完整原始地址；保存后将锁定为只读留档。", 400);
   }
   const row = await prisma.$transaction(async (tx) => {
-    if (proposedOriginalAddress) {
-      // Claim the write-once snapshot atomically. Concurrent edits may both
-      // observe an empty value before entering this transaction; updateMany's
-      // predicate is rechecked after the row lock, so only the first writer can
-      // fill it and later edits cannot replace it.
-      await tx.order.updateMany({
+    if (!originalAddressPreviouslyCaptured && proposedOriginalAddress) {
+      // A legacy derived value is not customer evidence. Replace it only while
+      // the provenance is still untrusted; the source predicate is rechecked
+      // after the row lock so a concurrent genuine capture can never be lost.
+      const captured = await tx.order.updateMany({
         where: {
           id: target.id,
+          businessUnitId: target.businessUnitId,
           status: "DRAFT",
-          OR: [{ recipientFullAddress: null }, { recipientFullAddress: "" }],
+          OR: [
+            { recipientFullAddressSource: null },
+            { recipientFullAddressSource: { not: CUSTOMER_ORIGINAL_ADDRESS_SOURCE } },
+          ],
         },
-        data: { recipientFullAddress: proposedOriginalAddress },
+        data: {
+          recipientFullAddress: proposedOriginalAddress,
+          recipientFullAddressSource: CUSTOMER_ORIGINAL_ADDRESS_SOURCE,
+        },
       });
+      if (captured.count !== 1) throw new OriginalAddressCaptureConflictError();
     }
     const updated = await tx.order.update({
       where: { id: target.id, status: "DRAFT" },
@@ -475,7 +490,13 @@ export async function PUT(request: NextRequest) {
       name: recipientName, contactName: recipientName, contactPhone: text(body.recipientPhone, 100), contactEmail: text(body.recipientEmail, 200)?.toLowerCase(),
     } });
     return updated;
+  }).catch((error: unknown) => {
+    if (error instanceof OriginalAddressCaptureConflictError) return null;
+    throw error;
   });
+  if (!row) {
+    return fail("ORIGINAL_ADDRESS_ALREADY_CAPTURED", "完整原始地址已由其他员工留存，请刷新后重试。", 409);
+  }
   await writeAuditLog({
     actorUserId: auth.userId,
     actorMembershipId: auth.membership.id,
@@ -488,8 +509,10 @@ export async function PUT(request: NextRequest) {
     details: {
       changed: "returned_order_details",
       previousExceptionNote: target.exceptionNote,
-      originalAddressPreviouslyCaptured: Boolean(target.recipientFullAddress),
-      originalAddressCapturedNow: !target.recipientFullAddress && Boolean(row.recipientFullAddress),
+      previousOriginalAddressSource: target.recipientFullAddressSource,
+      originalAddressPreviouslyCaptured,
+      originalAddressCapturedNow: !originalAddressPreviouslyCaptured
+        && hasCustomerOriginalAddress(row.recipientFullAddressSource),
     },
   });
 

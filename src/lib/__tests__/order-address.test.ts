@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { preserveOriginalAddress } from "@/lib/order-address";
+import {
+  CUSTOMER_ORIGINAL_ADDRESS_SOURCE,
+  hasCustomerOriginalAddress,
+  LEGACY_DERIVED_ADDRESS_SOURCE,
+  preserveOriginalAddress,
+} from "@/lib/order-address";
 
 describe("preserveOriginalAddress", () => {
   it("never overwrites an existing customer address snapshot", () => {
@@ -14,5 +19,11 @@ describe("preserveOriginalAddress", () => {
     expect(preserveOriginalAddress(null, "  Rua Augusta 88, 1100-053 Lisboa  "))
       .toBe("Rua Augusta 88, 1100-053 Lisboa");
     expect(preserveOriginalAddress(null, "")).toBeNull();
+  });
+
+  it("trusts only explicit customer-original provenance", () => {
+    expect(hasCustomerOriginalAddress(CUSTOMER_ORIGINAL_ADDRESS_SOURCE)).toBe(true);
+    expect(hasCustomerOriginalAddress(LEGACY_DERIVED_ADDRESS_SOURCE)).toBe(false);
+    expect(hasCustomerOriginalAddress(null)).toBe(false);
   });
 });

@@ -12,6 +12,10 @@ import {
   logisticsExportFilename,
   normalizeLogisticsExportColumns,
 } from "@/lib/logistics-export-review";
+import {
+  CUSTOMER_ORIGINAL_ADDRESS_SOURCE,
+  LEGACY_DERIVED_ADDRESS_SOURCE,
+} from "@/lib/order-address";
 
 const iberiaCode = "HONGYA_IBERIA_DROPSHIP";
 
@@ -121,6 +125,7 @@ describe("Hongya logistics review exports", () => {
         recipientPostalCode: "28009",
         recipientAddress: "Calle de Alcala 123",
         recipientFullAddress: "Maria, Calle de Alcala 123, 28009 Madrid, Espana",
+        recipientFullAddressSource: CUSTOMER_ORIGINAL_ADDRESS_SOURCE,
       },
       {
         orderNo: "ZY-MISSING",
@@ -131,12 +136,30 @@ describe("Hongya logistics review exports", () => {
         recipientPostalCode: "1100-053",
         recipientAddress: "Rua Augusta 88",
         recipientFullAddress: null,
+        recipientFullAddressSource: null,
       },
     ]);
 
     expect(issues).toEqual([{
       orderNo: "ZY-MISSING",
-      missingFields: ["收件人电话", "收件人城市", "完整原始地址"],
+      missingFields: ["收件人电话", "收件人城市", "完整原始地址（需补录客户原文）"],
+    }]);
+  });
+
+  it("rejects a non-empty legacy derived address until customer text is captured", () => {
+    expect(findLogisticsAddressReviewIssues(iberiaCode, [{
+      orderNo: "ZY-LEGACY",
+      recipientName: "Maria",
+      recipientPhone: "+34 600 000 000",
+      recipientCountryCode: "ES",
+      recipientCity: "Madrid",
+      recipientPostalCode: "28009",
+      recipientAddress: "Calle de Alcala 123",
+      recipientFullAddress: "Calle de Alcala 123",
+      recipientFullAddressSource: LEGACY_DERIVED_ADDRESS_SOURCE,
+    }])).toEqual([{
+      orderNo: "ZY-LEGACY",
+      missingFields: ["完整原始地址（需补录客户原文）"],
     }]);
   });
 
@@ -150,6 +173,7 @@ describe("Hongya logistics review exports", () => {
       recipientPostalCode: null,
       recipientAddress: null,
       recipientFullAddress: null,
+      recipientFullAddressSource: null,
     }])).toEqual([]);
   });
 

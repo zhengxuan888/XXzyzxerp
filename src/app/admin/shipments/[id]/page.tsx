@@ -57,7 +57,7 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
   const originalAddressQuery = canViewTimeline.allowed
     ? prisma.order.findFirst({
         where: { id: shipmentTarget.order.id, businessUnitId: membership.businessUnitId },
-        select: { recipientFullAddress: true },
+        select: { recipientFullAddress: true, recipientFullAddressSource: true },
       })
     : Promise.resolve(null);
   const [shipment, originalAddressRecord] = await Promise.all([
@@ -159,6 +159,7 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
         recipientPostalCode={shipment.order.recipientPostalCode}
         recipientAddress={shipment.order.recipientAddress}
         recipientFullAddress={originalAddressRecord?.recipientFullAddress ?? null}
+        recipientFullAddressSource={originalAddressRecord?.recipientFullAddressSource ?? null}
         showOriginalAddress={canViewTimeline.allowed}
         {...(canViewTimeline.allowed && canTrack.allowed
           ? { orderId: shipmentTarget.order.id, canCapture: true }

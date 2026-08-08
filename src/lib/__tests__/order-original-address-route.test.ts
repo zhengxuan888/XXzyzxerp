@@ -21,6 +21,10 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 import { POST } from "@/app/api/mvp/orders/[id]/original-address/route";
+import {
+  CUSTOMER_ORIGINAL_ADDRESS_SOURCE,
+  LEGACY_DERIVED_ADDRESS_SOURCE,
+} from "@/lib/order-address";
 
 const auth = {
   userId: "user-1",
@@ -35,6 +39,7 @@ const order = {
   creatorUserId: "creator-1",
   ownedByMembershipId: "owner-1",
   recipientFullAddress: null,
+  recipientFullAddressSource: null,
   shipments: [{ id: "shipment-1", siteId: "shipment-site-1" }],
 };
 
@@ -131,7 +136,7 @@ describe("one-time original address capture route", () => {
     }));
   });
 
-  it("captures once with an atomic empty-value guard and writes a redacted audit record", async () => {
+  it("captures once with an atomic provenance guard and writes a redacted audit record", async () => {
     const rawAddress = "  María García, Calle de Alcalá 123, 28009 Madrid, España  ";
 
     const response = await POST(request(rawAddress), params());
@@ -143,9 +148,16 @@ describe("one-time original address capture route", () => {
       where: {
         id: "order-1",
         businessUnitId: "business-1",
-        OR: [{ recipientFullAddress: null }, { recipientFullAddress: "" }],
+        OR: [
+          { recipientFullAddressSource: null },
+          { recipientFullAddressSource: "" },
+          { recipientFullAddressSource: LEGACY_DERIVED_ADDRESS_SOURCE },
+        ],
       },
-      data: { recipientFullAddress: "María García, Calle de Alcalá 123, 28009 Madrid, España" },
+      data: {
+        recipientFullAddress: "María García, Calle de Alcalá 123, 28009 Madrid, España",
+        recipientFullAddressSource: CUSTOMER_ORIGINAL_ADDRESS_SOURCE,
+      },
     });
     expect(mocks.writeAuditLog).toHaveBeenCalledWith(expect.objectContaining({
       action: "order.original_address.capture",
@@ -155,6 +167,8 @@ describe("one-time original address capture route", () => {
         orderNo: "ZY-1001",
         characterCount: 55,
         source: "manual_one_time_capture",
+        previousSource: null,
+        replacedLegacyDerived: false,
       },
     }), expect.anything());
     expect(JSON.stringify(mocks.writeAuditLog.mock.calls)).not.toContain("Calle de Alcalá");
@@ -170,12 +184,40 @@ describe("one-time original address capture route", () => {
   });
 
   it("never attempts to overwrite an address already present", async () => {
-    mocks.findFirst.mockResolvedValue({ ...order, recipientFullAddress: "Original already stored" });
+    mocks.findFirst.mockResolvedValue({
+      ...order,
+      recipientFullAddress: "Original already stored",
+      recipientFullAddressSource: CUSTOMER_ORIGINAL_ADDRESS_SOURCE,
+    });
 
     const response = await POST(request("Replacement address"), params());
 
     expect(response.status).toBe(409);
     expect(mocks.checkPermission).toHaveBeenCalled();
     expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it("allows a legacy derived value to be replaced by genuine customer text", async () => {
+    mocks.findFirst.mockResolvedValue({
+      ...order,
+      recipientFullAddress: "Calle de Alcalá 123",
+      recipientFullAddressSource: LEGACY_DERIVED_ADDRESS_SOURCE,
+    });
+
+    const response = await POST(request("Customer original, Calle de Alcalá 123, Madrid"), params());
+
+    expect(response.status).toBe(200);
+    expect(mocks.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: {
+        recipientFullAddress: "Customer original, Calle de Alcalá 123, Madrid",
+        recipientFullAddressSource: CUSTOMER_ORIGINAL_ADDRESS_SOURCE,
+      },
+    }));
+    expect(mocks.writeAuditLog).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.objectContaining({
+        previousSource: LEGACY_DERIVED_ADDRESS_SOURCE,
+        replacedLegacyDerived: true,
+      }),
+    }), expect.anything());
   });
 });

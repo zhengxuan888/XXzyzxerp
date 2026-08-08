@@ -235,6 +235,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           recipientPostalCode={order.recipientPostalCode}
           recipientAddress={order.recipientAddress}
           recipientFullAddress={order.recipientFullAddress}
+          recipientFullAddressSource={order.recipientFullAddressSource}
           orderId={order.id}
           canCapture={canUpdate.allowed || canReview.allowed || canShip.allowed}
         />
@@ -291,6 +292,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             recipientEmail: order.recipientEmail ?? "", recipientCountryCode: order.recipientCountryCode ?? "", recipientPostalCode: order.recipientPostalCode ?? "",
             recipientRegion: order.recipientRegion ?? "", recipientCity: order.recipientCity ?? "", recipientAddress: order.recipientAddress ?? "",
             recipientFullAddress: order.recipientFullAddress ?? "",
+            recipientFullAddressSource: order.recipientFullAddressSource,
             customerWhatsapp: order.customerWhatsapp ?? "", staffWhatsapp: order.staffWhatsapp ?? "", packageWeightGrams: order.packageWeightGrams ?? 0,
             paymentMethod: order.paymentMethod ?? "COD", logisticsChannel: order.logisticsChannel ?? "", note: order.note ?? "", returnReason: order.exceptionNote,
           }}

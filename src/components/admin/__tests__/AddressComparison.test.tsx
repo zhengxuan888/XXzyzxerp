@@ -6,6 +6,10 @@ vi.mock("next/navigation", () => ({
 }));
 
 import AddressComparison from "@/components/admin/AddressComparison";
+import {
+  CUSTOMER_ORIGINAL_ADDRESS_SOURCE,
+  LEGACY_DERIVED_ADDRESS_SOURCE,
+} from "@/lib/order-address";
 
 const completeAddress = {
   recipientName: "María García",
@@ -16,6 +20,7 @@ const completeAddress = {
   recipientPostalCode: "28009",
   recipientAddress: "Calle de Alcalá 123, 4º B",
   recipientFullAddress: "María García, Calle de Alcalá 123, 4º B, 28009 Madrid, España",
+  recipientFullAddressSource: CUSTOMER_ORIGINAL_ADDRESS_SOURCE,
 };
 
 describe("AddressComparison", () => {
@@ -65,5 +70,23 @@ describe("AddressComparison", () => {
     expect(authorizedHtml).toContain("补录并锁定");
     expect(readOnlyHtml).not.toContain("补录并锁定");
     expect(readOnlyHtml).toContain("请联系有订单或物流维护权限的员工补录");
+  });
+
+  it("treats a legacy derived value as missing customer evidence while preserving it for warning", () => {
+    const html = renderToStaticMarkup(
+      <AddressComparison
+        {...completeAddress}
+        recipientFullAddress="Calle de Alcalá 123, 4º B"
+        recipientFullAddressSource={LEGACY_DERIVED_ADDRESS_SOURCE}
+        orderId="order-1"
+        canCapture
+      />,
+    );
+
+    expect(html).toContain("历史拆分值，需补录");
+    expect(html).toContain("历史值：");
+    expect(html).toContain("Calle de Alcalá 123, 4º B");
+    expect(html).toContain("补录并锁定");
+    expect(html).not.toContain("客户原文已保留");
   });
 });

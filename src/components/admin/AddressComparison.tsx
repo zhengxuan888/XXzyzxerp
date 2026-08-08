@@ -1,6 +1,10 @@
 import { CircleAlert, CircleCheck, FileText, MapPinned } from "lucide-react";
 
 import OriginalAddressCapture from "@/components/admin/OriginalAddressCapture";
+import {
+  hasCustomerOriginalAddress,
+  LEGACY_DERIVED_ADDRESS_SOURCE,
+} from "@/lib/order-address";
 
 type AddressComparisonProps = {
   recipientName: string | null;
@@ -11,6 +15,7 @@ type AddressComparisonProps = {
   recipientPostalCode: string | null;
   recipientAddress: string | null;
   recipientFullAddress: string | null;
+  recipientFullAddressSource: string | null;
   orderId?: string;
   canCapture?: boolean;
   showOriginalAddress?: boolean;
@@ -30,6 +35,7 @@ export default function AddressComparison({
   recipientPostalCode,
   recipientAddress,
   recipientFullAddress,
+  recipientFullAddressSource,
   orderId,
   canCapture = false,
   showOriginalAddress = true,
@@ -46,7 +52,10 @@ export default function AddressComparison({
   ];
   const missingFields = structuredFields.filter((field) => field.required && !hasValue(field.value)).map((field) => field.label);
   const structuredComplete = missingFields.length === 0;
-  const originalComplete = hasValue(recipientFullAddress);
+  const originalComplete = hasValue(recipientFullAddress)
+    && hasCustomerOriginalAddress(recipientFullAddressSource);
+  const legacyDerived = hasValue(recipientFullAddress)
+    && recipientFullAddressSource === LEGACY_DERIVED_ADDRESS_SOURCE;
 
   return (
     <section
@@ -109,21 +118,32 @@ export default function AddressComparison({
                   <p className="mt-0.5 text-xs text-amber-800">仅供内部核对；发送物流商前删除表格中的原始地址列。</p>
                 </div>
               </div>
-              <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${originalComplete ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
+              <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${originalComplete ? "bg-emerald-100 text-emerald-700" : legacyDerived ? "bg-amber-100 text-amber-800" : "bg-rose-100 text-rose-700"}`}>
                 {originalComplete ? <CircleCheck size={13} aria-hidden="true" /> : <CircleAlert size={13} aria-hidden="true" />}
-                {originalComplete ? "原文已保留" : "原文缺失"}
+                {originalComplete ? "客户原文已保留" : legacyDerived ? "历史拆分值，需补录" : "客户原文缺失"}
               </span>
             </div>
-            <div className={`mt-4 min-h-28 rounded-lg border bg-white/80 p-3 ${originalComplete ? "border-amber-100" : "border-rose-200"}`}>
+            <div className={`mt-4 min-h-28 rounded-lg border bg-white/80 p-3 ${originalComplete ? "border-amber-100" : legacyDerived ? "border-amber-300" : "border-rose-200"}`}>
               {originalComplete ? (
                 <p className="whitespace-pre-wrap break-words text-sm font-medium leading-7 text-slate-900">
                   {recipientFullAddress}
                 </p>
               ) : (
                 <div>
-                  <p className="text-sm font-medium leading-6 text-rose-700">
-                    未保留客户完整原始地址，请先补充后再核对。
-                  </p>
+                  {legacyDerived ? (
+                    <div data-testid="legacy-derived-address-warning" className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                      <p className="text-sm font-semibold leading-6 text-amber-900">
+                        此内容来自历史拆分地址，不是客户原文，不能用于物流核对。
+                      </p>
+                      <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-5 text-slate-600">
+                        历史值：{recipientFullAddress}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm font-medium leading-6 text-rose-700">
+                      未保留客户完整原始地址，请先补充后再核对。
+                    </p>
+                  )}
                   {orderId && canCapture ? (
                     <OriginalAddressCapture orderId={orderId} />
                   ) : (

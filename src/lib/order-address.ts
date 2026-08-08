@@ -4,6 +4,13 @@ function normalizedText(value: unknown, maxLength: number) {
   return normalized ? normalized.slice(0, maxLength) : null;
 }
 
+export const CUSTOMER_ORIGINAL_ADDRESS_SOURCE = "CUSTOMER_ORIGINAL";
+export const LEGACY_DERIVED_ADDRESS_SOURCE = "LEGACY_DERIVED";
+
+export function hasCustomerOriginalAddress(source: string | null | undefined) {
+  return source === CUSTOMER_ORIGINAL_ADDRESS_SOURCE;
+}
+
 /** Keep the customer's original address as a write-once audit snapshot. */
 export function preserveOriginalAddress(
   existing: string | null | undefined,
