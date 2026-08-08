@@ -6,6 +6,13 @@ import { requireAuthContext } from "@/lib/api-auth";
 import { fail } from "@/lib/api-response";
 import { writeAuditLog } from "@/lib/audit";
 import { commonDepartmentId, createLogisticsBatchNo, exportFieldValue, logisticsBatchHash } from "@/lib/logistics-batch";
+import {
+  applyLogisticsExportPresentation,
+  findLogisticsAddressReviewIssues,
+  findMissingLogisticsShippingRoutes,
+  logisticsExportFilename,
+  normalizeLogisticsExportColumns,
+} from "@/lib/logistics-export-review";
 import { parseLogisticsTemplateConfiguration } from "@/lib/logistics-provider-template";
 import { prepareGeneratedSpreadsheetArtifact } from "@/lib/logistics-spreadsheet";
 import { checkPermission } from "@/lib/permission";
@@ -35,7 +42,7 @@ export async function POST(request: NextRequest, context: RouteContext<"/api/mvp
   });
   if (!template) return fail("TEMPLATE_NOT_FOUND", "物流商模板不存在或已停用。", 404);
   const configuration = parseLogisticsTemplateConfiguration(template.configuration);
-  const exportColumns = [...configuration.columns];
+  const exportColumns = normalizeLogisticsExportColumns(template.code, configuration.columns);
   if (!exportColumns.some((column) => column.field === "salesName")) {
     exportColumns.push({ field: "salesName", header: "录单员工" });
   }
@@ -71,6 +78,40 @@ export async function POST(request: NextRequest, context: RouteContext<"/api/mvp
     return fail("FORBIDDEN", "当前权限不能导出所选订单。", 403);
   }
 
+  const addressIssues = findLogisticsAddressReviewIssues(template.code, candidateOrders);
+  if (addressIssues.length) {
+    const preview = addressIssues
+      .slice(0, 10)
+      .map((issue) => `${issue.orderNo}：${issue.missingFields.join("、")}`)
+      .join("；");
+    const remaining = addressIssues.length > 10 ? `；另有 ${addressIssues.length - 10} 单` : "";
+    return fail(
+      "LOGISTICS_ADDRESS_INCOMPLETE",
+      `以下订单地址资料不完整，无法生成物流核对版：${preview}${remaining}。请补全后重试。`,
+      409,
+      { orders: addressIssues },
+    );
+  }
+
+  const routeIssues = findMissingLogisticsShippingRoutes(
+    exportColumns,
+    configuration.countryRoutes,
+    candidateOrders,
+  );
+  if (routeIssues.length) {
+    const preview = routeIssues
+      .slice(0, 10)
+      .map((issue) => `${issue.orderNo}：${issue.countryCode}`)
+      .join("；");
+    const remaining = routeIssues.length > 10 ? `；另有 ${routeIssues.length - 10} 单` : "";
+    return fail(
+      "LOGISTICS_ROUTE_NOT_CONFIGURED",
+      `以下订单没有匹配的国家运输线路：${preview}${remaining}。请先在物流模板中配置后再导出。`,
+      409,
+      { orders: routeIssues },
+    );
+  }
+
   const inFlight = await prisma.logisticsExportBatchItem.findFirst({
     where: {
       orderId: { in: candidateOrders.map((order) => order.id) },
@@ -95,11 +136,14 @@ export async function POST(request: NextRequest, context: RouteContext<"/api/mvp
   });
   sheet.getRow(1).font = { bold: true, color: configuration.headerFontColor ? { argb: `FF${configuration.headerFontColor}` } : undefined };
   if (configuration.headerFill) sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${configuration.headerFill}` } };
+  applyLogisticsExportPresentation(sheet, exportColumns, template.code);
   sheet.views = [{ state: "frozen", ySplit: 1 }];
   sheet.autoFilter = { from: "A1", to: { row: 1, column: exportColumns.length } };
   const output = Buffer.from(await workbook.xlsx.writeBuffer());
-  const safeCode = template.code.replace(/[^A-Z0-9_-]/g, "_");
-  const artifact = prepareGeneratedSpreadsheetArtifact(`${safeCode}-${new Date().toISOString().slice(0, 10)}.xlsx`, output);
+  const artifact = prepareGeneratedSpreadsheetArtifact(
+    logisticsExportFilename(template.code, new Date().toISOString().slice(0, 10)),
+    output,
+  );
   const batchNo = createLogisticsBatchNo();
   const templateSnapshot = {
     templateId: template.id,

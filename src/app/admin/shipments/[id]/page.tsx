@@ -7,6 +7,7 @@ import ShipmentEventForm from "@/components/admin/ShipmentEventForm";
 import LogisticsFollowUpForm from "@/components/admin/LogisticsFollowUpForm";
 import AttachmentPanel from "@/components/admin/AttachmentPanel";
 import ShipmentSyncButton from "@/components/admin/ShipmentSyncButton";
+import AddressComparison from "@/components/admin/AddressComparison";
 import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
 import { checkPermission } from "@/lib/permission";
@@ -27,7 +28,7 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
     select: {
       businessUnitId: true,
       siteId: true,
-      order: { select: { departmentId: true, creatorUserId: true, ownedByMembershipId: true } },
+      order: { select: { id: true, departmentId: true, creatorUserId: true, ownedByMembershipId: true } },
     },
   });
   if (!shipmentTarget) notFound();
@@ -53,49 +54,58 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
     ]);
   if (!canRead.allowed) redirect("/admin");
 
-  const shipment = await prisma.shipment.findFirst({
-    where: {
-      id,
-      businessUnitId: membership.businessUnitId,
-    },
-    include: {
-      order: {
-        select: {
-          orderNo: true,
-          exceptionNote: true,
-          recipientName: true,
-          recipientPhone: true,
-          recipientEmail: true,
-          customerWhatsapp: true,
-          recipientCountryCode: true,
-          recipientRegion: true,
-          recipientCity: true,
-          recipientPostalCode: true,
-          recipientAddress: true,
-          codAmountCents: true,
-          currency: true,
-          customer: { select: { code: true, name: true } },
-          creatorUser: { select: { username: true, fullName: true } },
-          items: { select: { productName: true, quantity: true }, orderBy: { id: "asc" } },
-        },
+  const originalAddressQuery = canViewTimeline.allowed
+    ? prisma.order.findFirst({
+        where: { id: shipmentTarget.order.id, businessUnitId: membership.businessUnitId },
+        select: { recipientFullAddress: true },
+      })
+    : Promise.resolve(null);
+  const [shipment, originalAddressRecord] = await Promise.all([
+    prisma.shipment.findFirst({
+      where: {
+        id,
+        businessUnitId: membership.businessUnitId,
       },
-      events: {
-        where: canViewTimeline.allowed ? {} : { id: "__permission_denied__" },
-        orderBy: { occurredAt: "desc" },
-        include: {
-          annotation: {
-            include: { handledByMembership: { include: { user: { select: { fullName: true, username: true } } } } },
+      include: {
+        order: {
+          select: {
+            orderNo: true,
+            exceptionNote: true,
+            recipientName: true,
+            recipientPhone: true,
+            recipientEmail: true,
+            customerWhatsapp: true,
+            recipientCountryCode: true,
+            recipientRegion: true,
+            recipientCity: true,
+            recipientPostalCode: true,
+            recipientAddress: true,
+            codAmountCents: true,
+            currency: true,
+            customer: { select: { code: true, name: true } },
+            creatorUser: { select: { username: true, fullName: true } },
+            items: { select: { productName: true, quantity: true }, orderBy: { id: "asc" } },
+          },
+        },
+        events: {
+          where: canViewTimeline.allowed ? {} : { id: "__permission_denied__" },
+          orderBy: { occurredAt: "desc" },
+          include: {
+            annotation: {
+              include: { handledByMembership: { include: { user: { select: { fullName: true, username: true } } } } },
+            },
+          },
+        },
+        followUps: {
+          where: canViewTimeline.allowed ? {} : { id: "__permission_denied__" },
+          orderBy: { createdAt: "desc" },
+          include: { actorUser: { select: { fullName: true, username: true } },
           },
         },
       },
-      followUps: {
-        where: canViewTimeline.allowed ? {} : { id: "__permission_denied__" },
-        orderBy: { createdAt: "desc" },
-        include: { actorUser: { select: { fullName: true, username: true } },
-        },
-      },
-    },
-  });
+    }),
+    originalAddressQuery,
+  ]);
   if (!shipment) notFound();
   const syncAllowed = isShipmentSyncAllowed({ status: shipment.status, orderExceptionNote: shipment.order.exceptionNote });
 
@@ -137,10 +147,23 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
         <Info icon={<UserRound size={16} />} label="销售" value={shipment.order.creatorUser.fullName || shipment.order.creatorUser.username} />
         <Info icon={<Package size={16} />} label="商品" value={shipment.order.items.map((item) => `${item.productName} × ${item.quantity}`).join("；") || "-"} />
         <Info icon={<PackageCheck size={16} />} label="COD 金额" value={formatMoneyCents(shipment.order.codAmountCents, shipment.order.currency)} />
-        <Info icon={<MapPin size={16} />} label="目的地" value={[shipment.order.recipientCountryCode, shipment.order.recipientRegion, shipment.order.recipientCity].filter(Boolean).join(" / ") || "-"} />
         <Info icon={<Route size={16} />} label="订单 / 客户编号" value={`${shipment.order.orderNo}${shipment.order.customer.code ? ` / ${shipment.order.customer.code}` : ""}`} />
-        {shipment.order.recipientAddress && <div className="md:col-span-2 xl:col-span-4 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700"><span className="font-medium text-slate-500">收件地址：</span>{[shipment.order.recipientAddress, shipment.order.recipientPostalCode].filter(Boolean).join(" / ")}</div>}
       </section>
+
+      <AddressComparison
+        recipientName={shipment.order.recipientName}
+        recipientPhone={shipment.order.recipientPhone}
+        recipientCountryCode={shipment.order.recipientCountryCode}
+        recipientRegion={shipment.order.recipientRegion}
+        recipientCity={shipment.order.recipientCity}
+        recipientPostalCode={shipment.order.recipientPostalCode}
+        recipientAddress={shipment.order.recipientAddress}
+        recipientFullAddress={originalAddressRecord?.recipientFullAddress ?? null}
+        showOriginalAddress={canViewTimeline.allowed}
+        {...(canViewTimeline.allowed && canTrack.allowed
+          ? { orderId: shipmentTarget.order.id, canCapture: true }
+          : {})}
+      />
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

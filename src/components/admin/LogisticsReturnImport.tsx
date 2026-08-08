@@ -24,6 +24,7 @@ type ExportBatch = {
   orderCount: number;
   exportArtifactId: string | null;
   latestReturnArtifactId: string | null;
+  requiresOriginalAddressRemoval: boolean;
   canPreview: boolean;
   canConfirm: boolean;
   canDispatch: boolean;
@@ -95,12 +96,16 @@ export default function LogisticsReturnImport({ batches }: { batches: ExportBatc
   }
 
   async function markDispatched(batch: ExportBatch) {
+    const rawAddressColumnRemoved = batch.requiresOriginalAddressRemoval
+      ? window.confirm("请确认：售后已核对拆分地址，并已从实际发送给物流商的 Excel 中删除“完整原始地址（核对后删除）”整列。确认后才会标记为已发送。")
+      : true;
+    if (!rawAddressColumnRemoved) return;
     setLoading(true);
     setMessage("");
     const response = await fetch(`/api/mvp/logistics-export-batches/${batch.id}/dispatch`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ rawAddressColumnRemoved }),
     });
     const payload = await response.json().catch(() => null);
     setLoading(false);
@@ -108,7 +113,7 @@ export default function LogisticsReturnImport({ batches }: { batches: ExportBatc
       setMessage(payload?.error?.message ?? "标记发送失败。" );
       return;
     }
-    setMessage(`批次 ${batch.batchNo} 已记录为“已发给物流商”。`);
+    setMessage(`批次 ${batch.batchNo} 已记录为“已发给物流商”。${batch.requiresOriginalAddressRemoval ? "已记录原始地址列删除确认。" : ""}`);
     window.setTimeout(() => window.location.reload(), 800);
   }
 
@@ -155,9 +160,9 @@ export default function LogisticsReturnImport({ batches }: { batches: ExportBatc
                   </label>
                   <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">{statusLabel(batch.status)}</span>
                   <div className="flex flex-wrap gap-2">
-                    {batch.canDownload && batch.exportArtifactId && <a href={`/api/mvp/logistics-batch-artifacts/${batch.exportArtifactId}/content`} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 hover:bg-slate-50"><Download size={13} />导出文件</a>}
+                    {batch.canDownload && batch.exportArtifactId && <a href={`/api/mvp/logistics-batch-artifacts/${batch.exportArtifactId}/content`} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 hover:bg-slate-50"><Download size={13} />{batch.requiresOriginalAddressRemoval ? "核对版（含原始地址）" : "导出文件"}</a>}
                     {batch.canDownload && batch.latestReturnArtifactId && <a href={`/api/mvp/logistics-batch-artifacts/${batch.latestReturnArtifactId}/content`} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 hover:bg-slate-50"><Download size={13} />回传原件</a>}
-                    {batch.canDispatch && batch.status === "EXPORTED" && <button type="button" disabled={loading} onClick={() => markDispatched(batch)} className="inline-flex items-center gap-1 rounded-lg border border-violet-200 px-2.5 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-50 disabled:opacity-50"><Send size={13} />标记已发送</button>}
+                    {batch.canDispatch && batch.status === "EXPORTED" && <button type="button" disabled={loading} onClick={() => markDispatched(batch)} className="inline-flex items-center gap-1 rounded-lg border border-violet-200 px-2.5 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-50 disabled:opacity-50"><Send size={13} />{batch.requiresOriginalAddressRemoval ? "确认删列并标记已发送" : "标记已发送"}</button>}
                   </div>
                 </div>
               );

@@ -142,9 +142,11 @@ export async function POST(request: NextRequest) {
             recipientPhone: row.phone || null,
             recipientEmail: row.email || null,
             recipientCountryCode: row.country || null,
+            recipientRegion: row.region || null,
             recipientCity: row.city || null,
             recipientPostalCode: row.postalCode || null,
             recipientAddress: row.address || null,
+            recipientFullAddress: row.fullAddress || null,
             paymentMethod: row.paymentMethod || null,
             items: {
               create: {

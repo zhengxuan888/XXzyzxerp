@@ -15,6 +15,7 @@ import { logisticsPriorityQuickTags, logisticsQueueKeys, matchesLogisticsQuickTa
 import { loadTrackingTranslations, trackingTextHash } from "@/lib/tracking-translation-service";
 import { classifyLogisticsColorTags, logisticsColorTagKeys, logisticsColorTags, parseLogisticsColorTagKeys } from "@/lib/logistics-color-tags";
 import { buildShipmentSyncScope } from "@/lib/logistics/shipment-sync-scope";
+import { sortPinnedShipmentCards } from "@/lib/logistics/shipment-card-pin";
 
 type Urgency = "critical" | "high" | "normal";
 
@@ -264,6 +265,19 @@ export default async function ShipmentsPage({
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       })
     : [];
+  const cardPins = candidateRows.length
+    ? await prisma.shipmentCardPin.findMany({
+        where: {
+          businessUnitId: membership.businessUnitId,
+          membershipId: membership.id,
+          shipmentId: { in: candidateRows.map((row) => row.id) },
+        },
+        select: { shipmentId: true, pinnedAt: true },
+      })
+    : [];
+  const cardPinByShipmentId = new Map(
+    cardPins.map((pin) => [pin.shipmentId, pin.pinnedAt.toISOString()] as const),
+  );
   const syncScope = buildShipmentSyncScope(syncCandidateRows.map((row) => ({
     id: row.id,
     status: row.status,
@@ -434,9 +448,14 @@ export default async function ShipmentsPage({
     workbenchConfig.cards.map((card) => [card.key, colorFiltered.filter((row) => matchesCard(row, card.key)).length]),
   ) as Partial<Record<LogisticsQueueKey, number>>;
   const filteredRows = colorFiltered.filter((row) => matchesCard(row, queue));
-  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const orderedRows = sortPinnedShipmentCards(filteredRows.map((row) => ({
+    ...row,
+    isPinned: cardPinByShipmentId.has(row.id),
+    pinnedAt: cardPinByShipmentId.get(row.id) ?? null,
+  })));
+  const pageCount = Math.max(1, Math.ceil(orderedRows.length / pageSize));
   const page = Math.min(requestedPage, pageCount);
-  const pageRows = filteredRows.slice((page - 1) * pageSize, page * pageSize);
+  const pageRows = orderedRows.slice((page - 1) * pageSize, page * pageSize);
   const pageIds = pageRows.map((row) => row.id);
   const detailRows = pageIds.length
     ? await prisma.shipment.findMany({
@@ -525,6 +544,8 @@ export default async function ShipmentsPage({
       canViewTrackingNo: row.canViewTrackingNo,
       canViewTimeline: row.canViewTimeline,
       canAnnotate: row.canAnnotate,
+      isPinned: row.isPinned,
+      pinnedAt: row.pinnedAt,
       carrier: detail.carrier,
       status: detail.status,
       urgency: row.urgency,

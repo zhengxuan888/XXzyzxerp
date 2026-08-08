@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ExternalLink, LayoutGrid, Mail, MessageCircle, OctagonX, Package, RefreshCw, Save, Search, SlidersHorizontal, Tags, Truck, UserRound, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ExternalLink, LayoutGrid, Mail, MessageCircle, OctagonX, Package, Pin, RefreshCw, Save, Search, SlidersHorizontal, Tags, Truck, UserRound, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -9,10 +9,11 @@ import { translateTrackingDescription } from "@/lib/tracking-translation";
 import { logisticsColorCardTone, logisticsColorTagDefinition, logisticsColorTags, parseLogisticsColorTagKeys, type LogisticsColorTagKey } from "@/lib/logistics-color-tags";
 import { isShipmentSyncAllowed } from "@/lib/logistics/shipment-sync-policy";
 import type { ShipmentSyncScope } from "@/lib/logistics/shipment-sync-scope";
+import { sortPinnedShipmentCards } from "@/lib/logistics/shipment-card-pin";
 
 type Annotation = { note: string | null; tags: string[]; isHandled: boolean; handledAt: string | null; updatedAt: string; handledByMembership?: { user?: { fullName: string | null; username: string } } | null };
 type TrackingEvent = { id: string; occurredAt: string; eventType: string; statusMilestone: string | null; location: string | null; memo: string | null; memoTranslation: string | null; annotation: Annotation | null };
-type TrackingRow = { id: string; updatedAt: string; trackingNo: string | null; carrier: string | null; status: string; colorTagKeys: string[]; urgency: "critical" | "high" | "normal"; urgencyLabel: string; priorityTag: string; dueStatus: string; canViewTrackingNo: boolean; canViewTimeline: boolean; canAnnotate: boolean; eventTotal: number; unhandledEventCount: number; queueSignals: string[]; followUpOwner: { id: string; user: { username: string; fullName: string | null } } | null; order: { id: string; orderNo: string; status: string; exceptionNote: string | null; shopId: string | null; recipientName: string | null; recipientPhone: string | null; recipientEmail: string | null; customerWhatsapp: string | null; recipientCountryCode: string | null; codAmountLabel: string; customer: { name: string }; creatorUser: { username: string; fullName: string | null }; ownerMembership: { id: string; department: { id: string; name: string } | null; managerMembership: { id: string; user: { username: string; fullName: string | null } } | null }; items: Array<{ productName: string; quantity: number }> }; events: TrackingEvent[] };
+type TrackingRow = { id: string; updatedAt: string; trackingNo: string | null; carrier: string | null; status: string; isPinned: boolean; pinnedAt: string | null; colorTagKeys: string[]; urgency: "critical" | "high" | "normal"; urgencyLabel: string; priorityTag: string; dueStatus: string; canViewTrackingNo: boolean; canViewTimeline: boolean; canAnnotate: boolean; eventTotal: number; unhandledEventCount: number; queueSignals: string[]; followUpOwner: { id: string; user: { username: string; fullName: string | null } } | null; order: { id: string; orderNo: string; status: string; exceptionNote: string | null; shopId: string | null; recipientName: string | null; recipientPhone: string | null; recipientEmail: string | null; customerWhatsapp: string | null; recipientCountryCode: string | null; codAmountLabel: string; customer: { name: string }; creatorUser: { username: string; fullName: string | null }; ownerMembership: { id: string; department: { id: string; name: string } | null; managerMembership: { id: string; user: { username: string; fullName: string | null } } | null }; items: Array<{ productName: string; quantity: number }> }; events: TrackingEvent[] };
 
 const primaryQueueKeys: readonly LogisticsQueueKey[] = ["unhandled", "critical", "due_today", "problem", "pending_delivery_confirmation"];
 
@@ -264,6 +265,9 @@ export default function LogisticsTrackingWorkbench({
   const [quickTagFiltersOpen, setQuickTagFiltersOpen] = useState(selectedQuickTags.length > 0);
   const [allQueuesOpen, setAllQueuesOpen] = useState(false);
   const [claimedOwners, setClaimedOwners] = useState<Record<string, string>>({});
+  const [pinOverrides, setPinOverrides] = useState<Record<string, { isPinned: boolean; pinnedAt: string | null }>>({});
+  const [pinningIds, setPinningIds] = useState<Record<string, boolean>>({});
+  const [pinMessages, setPinMessages] = useState<Record<string, string>>({});
   const closeOrder = async () => {
     if (!closeDialog) return;
     if (!closeDialog.confirmReady) {
@@ -323,6 +327,52 @@ export default function LogisticsTrackingWorkbench({
     if (resetPage) next.delete("page");
     router.replace(`/admin/shipments${next.size ? `?${next.toString()}` : ""}`);
   };
+  const toggleCardPin = async (row: TrackingRow) => {
+    const previous = { isPinned: row.isPinned, pinnedAt: row.pinnedAt };
+    const pinned = !row.isPinned;
+    setPinOverrides((current) => ({
+      ...current,
+      [row.id]: { isPinned: pinned, pinnedAt: pinned ? new Date().toISOString() : null },
+    }));
+    setPinningIds((current) => ({ ...current, [row.id]: true }));
+    setPinMessages((current) => ({ ...current, [row.id]: "" }));
+
+    try {
+      const response = await fetch(`/api/mvp/shipments/${row.id}/pin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pinned }),
+      });
+      const payload = await response.json().catch(() => null) as {
+        data?: { pinned?: boolean; pinnedAt?: string | null };
+        error?: { message?: string };
+      } | null;
+      if (!response.ok) throw new Error(payload?.error?.message ?? "卡片锁定失败");
+
+      setPinOverrides((current) => ({
+        ...current,
+        [row.id]: {
+          isPinned: payload?.data?.pinned ?? pinned,
+          pinnedAt: payload?.data?.pinnedAt ?? (pinned ? new Date().toISOString() : null),
+        },
+      }));
+
+      if (pinned && pagination.page > 1) replaceQuery({}, true);
+      else router.refresh();
+    } catch (error) {
+      setPinOverrides((current) => ({ ...current, [row.id]: previous }));
+      setPinMessages((current) => ({
+        ...current,
+        [row.id]: error instanceof Error ? error.message : "卡片锁定失败",
+      }));
+    } finally {
+      setPinningIds((current) => {
+        const next = { ...current };
+        delete next[row.id];
+        return next;
+      });
+    }
+  };
   const toggleColorTagFilter = (key: LogisticsColorTagKey) => {
     const next = selectedColorTags.includes(key)
       ? selectedColorTags.filter((item) => item !== key)
@@ -337,7 +387,10 @@ export default function LogisticsTrackingWorkbench({
     if (!selectedQuickTags.length && next.length && !urlSearchParams.has("queue")) updates.queue = "all";
     replaceQuery(updates);
   };
-  const pagedRows = rows;
+  const pagedRows = sortPinnedShipmentCards(rows.map((row) => ({
+    ...row,
+    ...(pinOverrides[row.id] ?? {}),
+  })));
   const syncableShipmentIds = syncScope.shipmentIds;
   const countFor = (key: LogisticsQueueKey) => queueCounts[key] ?? 0;
   const toneFor = (key: LogisticsQueueKey) => key === "critical" || key === "problem" || key === "signed_refund" ? "border-rose-200 bg-rose-50 text-rose-900" : key === "refused" ? "border-red-300 bg-red-50 text-red-900" : key === "delivery_failed" || key === "unread_no_reply" || key === "read_no_reply" || key === "pending_delivery_confirmation" || key === "due_today" || key === "high" ? "border-yellow-300 bg-yellow-50 text-yellow-950" : key === "out_for_delivery" ? "border-pink-300 bg-pink-50 text-pink-900" : key === "ready_for_pickup" ? "border-blue-300 bg-blue-50 text-blue-900" : key === "delivered" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : key === "unhandled" || key === "returning" ? "border-violet-200 bg-violet-50 text-violet-900" : "border-slate-200 bg-white text-slate-900";
@@ -474,9 +527,9 @@ export default function LogisticsTrackingWorkbench({
     {!canViewTrackingNo && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">当前角色未配置“查看物流单号”权限，页面已隐藏物流单号。</p>}
     {!canViewTimeline && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">当前角色未配置“查看物流轨迹”权限，页面已隐藏全部轨迹。</p>}
     {canViewTimeline && !canAnnotate && <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">当前角色可查看物流轨迹，但未配置“处理物流轨迹”权限，备注和完成按钮已隐藏。</p>}
-    {pagedRows.map((row) => { const isOpen = expanded[row.id] ?? false; return <article key={row.id} className={`overflow-hidden rounded-2xl border border-l-4 shadow-sm transition-colors ${logisticsColorCardTone(row.colorTagKeys)}`}>
+    {pagedRows.map((row) => { const isOpen = expanded[row.id] ?? false; return <article key={row.id} className={`overflow-hidden rounded-2xl border border-l-4 shadow-sm transition-colors ${row.isPinned ? "ring-2 ring-violet-300 ring-offset-1" : ""} ${logisticsColorCardTone(row.colorTagKeys)}`}>
       <div className="grid gap-4 p-3 sm:p-4 lg:grid-cols-2 xl:grid-cols-[1.2fr_1.3fr_1fr_auto] xl:items-center">
-        <div><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.urgency === "critical" ? "bg-rose-50 text-rose-800" : row.urgency === "high" ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-800"}`}>{row.urgencyLabel}</span>{!hasEquivalentColorStatus(row.status, row.colorTagKeys) && <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${trackingStatusTone(row.status)}`}>{trackingStatusLabel(row.status)}</span>}{row.colorTagKeys.map((key) => <span key={key} className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${colorTagTone(key)}`}>{colorTagLabel(key)}</span>)}{row.priorityTag !== "-" && <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">{row.priorityTag}</span>}</div><div className="mt-2 flex flex-wrap items-center gap-2"><p className="font-mono text-sm font-semibold text-slate-900">{row.trackingNo || "暂无物流单号"}</p>{row.trackingNo && <a href={`https://www.ship24.com/tracking?p=${encodeURIComponent(row.trackingNo)}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-violet-700 hover:underline">Ship24 查看<ExternalLink size={12} /></a>}</div><p className="mt-1 text-xs text-slate-600">{row.carrier || "未填写物流商"} · {row.order.recipientCountryCode || "目的地未知"} · {row.dueStatus}</p></div>
+        <div><div className="mb-2 flex flex-wrap items-center gap-2"><button type="button" disabled={Boolean(pinningIds[row.id])} aria-pressed={row.isPinned} aria-label={`${row.isPinned ? "取消锁定" : "锁定"}订单 ${row.order.orderNo}`} title="仅影响我的物流工作台排序" onClick={() => void toggleCardPin(row)} className={`inline-flex min-h-8 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1 disabled:cursor-wait disabled:opacity-60 ${row.isPinned ? "border-violet-300 bg-violet-100 text-violet-800" : "border-slate-200 bg-white text-slate-600 hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700"}`}>{pinningIds[row.id] ? <RefreshCw size={13} className="animate-spin" aria-hidden="true" /> : <Pin size={13} fill={row.isPinned ? "currentColor" : "none"} aria-hidden="true" />}{row.isPinned ? "已锁定" : "锁定卡片"}</button><span className="text-[11px] text-slate-400">仅影响我的排序</span>{pinMessages[row.id] && <span role="alert" className="text-xs font-medium text-rose-600">{pinMessages[row.id]}</span>}</div><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.urgency === "critical" ? "bg-rose-50 text-rose-800" : row.urgency === "high" ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-800"}`}>{row.urgencyLabel}</span>{!hasEquivalentColorStatus(row.status, row.colorTagKeys) && <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${trackingStatusTone(row.status)}`}>{trackingStatusLabel(row.status)}</span>}{row.colorTagKeys.map((key) => <span key={key} className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${colorTagTone(key)}`}>{colorTagLabel(key)}</span>)}{row.priorityTag !== "-" && <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">{row.priorityTag}</span>}</div><div className="mt-2 flex flex-wrap items-center gap-2"><p className="font-mono text-sm font-semibold text-slate-900">{row.trackingNo || "暂无物流单号"}</p>{row.trackingNo && <a href={`https://www.ship24.com/tracking?p=${encodeURIComponent(row.trackingNo)}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-violet-700 hover:underline">Ship24 查看<ExternalLink size={12} /></a>}</div><p className="mt-1 text-xs text-slate-600">{row.carrier || "未填写物流商"} · {row.order.recipientCountryCode || "目的地未知"} · {row.dueStatus}</p></div>
         <div><div className="flex flex-wrap items-center gap-2"><Link href={`/admin/orders/${row.order.id}`} className="font-semibold text-violet-700 hover:underline">{row.order.orderNo}</Link><span className="rounded-md bg-slate-100 px-2 py-1 font-mono text-xs font-medium text-slate-700">窗口 ID：{row.order.shopId || "未填写"}</span></div><p className="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-slate-800"><MessageCircle size={14} className="text-emerald-600" />客户 WhatsApp：{row.order.customerWhatsapp || "未填写"}</p><div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600"><span className="inline-flex items-center gap-1"><Mail size={13} />{row.order.recipientEmail || "-"}</span><span>{row.order.recipientPhone || "-"}</span></div></div>
         <div><div className="flex items-start gap-2"><Package size={16} className="mt-0.5 shrink-0 text-slate-400" /><div className="text-sm text-slate-700">{row.order.items.map((item) => `${item.productName} × ${item.quantity}`).join("、") || "未记录产品"}</div></div><div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600"><span>COD：<strong className="text-slate-800">{row.order.codAmountLabel}</strong></span><span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-1 font-medium text-violet-700"><UserRound size={13} />销售：{row.order.creatorUser.fullName || row.order.creatorUser.username}</span></div></div>
         <div className="flex flex-col gap-2">

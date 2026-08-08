@@ -12,6 +12,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { fail, ok, paginated, parsePagination } from "@/lib/api-response";
 import { normalizeMoneyCents } from "@/lib/money";
 import { parseOrderItems, parseSingleOrderItem, type ParsedOrderItem } from "@/lib/order-item-input";
+import { preserveOriginalAddress } from "@/lib/order-address";
 import { allocateOrderNumber, OrderNumberingError } from "@/lib/order-numbering";
 import { parseOrderTemplateConfiguration, sanitizeOrderCustomValues } from "@/lib/order-template";
 
@@ -140,7 +141,10 @@ export async function POST(request: NextRequest) {
   if (!shopId) return fail("SHOP_ID_REQUIRED", "请填写比特窗口号（店铺 ID）。", 400);
   const recipientEmail = typeof body.recipientEmail === "string" ? body.recipientEmail.trim().toLowerCase() : "";
   const recipientAddress = typeof body.recipientAddress === "string" ? body.recipientAddress.trim() : "";
-  const recipientFullAddress = typeof body.recipientFullAddress === "string" ? body.recipientFullAddress.trim() : recipientAddress;
+  const recipientFullAddress = preserveOriginalAddress(null, body.recipientFullAddress);
+  if (!recipientFullAddress) {
+    return fail("RECIPIENT_FULL_ADDRESS_REQUIRED", "请完整粘贴客户提供的原始地址，供售后核对。", 400);
+  }
   const recipientCountryCode = typeof body.recipientCountryCode === "string" ? body.recipientCountryCode.trim() : "";
   const recipientPostalCode = typeof body.recipientPostalCode === "string" ? body.recipientPostalCode.trim() : "";
   const recipientRegion = typeof body.recipientRegion === "string" ? body.recipientRegion.trim() : "";
@@ -302,7 +306,7 @@ export async function POST(request: NextRequest) {
         recipientRegion: recipientRegion ? recipientRegion.slice(0, 100) : null,
         recipientCity: recipientCity ? recipientCity.slice(0, 100) : null,
         recipientAddress: recipientAddress || null,
-        recipientFullAddress: recipientFullAddress ? recipientFullAddress.slice(0, 1000) : null,
+        recipientFullAddress,
         packageWeightGrams,
         paymentMethod: typeof body.paymentMethod === "string" ? body.paymentMethod.trim().slice(0, 30) : templateConfiguration.paymentMethod,
         customerWhatsapp: typeof body.customerWhatsapp === "string" ? body.customerWhatsapp.trim().slice(0, 50) : null,
@@ -425,7 +429,28 @@ export async function PUT(request: NextRequest) {
   } catch {
     return fail("DECLARATION_RATE_NOT_CONFIGURED", `暂未配置 ${orderCurrency} 到欧元的申报固定汇率。`, 400);
   }
+  const proposedOriginalAddress = preserveOriginalAddress(
+    null,
+    body.recipientFullAddress,
+  );
+  if (!target.recipientFullAddress && !proposedOriginalAddress) {
+    return fail("RECIPIENT_FULL_ADDRESS_REQUIRED", "请先补录客户提供的完整原始地址；保存后将锁定为只读留档。", 400);
+  }
   const row = await prisma.$transaction(async (tx) => {
+    if (proposedOriginalAddress) {
+      // Claim the write-once snapshot atomically. Concurrent edits may both
+      // observe an empty value before entering this transaction; updateMany's
+      // predicate is rechecked after the row lock, so only the first writer can
+      // fill it and later edits cannot replace it.
+      await tx.order.updateMany({
+        where: {
+          id: target.id,
+          status: "DRAFT",
+          OR: [{ recipientFullAddress: null }, { recipientFullAddress: "" }],
+        },
+        data: { recipientFullAddress: proposedOriginalAddress },
+      });
+    }
     const updated = await tx.order.update({
       where: { id: target.id, status: "DRAFT" },
       data: {
@@ -436,7 +461,6 @@ export async function PUT(request: NextRequest) {
         recipientName, recipientPhone: text(body.recipientPhone, 100), recipientEmail: text(body.recipientEmail, 200)?.toLowerCase(),
         recipientCountryCode, recipientPostalCode: text(body.recipientPostalCode, 30),
         recipientRegion: text(body.recipientRegion, 100), recipientCity: text(body.recipientCity, 100), recipientAddress: text(body.recipientAddress, 500),
-        recipientFullAddress: text(body.recipientFullAddress, 1000) ?? text(body.recipientAddress, 500),
         customerWhatsapp: text(body.customerWhatsapp, 50), staffWhatsapp: text(body.staffWhatsapp, 50), packageWeightGrams,
         paymentMethod: text(body.paymentMethod, 30), logisticsChannel: text(body.logisticsChannel, 50), note: text(body.note, 2000),
         exceptionNote: null,
@@ -461,7 +485,12 @@ export async function PUT(request: NextRequest) {
     targetId: row.id,
     businessUnitId: row.businessUnitId,
     roleId: auth.membership.roleId,
-    details: { changed: "returned_order_details", previousExceptionNote: target.exceptionNote },
+    details: {
+      changed: "returned_order_details",
+      previousExceptionNote: target.exceptionNote,
+      originalAddressPreviouslyCaptured: Boolean(target.recipientFullAddress),
+      originalAddressCapturedNow: !target.recipientFullAddress && Boolean(row.recipientFullAddress),
+    },
   });
 
   return ok(row);

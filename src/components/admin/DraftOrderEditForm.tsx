@@ -79,7 +79,18 @@ export default function DraftOrderEditForm({ order, products, countries }: { ord
       <Label text="州/区域"><input name="recipientRegion" defaultValue={order.recipientRegion} className={field}/></Label>
       <Label text="城市"><input name="recipientCity" defaultValue={order.recipientCity} className={field}/></Label>
       <Label text="详细地址" wide><input name="recipientAddress" defaultValue={order.recipientAddress} className={field}/></Label>
-      <Label text="完整原始地址（人工核对）" wide><input name="recipientFullAddress" defaultValue={order.recipientFullAddress} className={field}/></Label>
+      <Label text={order.recipientFullAddress ? "客户完整原始地址（只读留档）" : "客户完整原始地址（首次补录后锁定）"} wide>
+        <textarea
+          name="recipientFullAddress"
+          readOnly={Boolean(order.recipientFullAddress)}
+          required={!order.recipientFullAddress}
+          defaultValue={order.recipientFullAddress}
+          rows={3}
+          placeholder="请完整粘贴客户提供的原始地址"
+          className={`w-full resize-y rounded-lg border px-3 py-2 text-sm leading-6 text-slate-800 outline-none ${order.recipientFullAddress ? "border-rose-200 bg-rose-50" : "border-amber-300 bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-100"}`}
+        />
+        <span className={`text-xs font-normal ${order.recipientFullAddress ? "text-rose-700" : "text-amber-700"}`}>{order.recipientFullAddress ? "原文只用于核对；请在上方修改拆分后的地址字段。" : "当前未留存原文，请补录一次；保存后不可覆盖。"}</span>
+      </Label>
       <Label text="客户 WhatsApp"><input name="customerWhatsapp" defaultValue={order.customerWhatsapp} className={field}/></Label>
       <Label text="员工 WhatsApp"><input name="staffWhatsapp" defaultValue={order.staffWhatsapp} className={field}/></Label>
       <Label text="重量（kg）"><input min="0" step="0.001" type="number" name="packageWeightKg" defaultValue={(order.packageWeightGrams / 1000).toString()} className={field}/></Label>

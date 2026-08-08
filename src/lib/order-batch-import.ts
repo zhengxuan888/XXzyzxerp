@@ -11,7 +11,9 @@ export type OrderImportRow = {
   phone: string;
   email: string;
   address: string;
+  fullAddress: string;
   country: string;
+  region: string;
   city: string;
   postalCode: string;
   productCode: string;
@@ -49,8 +51,19 @@ const HEADER_ALIASES: Record<string, ImportField> = {
   email: "email",
   地址: "address",
   收货地址: "address",
+  详细地址: "address",
+  fulladdress: "fullAddress",
+  完整地址: "fullAddress",
+  原始地址: "fullAddress",
+  完整原始地址: "fullAddress",
+  完整原始地址人工核对: "fullAddress",
   国家: "country",
   country: "country",
+  州省: "region",
+  州区域: "region",
+  省份: "region",
+  region: "region",
+  state: "region",
   城市: "city",
   city: "city",
   邮编: "postalCode",
@@ -76,6 +89,7 @@ const REQUIRED_HEADERS: Array<{ field: ImportField; label: string }> = [
   { field: "productCode", label: "商品编码" },
   { field: "quantity", label: "数量" },
   { field: "unitPriceCents", label: "单价分" },
+  { field: "fullAddress", label: "完整原始地址（人工核对）" },
 ];
 
 function cellText(value: ExcelJS.CellValue): string {
@@ -91,7 +105,7 @@ function cellText(value: ExcelJS.CellValue): string {
 }
 
 function normalizeHeader(value: ExcelJS.CellValue) {
-  return cellText(value).toLowerCase().replace(/\s/g, "");
+  return cellText(value).toLowerCase().replace(/[\s　/／()（）\[\]【】:_-]+/g, "");
 }
 
 export async function parseOrderImportWorkbook(input: Buffer | Uint8Array): Promise<OrderImportRow[]> {
@@ -135,7 +149,9 @@ export async function parseOrderImportWorkbook(input: Buffer | Uint8Array): Prom
       phone: raw.phone ?? "",
       email: (raw.email ?? "").toLowerCase(),
       address: raw.address ?? "",
+      fullAddress: raw.fullAddress ?? "",
       country: (raw.country ?? "").toUpperCase(),
+      region: raw.region ?? "",
       city: raw.city ?? "",
       postalCode: raw.postalCode ?? "",
       productCode: raw.productCode ?? "",
@@ -164,6 +180,7 @@ export function validateOrderImportRows(
     const product = productsByCode.get(row.productCode.toLowerCase());
     if (!row.shopId) errors.push("店铺 ID 必填");
     if (!row.customerName) errors.push("客户姓名必填");
+    if (!row.fullAddress) errors.push("完整原始地址必填");
     if (!row.productCode || !product) errors.push("商品编码不存在或不属于当前业务板块");
     if (!Number.isSafeInteger(row.quantity) || row.quantity <= 0) errors.push("数量必须为正整数");
     if (!Number.isSafeInteger(row.unitPriceCents) || row.unitPriceCents < 0) errors.push("单价分必须为非负整数");

@@ -13,10 +13,12 @@ const HEADERS = [
   "客户姓名",
   "电话",
   "邮箱",
-  "收货地址",
   "国家",
+  "州/省",
   "城市",
   "邮编",
+  "详细地址",
+  "完整原始地址（人工核对）",
   "商品编码",
   "数量",
   "单价分",
@@ -48,10 +50,12 @@ export async function GET(request: NextRequest) {
     "示例客户（请删除本行）",
     "+34123456789",
     "customer@example.com",
-    "示例地址",
     "ES",
+    "Comunidad de Madrid",
     "Madrid",
     "28001",
+    "Calle de Alcalá 123, 4º B",
+    "María García, Calle de Alcalá 123, 4º B, 28001 Madrid, España",
     "请填写系统中的商品编码",
     1,
     2999,
@@ -60,7 +64,7 @@ export async function GET(request: NextRequest) {
     "COD",
   ]);
   sheet.views = [{ state: "frozen", ySplit: 1 }];
-  sheet.autoFilter = { from: "A1", to: "O1" };
+  sheet.autoFilter = { from: "A1", to: "Q1" };
   sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
   sheet.getRow(1).fill = {
     type: "pattern",
@@ -73,10 +77,12 @@ export async function GET(request: NextRequest) {
     { width: 22 },
     { width: 18 },
     { width: 28 },
-    { width: 36 },
     { width: 12 },
+    { width: 24 },
     { width: 18 },
     { width: 14 },
+    { width: 36 },
+    { width: 58 },
     { width: 28 },
     { width: 10 },
     { width: 14 },
@@ -84,6 +90,9 @@ export async function GET(request: NextRequest) {
     { width: 10 },
     { width: 14 },
   ];
+  sheet.getColumn(9).numFmt = "@";
+  sheet.getColumn(10).numFmt = "@";
+  sheet.getColumn(11).numFmt = "@";
 
   const output = await workbook.xlsx.writeBuffer();
   return new Response(output as BodyInit, {
