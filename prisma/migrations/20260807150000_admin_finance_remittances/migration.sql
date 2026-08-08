@@ -1,5 +1,5 @@
-INSERT INTO "Action" ("key", "name", "namespace", "createdAt", "updatedAt")
-VALUES ('finance.remittance_admin.read', '查看管理员回款数据', 'finance', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+INSERT INTO "Action" ("id", "key", "name", "namespace", "createdAt", "updatedAt")
+VALUES (gen_random_uuid()::text, 'finance.remittance_admin.read', '查看管理员回款数据', 'finance', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 ON CONFLICT ("key") DO UPDATE SET "name" = EXCLUDED."name", "updatedAt" = CURRENT_TIMESTAMP;
 
 INSERT INTO "RolePermission" ("id", "roleId", "actionKey", "scope", "isAllowed", "createdAt", "updatedAt")
