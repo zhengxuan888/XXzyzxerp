@@ -6,6 +6,9 @@ export type SmartAddressResult = {
   countryCode: string;
   postalCode: string;
   city: string;
+  district: string;
+  street: string;
+  houseNumber: string;
   address: string;
 };
 
@@ -14,6 +17,9 @@ export type StructuredAddress = {
   postalCode: string;
   region: string;
   city: string;
+  district: string;
+  street: string;
+  houseNumber: string;
   address: string;
 };
 
@@ -21,6 +27,9 @@ const EMAIL_PATTERN = /[^\s,;<>]+@[^\s,;<>]+\.[^\s,;<>]+/iu;
 const PHONE_CANDIDATE_PATTERN = /(?:\+|00)?\d[\d\t ().-]{5,}\d/gu;
 const PORTUGAL_POSTAL_PATTERN = /\b\d{4}[ -]\d{3}\b/u;
 const SPAIN_POSTAL_PATTERN = /\b\d{5}\b/u;
+const STREET_PREFIX_PATTERN = /^(?:calle|c\/?|avenida|avda\.?|av\.?|paseo|p\.?º|plaza|camino|carretera|ronda|rambla|traves[ií]a|urbanizaci[oó]n|rua|travessa|pra[cç]a|estrada|largo|alameda|beco|cal[cç]ada)\b/iu;
+const HOUSE_NUMBER_SOURCE = String.raw`(?:n(?:[.º°o]|úm(?:ero)?)?\s*)?(?:\d{1,5}(?:\s*[-/]\s*\d{1,5})?[a-z]?|s\s*\/\s*n)`;
+const DISTRICT_LABEL_PATTERN = /^(?:distrito|barrio|bairro|freguesia|concelho|parroquia|par[oó]quia)\s*(?:(?:de|do|da)\s+)?[:：,\-]?\s*(.+)$/iu;
 
 const COUNTRY_ALIASES: Record<string, readonly string[]> = {
   ES: ["españa", "espana", "spain"],
@@ -99,6 +108,106 @@ function looksLikeAddressLine(line: string) {
     || SPAIN_POSTAL_PATTERN.test(line);
 }
 
+function compactHouseNumber(value: string) {
+  return value.replace(/\s*\/\s*/gu, "/").replace(/\s{2,}/gu, " ").trim();
+}
+
+function looksLikeUnitSuffix(value: string) {
+  const suffix = value.replace(/^[\s,;\-]+/u, "").replace(/[\s,;]+$/u, "").trim();
+  if (!suffix) return true;
+  if (suffix.length > 50) return false;
+
+  // A suffix is accepted only when every token looks like a floor, door,
+  // staircase, apartment, block or left/right qualifier. This intentionally
+  // rejects place names so a city or district is never swallowed into the
+  // house-number field.
+  const tokens = suffix.split(/[\s,;]+/u).filter(Boolean);
+  return tokens.length > 0 && tokens.every((token) => {
+    const normalized = token.replace(/^[#(]+|[).]+$/gu, "");
+    return /^(?:\d{1,3}(?:[-/]\d{1,3})?[a-z]?|\d{1,2}(?:\.?[º°ª]|[oa])|[a-z]|piso|planta|andar|porta|puerta|apto|apartamento|frac[cç][aã]o|bloco|bloque|esc(?:alera)?|esq(?:\.?|uerdo|uerda)?|izq(?:\.?|uierdo|uierda)?|dto\.?|dcha?\.?|der(?:\.?|echo|echa)?|frente|tras|bajo|baixo|entresuelo)$/iu.test(normalized);
+  });
+}
+
+function splitStreetLine(line: string) {
+  const candidate = line.replace(/^[\s,;]+|[\s,;]+$/gu, "").trim();
+  if (!candidate || candidate.length > 200) return null;
+
+  // Some pasted Portuguese addresses put the number first (for example,
+  // `34 Rua Augusta`). Accept that form only when the remaining street text
+  // contains no other digit; otherwise the interpretation is ambiguous.
+  const leadingPattern = new RegExp(`^(${HOUSE_NUMBER_SOURCE})[\\s,;\\-]+(.+)$`, "iu");
+  const leading = candidate.match(leadingPattern);
+  if (leading && STREET_PREFIX_PATTERN.test(leading[2]) && !/\d/u.test(leading[2])) {
+    return { street: leading[2].trim(), houseNumber: compactHouseNumber(leading[1]) };
+  }
+
+  if (!STREET_PREFIX_PATTERN.test(candidate)) return null;
+
+  const numberPattern = new RegExp(HOUSE_NUMBER_SOURCE, "giu");
+  for (const match of candidate.matchAll(numberPattern)) {
+    const index = match.index ?? -1;
+    if (index <= 0) continue;
+    const street = candidate.slice(0, index).replace(/[\s,;\-]+$/gu, "").trim();
+    const suffix = candidate.slice(index + match[0].length);
+    if (!street || !STREET_PREFIX_PATTERN.test(street) || !looksLikeUnitSuffix(suffix)) continue;
+    return {
+      street,
+      houseNumber: compactHouseNumber(`${match[0]}${suffix}`.replace(/^[\s,;]+|[\s,;]+$/gu, "")),
+    };
+  }
+
+  // A well-known street prefix is enough to identify the street itself, but
+  // never invent a house number when none can be separated safely.
+  if (!PORTUGAL_POSTAL_PATTERN.test(candidate) && !SPAIN_POSTAL_PATTERN.test(candidate)) {
+    return { street: candidate, houseNumber: "" };
+  }
+  return null;
+}
+
+function addressAnalysisCandidates(lines: readonly string[]) {
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+  const append = (value: string) => {
+    const candidate = value.trim();
+    const key = candidate.toLocaleLowerCase("en-US");
+    if (!candidate || seen.has(key)) return;
+    seen.add(key);
+    candidates.push(candidate);
+  };
+
+  for (const line of lines) {
+    append(line);
+    const parts = line.split(/\s*[,;]\s*/u).map((part) => part.trim()).filter(Boolean);
+    for (let start = 0; start < parts.length; start += 1) {
+      // Joining adjacent parts keeps a floor/door suffix beside its street
+      // number while allowing a leading name to be skipped in one-line text.
+      for (let length = Math.min(3, parts.length - start); length >= 1; length -= 1) {
+        append(parts.slice(start, start + length).join(", "));
+      }
+    }
+  }
+  return candidates;
+}
+
+function extractDistrict(lines: readonly string[]) {
+  for (const line of addressAnalysisCandidates(lines)) {
+    const match = line.match(DISTRICT_LABEL_PATTERN);
+    const candidate = match?.[1]?.trim().replace(/[.,;]+$/gu, "") ?? "";
+    if (!candidate || candidate.length > 100 || /\d/u.test(candidate)) continue;
+    if (PORTUGAL_POSTAL_PATTERN.test(candidate) || SPAIN_POSTAL_PATTERN.test(candidate)) continue;
+    return candidate;
+  }
+  return "";
+}
+
+function extractStreetParts(lines: readonly string[]) {
+  for (const line of addressAnalysisCandidates(lines)) {
+    const result = splitStreetLine(line);
+    if (result) return result;
+  }
+  return { street: "", houseNumber: "" };
+}
+
 /**
  * Extracts contact hints from pasted customer text without pretending to be a
  * postal authority. The returned address remains deliberately generous and is
@@ -115,6 +224,9 @@ export function parseSmartAddressText(raw: string, preferredCountryCode?: string
       countryCode: normalizedCountryCode(preferredCountryCode),
       postalCode: "",
       city: "",
+      district: "",
+      street: "",
+      houseNumber: "",
       address: "",
     };
   }
@@ -147,6 +259,8 @@ export function parseSmartAddressText(raw: string, preferredCountryCode?: string
   const address = addressLines.join(", ").slice(0, 500);
   const countryCode = detectCountryCode(originalText, preferredCountryCode);
   const { postalCode, city } = extractPostalAndCity(address, countryCode || "ES");
+  const district = extractDistrict(addressLines);
+  const { street, houseNumber } = extractStreetParts(addressLines);
 
   return {
     originalText,
@@ -156,6 +270,9 @@ export function parseSmartAddressText(raw: string, preferredCountryCode?: string
     countryCode,
     postalCode,
     city,
+    district,
+    street,
+    houseNumber,
     address,
   };
 }
@@ -173,6 +290,9 @@ export function mergeNonEmptyAddressSuggestion(
     postalCode: value(suggestion.postalCode, current.postalCode),
     region: value(suggestion.region, current.region),
     city: value(suggestion.city, current.city),
+    district: value(suggestion.district, current.district),
+    street: value(suggestion.street, current.street),
+    houseNumber: value(suggestion.houseNumber, current.houseNumber),
     address: value(suggestion.address, current.address),
   };
 }

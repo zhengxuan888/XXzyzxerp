@@ -1,11 +1,20 @@
 import type { Worksheet } from "exceljs";
 
+import { resolveStructuredAddressForExport } from "@/lib/logistics-batch";
 import type { LogisticsTemplateColumn } from "@/lib/logistics-provider-template";
 import { hasCustomerOriginalAddress } from "@/lib/order-address";
+
+export const HONGYA_FORWARD_TEMPLATE_CODES = [
+  "HONGYA_IBERIA_FORWARD",
+  "HONGYA_EAST_EU_FORWARD",
+  "HONGYA_EAST_FORWARD",
+  "（鸿亚）东欧转寄",
+] as const;
 
 export const HONGYA_ADDRESS_REVIEW_TEMPLATE_CODES = [
   "HONGYA_IBERIA_DROPSHIP",
   "HONGYA_EAST_EU_DROPSHIP",
+  ...HONGYA_FORWARD_TEMPLATE_CODES,
 ] as const;
 
 export const ORIGINAL_ADDRESS_REVIEW_HEADER = "完整原始地址（核对后删除）";
@@ -43,7 +52,10 @@ export function isHongyaAddressReviewTemplate(code: string) {
 }
 
 export function logisticsExportFilename(templateCode: string, date: string) {
-  const safeCode = templateCode.replace(/[^A-Z0-9_-]/g, "_");
+  const filenameCode = templateCode === "（鸿亚）东欧转寄"
+    ? "HONGYA_EAST_EU_FORWARD"
+    : templateCode;
+  const safeCode = filenameCode.replace(/[^A-Z0-9_-]/g, "_");
   const reviewMarker = isHongyaAddressReviewTemplate(templateCode)
     ? "-REVIEW-INCLUDES-ORIGINAL-ADDRESS"
     : "";
@@ -68,7 +80,16 @@ export function normalizeLogisticsExportColumns(
     field: "recipientFullAddress",
     header: ORIGINAL_ADDRESS_REVIEW_HEADER,
   };
-  const structuredAddressIndex = normalized.findIndex((column) => column.field === "recipientAddress");
+  const structuredAddressFields = new Set<LogisticsTemplateColumn["field"]>([
+    "recipientAddress",
+    "recipientStreet",
+    "recipientHouseNumber",
+    "custom:streetNumber",
+  ]);
+  const structuredAddressIndex = normalized.reduce(
+    (lastIndex, column, index) => structuredAddressFields.has(column.field) ? index : lastIndex,
+    -1,
+  );
   if (structuredAddressIndex < 0) return [...normalized, reviewColumn];
   return [
     ...normalized.slice(0, structuredAddressIndex + 1),
@@ -83,6 +104,10 @@ export function logisticsExportColumnPresentation(
 ): LogisticsExportColumnPresentation {
   if (isHongyaAddressReviewTemplate(templateCode) && field === "recipientFullAddress") {
     return { ...originalAddressColumnPresentation };
+  }
+  if (field === "recipientStreet") return { ...defaultColumnPresentation, width: 30, wrapText: true };
+  if (field === "recipientDistrict" || field === "recipientHouseNumber") {
+    return { ...defaultColumnPresentation, width: 20, wrapText: true };
   }
   if (field === "recipientAddress") return { ...defaultColumnPresentation, width: 36, wrapText: true };
   if (field === "productConfigurations" || field === "productNames") {
@@ -131,11 +156,16 @@ type AddressReviewOrder = {
   recipientName: string | null;
   recipientPhone: string | null;
   recipientCountryCode: string | null;
+  recipientRegion?: string | null;
   recipientCity: string | null;
+  recipientDistrict?: string | null;
+  recipientStreet?: string | null;
+  recipientHouseNumber?: string | null;
   recipientPostalCode: string | null;
   recipientAddress: string | null;
   recipientFullAddress?: string | null;
   recipientFullAddressSource?: string | null;
+  customFields?: unknown;
 };
 
 const requiredAddressFields: Array<[keyof AddressReviewOrder, string]> = [
@@ -145,6 +175,12 @@ const requiredAddressFields: Array<[keyof AddressReviewOrder, string]> = [
   ["recipientCity", "收件人城市"],
   ["recipientPostalCode", "收件人邮编"],
   ["recipientAddress", "收件人地址"],
+];
+
+const configuredStructuredAddressFields: Array<[keyof AddressReviewOrder, LogisticsTemplateColumn["field"], string]> = [
+  ["recipientRegion", "recipientRegion", "收件人州/省"],
+  ["recipientStreet", "recipientStreet", "收件人街道"],
+  ["recipientHouseNumber", "recipientHouseNumber", "收件人门牌号/楼层房号"],
 ];
 
 const customerOriginalAddressLabel = "完整原始地址（需补录客户原文）";
@@ -162,11 +198,26 @@ export type LogisticsShippingRouteIssue = {
 export function findLogisticsAddressReviewIssues(
   templateCode: string,
   orders: readonly AddressReviewOrder[],
+  columns: readonly LogisticsTemplateColumn[] = [],
 ): LogisticsAddressReviewIssue[] {
   if (!isHongyaAddressReviewTemplate(templateCode)) return [];
+  const exportedFields = new Set(columns.map((column) => column.field));
+  const requiredFields = [
+    ...requiredAddressFields,
+    ...configuredStructuredAddressFields
+      .filter(([, exportField]) => exportedFields.has(exportField))
+      .map(([orderField, , label]) => [orderField, label] as [keyof AddressReviewOrder, string]),
+  ];
   return orders.flatMap((order) => {
-    const missingFields = requiredAddressFields.flatMap(([field, label]) => {
-      const value = order[field];
+    const structuredAddress = resolveStructuredAddressForExport(order);
+    const resolvedValues: Partial<Record<keyof AddressReviewOrder, string>> = {
+      recipientRegion: structuredAddress.region,
+      recipientDistrict: structuredAddress.district,
+      recipientStreet: structuredAddress.street,
+      recipientHouseNumber: structuredAddress.houseNumber,
+    };
+    const missingFields = requiredFields.flatMap(([field, label]) => {
+      const value = resolvedValues[field] ?? order[field];
       return typeof value === "string" && value.trim() ? [] : [label];
     });
     if (

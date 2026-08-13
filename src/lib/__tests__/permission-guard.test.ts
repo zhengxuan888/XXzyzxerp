@@ -28,6 +28,7 @@ describe("dynamic menu grant lifecycle", () => {
       id: "m1",
       userId: "u1",
       roleId: "employee",
+      role: { code: "employee" },
       businessUnitId: "BU_A",
       isActive: true,
       endedAt: null,

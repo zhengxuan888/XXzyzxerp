@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import type { LogisticsCoreExportField, LogisticsExportField } from "@/lib/logistics-provider-template";
+import { parseSmartAddressText } from "@/lib/smart-address";
 
 type BatchExportItem = {
   productName: string;
@@ -18,6 +19,9 @@ export type BatchExportOrder = {
   recipientPostalCode: string | null;
   recipientRegion: string | null;
   recipientCity: string | null;
+  recipientDistrict?: string | null;
+  recipientStreet?: string | null;
+  recipientHouseNumber?: string | null;
   recipientAddress: string | null;
   recipientFullAddress?: string | null;
   codAmountCents: number;
@@ -44,9 +48,76 @@ function customFieldValue(input: unknown, key: string) {
   return scalarText(value);
 }
 
+function firstNonEmpty(...values: unknown[]) {
+  for (const value of values) {
+    const normalized = scalarText(value);
+    if (normalized !== "") return normalized;
+  }
+  return "";
+}
+
+export type ResolvableStructuredAddressOrder = {
+  recipientCountryCode?: string | null;
+  recipientRegion?: string | null;
+  recipientDistrict?: string | null;
+  recipientStreet?: string | null;
+  recipientHouseNumber?: string | null;
+  recipientAddress?: string | null;
+  recipientFullAddress?: string | null;
+  customFields?: unknown;
+};
+
+export function resolveStructuredAddressForExport(order: ResolvableStructuredAddressOrder) {
+  const parsed = parseSmartAddressText(
+    order.recipientFullAddress || order.recipientAddress || "",
+    order.recipientCountryCode || undefined,
+  );
+  return {
+    region: String(firstNonEmpty(order.recipientRegion)),
+    district: String(firstNonEmpty(
+      order.recipientDistrict,
+      customFieldValue(order.customFields, "recipientDistrict"),
+      parsed.district,
+    )),
+    street: String(firstNonEmpty(
+      order.recipientStreet,
+      customFieldValue(order.customFields, "recipientStreet"),
+      customFieldValue(order.customFields, "street"),
+      parsed.street,
+    )),
+    houseNumber: String(firstNonEmpty(
+      order.recipientHouseNumber,
+      customFieldValue(order.customFields, "recipientHouseNumber"),
+      customFieldValue(order.customFields, "houseNumber"),
+      customFieldValue(order.customFields, "doorNumber"),
+      parsed.houseNumber,
+    )),
+  };
+}
+
+function legacyStructuredAddressValue(order: BatchExportOrder, key: string) {
+  switch (key) {
+    case "recipientDistrict":
+      return order.recipientDistrict ?? "";
+    case "street":
+    case "recipientStreet":
+      return order.recipientStreet ?? "";
+    case "doorNumber":
+    case "houseNumber":
+    case "recipientHouseNumber":
+      return order.recipientHouseNumber ?? "";
+    default:
+      return "";
+  }
+}
+
 export function exportFieldValue(order: BatchExportOrder, field: LogisticsExportField): string | number {
-  if (field.startsWith("custom:")) return customFieldValue(order.customFields, field.slice("custom:".length));
+  if (field.startsWith("custom:")) {
+    const key = field.slice("custom:".length);
+    return firstNonEmpty(legacyStructuredAddressValue(order, key), customFieldValue(order.customFields, key));
+  }
   if (field.startsWith("constant:")) return field.slice("constant:".length);
+  const structuredAddress = resolveStructuredAddressForExport(order);
   const values: Record<LogisticsCoreExportField, string | number> = {
     orderNo: order.orderNo,
     recipientName: order.recipientName ?? "",
@@ -54,8 +125,11 @@ export function exportFieldValue(order: BatchExportOrder, field: LogisticsExport
     recipientEmail: order.recipientEmail ?? "",
     recipientCountryCode: order.recipientCountryCode ?? "",
     recipientPostalCode: order.recipientPostalCode ?? "",
-    recipientRegion: order.recipientRegion ?? "",
+    recipientRegion: structuredAddress.region,
     recipientCity: order.recipientCity ?? "",
+    recipientDistrict: structuredAddress.district,
+    recipientStreet: structuredAddress.street,
+    recipientHouseNumber: structuredAddress.houseNumber,
     recipientAddress: order.recipientAddress ?? "",
     recipientFullAddress: order.recipientFullAddress ?? "",
     productNames: order.items.map((item) => item.productName).join(" / "),

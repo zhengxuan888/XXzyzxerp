@@ -18,6 +18,9 @@ const completeAddress = {
   recipientRegion: null,
   recipientCity: "Madrid",
   recipientPostalCode: "28009",
+  recipientDistrict: "Salamanca",
+  recipientStreet: "Calle de Alcalá",
+  recipientHouseNumber: "123, 4º B",
   recipientAddress: "Calle de Alcalá 123, 4º B",
   recipientFullAddress: "María García, Calle de Alcalá 123, 4º B, 28009 Madrid, España",
   recipientFullAddressSource: CUSTOMER_ORIGINAL_ADDRESS_SOURCE,
@@ -28,7 +31,7 @@ describe("AddressComparison", () => {
     const html = renderToStaticMarkup(<AddressComparison {...completeAddress} showOriginalAddress={false} />);
 
     expect(html).toContain("拆分字段完整");
-    expect(html).toContain("州/区域（可选）");
+    expect(html).toContain("州/省（可选）");
     expect(html).toContain("未填写（不影响导出）");
     expect(html).not.toContain("客户完整原始地址（核对后删除）");
     expect(html).not.toContain(completeAddress.recipientFullAddress);

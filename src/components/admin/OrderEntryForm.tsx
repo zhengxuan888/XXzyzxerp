@@ -11,7 +11,17 @@ import { mergeNonEmptyAddressSuggestion, parseSmartAddressText, type StructuredA
 type Option = { id: string; code: string; name: string };
 type ProductOption = Option & { skus: { id: string; code: string }[] };
 type TemplateOption = Option & { configuration: OrderTemplateConfiguration; isDefault: boolean };
-type AddressSuggestion = { countryCode: string; postalCode: string; region: string; city: string; address: string; formattedAddress: string };
+type AddressSuggestion = {
+  countryCode: string;
+  postalCode: string;
+  region: string;
+  city: string;
+  district: string;
+  street: string;
+  houseNumber: string;
+  address: string;
+  formattedAddress: string;
+};
 type AddressValidation = { status: "verified" | "review"; label: string; suggestion: AddressSuggestion; issues: string[] };
 
 const SKU_COLORS: Array<[string, string]> = [
@@ -148,6 +158,9 @@ export default function OrderEntryForm({
       recipientPostalCode: String(data.get("recipientPostalCode") ?? ""),
       recipientRegion: String(data.get("recipientRegion") ?? ""),
       recipientCity: String(data.get("recipientCity") ?? ""),
+      recipientDistrict: String(data.get("recipientDistrict") ?? ""),
+      recipientStreet: String(data.get("recipientStreet") ?? ""),
+      recipientHouseNumber: String(data.get("recipientHouseNumber") ?? ""),
       recipientAddress: String(data.get("recipientAddress") ?? ""),
       recipientFullAddress: String(data.get("recipientFullAddress") ?? ""),
       packageWeightGrams: Math.round(Number(data.get("packageWeightKg") || 0) * 1000),
@@ -238,6 +251,9 @@ export default function OrderEntryForm({
       postalCode: formValue("recipientPostalCode"),
       region: formValue("recipientRegion"),
       city: formValue("recipientCity"),
+      district: formValue("recipientDistrict"),
+      street: formValue("recipientStreet"),
+      houseNumber: formValue("recipientHouseNumber"),
       address: formValue("recipientAddress"),
     };
   }
@@ -250,6 +266,9 @@ export default function OrderEntryForm({
     setFormValue("recipientPostalCode", value.postalCode);
     setFormValue("recipientRegion", value.region);
     setFormValue("recipientCity", value.city);
+    setFormValue("recipientDistrict", value.district);
+    setFormValue("recipientStreet", value.street);
+    setFormValue("recipientHouseNumber", value.houseNumber);
     setFormValue("recipientAddress", value.address);
   }
 
@@ -280,6 +299,9 @@ export default function OrderEntryForm({
     if (parsed.recipientEmail) setRecipientEmail(parsed.recipientEmail);
     if (parsed.postalCode) setFormValue("recipientPostalCode", parsed.postalCode);
     if (parsed.city) setFormValue("recipientCity", parsed.city);
+    if (parsed.district) setFormValue("recipientDistrict", parsed.district);
+    if (parsed.street) setFormValue("recipientStreet", parsed.street);
+    if (parsed.houseNumber) setFormValue("recipientHouseNumber", parsed.houseNumber);
     if (parsed.address) setFormValue("recipientAddress", parsed.address);
 
     const resolvedCountry = parsed.countryCode || recipientCountryCode;
@@ -569,24 +591,27 @@ export default function OrderEntryForm({
           <Field label="邮编" required={config?.requireRecipientPostalCode}>
             <input name="recipientPostalCode" required={config?.requireRecipientPostalCode} className={input} placeholder="邮编" />
           </Field>
-          <Field label="州/县" required={config?.requireRecipientRegion}>
-            <input name="recipientRegion" required={config?.requireRecipientRegion} className={input} placeholder="州/县" />
+          <Field label="州/省" required={config?.requireRecipientRegion}>
+            <input name="recipientRegion" required={config?.requireRecipientRegion} className={input} placeholder="州、省或一级行政区" />
           </Field>
           <Field label="城市" required={config?.requireRecipientCity}>
             <input name="recipientCity" required={config?.requireRecipientCity} className={input} placeholder="城市" />
           </Field>
-          <Field label="详细地址" wide required={config?.requireRecipientAddress}><input name="recipientAddress" required={config?.requireRecipientAddress} className={input} placeholder="建议填写完整地址" /></Field>
+          <Field label="区/县"><input name="recipientDistrict" className={input} placeholder="区、县、城区或社区" /></Field>
+          <Field label="街道" wide><input name="recipientStreet" className={input} placeholder="街道、道路名称" /></Field>
+          <Field label="门牌号/楼层房号"><input name="recipientHouseNumber" className={input} placeholder="如：123，4º B" /></Field>
+          <Field label="物流完整详细地址" wide required={config?.requireRecipientAddress}><input name="recipientAddress" required={config?.requireRecipientAddress} className={input} placeholder="自动组合后的投递详细地址，可人工修正" /></Field>
           <Field label="完整原始地址（人工核对）" wide required><textarea name="recipientFullAddress" required rows={3} className={`${input} h-auto min-h-20 py-2 leading-6`} placeholder="完整粘贴客户发来的原文；自动拆分不会覆盖这里" /></Field>
           <div className="md:col-span-4 rounded-xl border border-emerald-100 bg-emerald-50/40 p-3">
             <div className="flex flex-wrap items-center gap-3">
               <button type="button" onClick={() => void validateAddress()} disabled={addressChecking || !recipientCountryCode} className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">{addressChecking ? <LoaderCircle size={16} className="animate-spin" /> : <MapPinCheck size={16} />}{addressChecking ? "正在检测…" : "检测地址"}</button>
-              <span className="text-xs text-slate-500">用于核对邮编、城市和详细地址，不影响订单保存。</span>
+              <span className="text-xs text-slate-500">用于核对州省、城市、区县、街道、门牌号和邮编，不影响订单保存。</span>
               {addressValidationMessage && <span className="text-xs font-medium text-emerald-700">{addressValidationMessage}</span>}
             </div>
             {addressValidation && <div className="mt-3 rounded-xl border border-emerald-200 bg-white p-3">
               <div className="flex flex-wrap items-center justify-between gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${addressValidation.status === "verified" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{addressValidation.label}</span>{addressValidation.issues.length > 0 && <span className="text-xs text-amber-700">{addressValidation.issues.join("；")}</span>}</div>
               <p className="mt-2 text-xs text-slate-500">Google 建议地址</p>
-              <p className="mt-1 text-sm font-medium leading-6 text-slate-900">{addressValidation.suggestion.formattedAddress || [addressValidation.suggestion.address, addressValidation.suggestion.city, addressValidation.suggestion.region, addressValidation.suggestion.postalCode].filter(Boolean).join("，")}</p>
+              <p className="mt-1 text-sm font-medium leading-6 text-slate-900">{addressValidation.suggestion.formattedAddress || [addressValidation.suggestion.street, addressValidation.suggestion.houseNumber, addressValidation.suggestion.district, addressValidation.suggestion.city, addressValidation.suggestion.region, addressValidation.suggestion.postalCode].filter(Boolean).join("，")}</p>
               <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={applyAddressSuggestion} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800">采用建议地址</button><button type="button" onClick={() => { setAddressValidation(null); setAddressValidationMessage("已保留原地址。"); }} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">保留原地址</button></div>
             </div>}
           </div>

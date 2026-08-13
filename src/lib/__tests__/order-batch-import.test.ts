@@ -2,6 +2,7 @@ import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
 
 import {
+  enrichOrderImportAddress,
   parseOrderImportWorkbook,
   validateOrderImportRows,
   type OrderImportRow,
@@ -26,6 +27,9 @@ function validRow(overrides: Partial<OrderImportRow> = {}): OrderImportRow {
     country: "CN",
     region: "广东省",
     city: "深圳",
+    district: "南山区",
+    street: "科技南十二路",
+    houseNumber: "12 号 A 座",
     postalCode: "518000",
     productCode: "SKU-1",
     quantity: 2,
@@ -72,19 +76,44 @@ describe("order batch import", () => {
 
   it("preserves structured region data and the complete original address", async () => {
     const buffer = await workbookBuffer([
-      ["店铺ID", "客户姓名", "商品编码", "数量", "单价分", "国家", "州/省", "城市", "邮编", "详细地址", "完整原始地址（人工核对）"],
-      ["SHOP-ES", "María García", "SKU-1", 1, 100, "ES", "Comunidad de Madrid", "Madrid", "28009", "Calle de Alcalá 123, 4º B", "María García, Calle de Alcalá 123, 4º B, 28009 Madrid, España"],
+      ["店铺ID", "客户姓名", "商品编码", "数量", "单价分", "国家", "州/省", "城市", "区/县", "街道", "门牌号/楼层房号", "邮编", "详细地址", "完整原始地址（人工核对）"],
+      ["SHOP-ES", "María García", "SKU-1", 1, 100, "ES", "Comunidad de Madrid", "Madrid", "Centro", "Calle de Alcalá", "123, 4º B", "28009", "Calle de Alcalá 123, 4º B", "María García, Calle de Alcalá 123, 4º B, 28009 Madrid, España"],
     ]);
 
     await expect(parseOrderImportWorkbook(buffer)).resolves.toEqual([
       expect.objectContaining({
         region: "Comunidad de Madrid",
         city: "Madrid",
+        district: "Centro",
+        street: "Calle de Alcalá",
+        houseNumber: "123, 4º B",
         postalCode: "28009",
         address: "Calle de Alcalá 123, 4º B",
         fullAddress: "María García, Calle de Alcalá 123, 4º B, 28009 Madrid, España",
       }),
     ]);
+  });
+
+  it("fills missing structured columns from the original address without overwriting explicit values", () => {
+    const enriched = enrichOrderImportAddress(validRow({
+      country: "PT",
+      city: "Lisboa manual",
+      postalCode: "",
+      district: "",
+      street: "",
+      houseNumber: "manual 88",
+      address: "",
+      fullAddress: "João Silva\nRua Augusta 88, 2º D\nBaixa\n1100-053 Lisboa\nPortugal",
+    }));
+
+    expect(enriched).toMatchObject({
+      country: "PT",
+      city: "Lisboa manual",
+      postalCode: "1100-053",
+      street: "Rua Augusta",
+      houseNumber: "manual 88",
+    });
+    expect(enriched.address).toContain("Rua Augusta 88");
   });
 
   it("rejects templates missing required columns", async () => {
