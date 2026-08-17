@@ -1,7 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
+import { existsSync } from "node:fs";
 import { loadEnvFile } from "node:process";
 
-loadEnvFile(".env");
+if (existsSync(".env")) loadEnvFile(".env");
 process.env.NO_PROXY = [process.env.NO_PROXY, "localhost", "127.0.0.1"].filter(Boolean).join(",");
 
 const port = process.env.PW_PORT || "3000";

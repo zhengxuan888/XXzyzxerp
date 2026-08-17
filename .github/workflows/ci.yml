@@ -47,6 +47,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm prisma:generate
       - run: pnpm prisma:validate
+      - run: pnpm exec prisma migrate deploy
+      - run: pnpm db:seed
       - run: pnpm ts-check
       - run: pnpm lint
       - run: pnpm test
@@ -55,8 +57,32 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: erp_v2
+          POSTGRES_USER: erp
+          POSTGRES_PASSWORD: erp
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U erp -d erp_v2"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
     env:
       DATABASE_URL: postgresql://erp:erp@localhost:5432/erp_v2
+      REDIS_URL: redis://localhost:6379
       SESSION_SECRET: ci-only-not-for-production
     steps:
       - uses: actions/checkout@v4
@@ -68,5 +94,8 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm prisma:generate
+      - run: pnpm exec prisma migrate deploy
+      - run: pnpm db:seed
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
