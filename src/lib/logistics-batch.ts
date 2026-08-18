@@ -26,6 +26,8 @@ export type BatchExportOrder = {
   recipientFullAddress?: string | null;
   codAmountCents: number;
   currency: string;
+  productValueCents: number;
+  declarationCurrency: string;
   customerWhatsapp: string | null;
   note: string | null;
   customFields: unknown;
@@ -145,6 +147,9 @@ export function exportFieldValue(order: BatchExportOrder, field: LogisticsExport
       .join(" / "),
     productSkus: order.items.map((item) => item.sku?.code).filter(Boolean).join(" / "),
     unitPrice: typeof order.items[0]?.unitPriceCents === "number" ? (order.items[0].unitPriceCents / 100).toFixed(2) : "",
+    declaredAmount: Number.isSafeInteger(order.productValueCents) && order.productValueCents > 0
+      ? order.productValueCents / 100
+      : "",
     shippingRoute: "",
   };
   return values[field as LogisticsCoreExportField];
