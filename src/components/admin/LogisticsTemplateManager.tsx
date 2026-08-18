@@ -3,13 +3,13 @@
 import { AlertTriangle, Check, Download, LoaderCircle, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 
-import { isHongyaAddressReviewTemplate } from "@/lib/logistics-export-review";
 import {
   DEFAULT_RETURN_WORKBOOK_MAPPING,
   countryRouteLines,
   parseLogisticsTemplateConfiguration,
   returnMappingLines,
 } from "@/lib/logistics-provider-template";
+import { isHongyaAddressReviewTemplate } from "@/lib/logistics-template-policy";
 
 type Template = {
   id: string;

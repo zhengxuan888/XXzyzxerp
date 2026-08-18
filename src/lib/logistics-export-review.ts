@@ -2,20 +2,17 @@ import type { Worksheet } from "exceljs";
 
 import { resolveStructuredAddressForExport } from "@/lib/logistics-batch";
 import type { LogisticsTemplateColumn } from "@/lib/logistics-provider-template";
+import {
+  HONGYA_FORWARD_TEMPLATE_CODES,
+  isHongyaAddressReviewTemplate,
+} from "@/lib/logistics-template-policy";
 import { hasCustomerOriginalAddress } from "@/lib/order-address";
 
-export const HONGYA_FORWARD_TEMPLATE_CODES = [
-  "HONGYA_IBERIA_FORWARD",
-  "HONGYA_EAST_EU_FORWARD",
-  "HONGYA_EAST_FORWARD",
-  "（鸿亚）东欧转寄",
-] as const;
-
-export const HONGYA_ADDRESS_REVIEW_TEMPLATE_CODES = [
-  "HONGYA_IBERIA_DROPSHIP",
-  "HONGYA_EAST_EU_DROPSHIP",
-  ...HONGYA_FORWARD_TEMPLATE_CODES,
-] as const;
+export {
+  HONGYA_ADDRESS_REVIEW_TEMPLATE_CODES,
+  HONGYA_FORWARD_TEMPLATE_CODES,
+  isHongyaAddressReviewTemplate,
+} from "@/lib/logistics-template-policy";
 
 export const ORIGINAL_ADDRESS_REVIEW_HEADER = "完整原始地址（核对后删除）";
 export const ORIGINAL_ADDRESS_REVIEW_NOTE = "此列仅供售后核对。发送给物流商前，请删除整列（不是只清空内容）。";
@@ -46,10 +43,6 @@ const originalAddressColumnPresentation: LogisticsExportColumnPresentation = {
   bodyFill: "FFF1F2",
   note: ORIGINAL_ADDRESS_REVIEW_NOTE,
 };
-
-export function isHongyaAddressReviewTemplate(code: string) {
-  return (HONGYA_ADDRESS_REVIEW_TEMPLATE_CODES as readonly string[]).includes(code);
-}
 
 export function logisticsExportFilename(templateCode: string, date: string) {
   const filenameCode = templateCode === "（鸿亚）东欧转寄"
