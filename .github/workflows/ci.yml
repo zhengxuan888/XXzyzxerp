@@ -84,6 +84,7 @@ jobs:
       DATABASE_URL: postgresql://erp:erp@localhost:5432/erp_v2
       REDIS_URL: redis://localhost:6379
       SESSION_SECRET: ci-only-not-for-production
+      SEED_FOUNDER_PASSWORD: "ChangeMe#2026"
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
