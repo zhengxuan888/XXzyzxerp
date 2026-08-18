@@ -14,6 +14,9 @@ test.describe.serial("物流敏感字段动态授权门禁", () => {
     recipientCountryCode: string | null;
     recipientRegion: string | null;
     recipientCity: string | null;
+    recipientDistrict: string | null;
+    recipientStreet: string | null;
+    recipientHouseNumber: string | null;
     recipientPostalCode: string | null;
     recipientAddress: string | null;
     recipientFullAddress: string | null;
@@ -30,6 +33,9 @@ test.describe.serial("物流敏感字段动态授权门禁", () => {
             recipientCountryCode: true,
             recipientRegion: true,
             recipientCity: true,
+            recipientDistrict: true,
+            recipientStreet: true,
+            recipientHouseNumber: true,
             recipientPostalCode: true,
             recipientAddress: true,
             recipientFullAddress: true,
@@ -45,6 +51,9 @@ test.describe.serial("物流敏感字段动态授权门禁", () => {
         recipientCountryCode: "ES",
         recipientRegion: "Comunidad de Madrid",
         recipientCity: "Madrid",
+        recipientDistrict: "Centro",
+        recipientStreet: "Calle de Alcalá",
+        recipientHouseNumber: "123, 4º B",
         recipientPostalCode: "28009",
         recipientAddress: "Calle de Alcalá 123, 4º B",
         recipientFullAddress: originalAddress,
@@ -64,6 +73,9 @@ test.describe.serial("物流敏感字段动态授权门禁", () => {
           recipientCountryCode: orderSnapshot.recipientCountryCode,
           recipientRegion: orderSnapshot.recipientRegion,
           recipientCity: orderSnapshot.recipientCity,
+          recipientDistrict: orderSnapshot.recipientDistrict,
+          recipientStreet: orderSnapshot.recipientStreet,
+          recipientHouseNumber: orderSnapshot.recipientHouseNumber,
           recipientPostalCode: orderSnapshot.recipientPostalCode,
           recipientAddress: orderSnapshot.recipientAddress,
           recipientFullAddress: orderSnapshot.recipientFullAddress,

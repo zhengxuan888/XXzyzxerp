@@ -881,6 +881,9 @@ model Order {
   recipientPostalCode                 String?
   recipientRegion                     String?
   recipientCity                       String?
+  recipientDistrict                   String?
+  recipientStreet                     String?
+  recipientHouseNumber                String?
   recipientAddress                    String?
   recipientFullAddress                String?
   recipientFullAddressSource          String?

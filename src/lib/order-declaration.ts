@@ -17,7 +17,8 @@ export function declarationAmountEurCents(codAmountCents: number, currency: stri
   const normalized = currency.trim().toUpperCase();
   const rate = UNITS_PER_EUR_SCALED[normalized];
   if (!rate) throw new Error(`DECLARATION_RATE_NOT_CONFIGURED:${normalized}`);
-  return Math.round((codAmountCents * 1_000) / rate);
+  const declarationScale = DECLARATION_RATIO_PERCENT * 100;
+  return Math.round((codAmountCents * declarationScale) / rate);
 }
 
 export function declarationPreview(codAmount: number, currency: string) {

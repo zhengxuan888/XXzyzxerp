@@ -34,4 +34,26 @@ describe("logistics provider template", () => {
     expect(result.headerFill).toBe("FFFF00");
     expect(result.columns[1]).toEqual({ field: "constant:1", header: "包裹件数" });
   });
+
+  it("accepts independently mapped district, street and house-number columns", () => {
+    expect(parseColumnLines([
+      "recipientDistrict=收件人区/县",
+      "recipientStreet=收件人街道",
+      "recipientHouseNumber=收件人门牌号",
+      "recipientAddress=收件人详细地址",
+      "recipientFullAddress=完整原始地址",
+    ].join("\n"))).toEqual([
+      { field: "recipientDistrict", header: "收件人区/县" },
+      { field: "recipientStreet", header: "收件人街道" },
+      { field: "recipientHouseNumber", header: "收件人门牌号" },
+      { field: "recipientAddress", header: "收件人详细地址" },
+      { field: "recipientFullAddress", header: "完整原始地址" },
+    ]);
+  });
+
+  it("accepts the frozen order declaration total as a core export field", () => {
+    expect(parseColumnLines("declarationAmount=申报金额")).toEqual([
+      { field: "declarationAmount", header: "申报金额" },
+    ]);
+  });
 });

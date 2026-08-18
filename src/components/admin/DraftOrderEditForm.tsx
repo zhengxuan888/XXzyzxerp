@@ -15,7 +15,8 @@ type InitialOrder = {
   quantity: number; unitPriceCents: number; codAmountCents: number; shippingFeeCents: number;
   currency: string; orderedAt: string; recipientName: string; recipientPhone: string;
   recipientEmail: string; recipientCountryCode: string; recipientPostalCode: string;
-  recipientRegion: string; recipientCity: string; recipientAddress: string; recipientFullAddress: string;
+  recipientRegion: string; recipientCity: string; recipientDistrict: string; recipientStreet: string;
+  recipientHouseNumber: string; recipientAddress: string; recipientFullAddress: string;
   recipientFullAddressSource: string | null;
   customerWhatsapp: string; staffWhatsapp: string; packageWeightGrams: number;
   paymentMethod: string; logisticsChannel: string; note: string; returnReason: string;
@@ -54,7 +55,9 @@ export default function DraftOrderEditForm({ order, products, countries }: { ord
         recipientName: data.get("recipientName"), recipientPhone: data.get("recipientPhone"),
         recipientEmail: data.get("recipientEmail"), recipientCountryCode: data.get("recipientCountryCode"),
         recipientPostalCode: data.get("recipientPostalCode"), recipientRegion: data.get("recipientRegion"),
-        recipientCity: data.get("recipientCity"), recipientAddress: data.get("recipientAddress"),
+        recipientCity: data.get("recipientCity"), recipientDistrict: data.get("recipientDistrict"),
+        recipientStreet: data.get("recipientStreet"), recipientHouseNumber: data.get("recipientHouseNumber"),
+        recipientAddress: data.get("recipientAddress"),
         recipientFullAddress: data.get("recipientFullAddress"),
         customerWhatsapp: data.get("customerWhatsapp"), staffWhatsapp: data.get("staffWhatsapp"),
         packageWeightGrams: Math.round(Number(data.get("packageWeightKg") || 0) * 1000),
@@ -85,9 +88,12 @@ export default function DraftOrderEditForm({ order, products, countries }: { ord
       <Label text="邮箱"><input type="email" name="recipientEmail" defaultValue={order.recipientEmail} className={field}/></Label>
       <Label text="国家"><select name="recipientCountryCode" defaultValue={order.recipientCountryCode} onChange={(event) => setCurrency(currencyForCountry(event.target.value, order.currency))} className={field}><option value="">选择国家</option>{countries.map((c) => <option key={c.code} value={c.code}>{c.name} ({c.code})</option>)}</select></Label>
       <Label text="邮编"><input name="recipientPostalCode" defaultValue={order.recipientPostalCode} className={field}/></Label>
-      <Label text="州/区域"><input name="recipientRegion" defaultValue={order.recipientRegion} className={field}/></Label>
+      <Label text="州/省"><input name="recipientRegion" defaultValue={order.recipientRegion} className={field}/></Label>
       <Label text="城市"><input name="recipientCity" defaultValue={order.recipientCity} className={field}/></Label>
-      <Label text="详细地址" wide><input name="recipientAddress" defaultValue={order.recipientAddress} className={field}/></Label>
+      <Label text="区/县"><input name="recipientDistrict" defaultValue={order.recipientDistrict} className={field}/></Label>
+      <Label text="街道" wide><input name="recipientStreet" defaultValue={order.recipientStreet} className={field}/></Label>
+      <Label text="门牌号/楼层房号"><input name="recipientHouseNumber" defaultValue={order.recipientHouseNumber} className={field}/></Label>
+      <Label text="物流完整详细地址" wide><input name="recipientAddress" defaultValue={order.recipientAddress} className={field}/></Label>
       <Label text={originalAddressLocked ? "客户完整原始地址（只读留档）" : "客户完整原始地址（补录后锁定）"} wide>
         {legacyDerivedAddress && (
           <span className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-normal leading-5 text-amber-900">

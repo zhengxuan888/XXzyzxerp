@@ -16,6 +16,9 @@ const HEADERS = [
   "国家",
   "州/省",
   "城市",
+  "区/县",
+  "街道",
+  "门牌号/楼层房号",
   "邮编",
   "详细地址",
   "完整原始地址（人工核对）",
@@ -53,6 +56,9 @@ export async function GET(request: NextRequest) {
     "ES",
     "Comunidad de Madrid",
     "Madrid",
+    "Centro",
+    "Calle de Alcalá",
+    "123, 4º B",
     "28001",
     "Calle de Alcalá 123, 4º B",
     "María García, Calle de Alcalá 123, 4º B, 28001 Madrid, España",
@@ -64,7 +70,7 @@ export async function GET(request: NextRequest) {
     "COD",
   ]);
   sheet.views = [{ state: "frozen", ySplit: 1 }];
-  sheet.autoFilter = { from: "A1", to: "Q1" };
+  sheet.autoFilter = { from: "A1", to: "T1" };
   sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
   sheet.getRow(1).fill = {
     type: "pattern",
@@ -80,6 +86,9 @@ export async function GET(request: NextRequest) {
     { width: 12 },
     { width: 24 },
     { width: 18 },
+    { width: 18 },
+    { width: 30 },
+    { width: 22 },
     { width: 14 },
     { width: 36 },
     { width: 58 },
@@ -90,9 +99,10 @@ export async function GET(request: NextRequest) {
     { width: 10 },
     { width: 14 },
   ];
-  sheet.getColumn(9).numFmt = "@";
-  sheet.getColumn(10).numFmt = "@";
   sheet.getColumn(11).numFmt = "@";
+  sheet.getColumn(12).numFmt = "@";
+  sheet.getColumn(13).numFmt = "@";
+  sheet.getColumn(14).numFmt = "@";
 
   const output = await workbook.xlsx.writeBuffer();
   return new Response(output as BodyInit, {

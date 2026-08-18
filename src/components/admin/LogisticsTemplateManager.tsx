@@ -3,13 +3,13 @@
 import { AlertTriangle, Check, Download, LoaderCircle, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 
-import { isHongyaAddressReviewTemplate } from "@/lib/logistics-export-review";
 import {
   DEFAULT_RETURN_WORKBOOK_MAPPING,
   countryRouteLines,
   parseLogisticsTemplateConfiguration,
   returnMappingLines,
 } from "@/lib/logistics-provider-template";
+import { isHongyaAddressReviewTemplate } from "@/lib/logistics-template-policy";
 
 type Template = {
   id: string;
@@ -37,9 +37,12 @@ const defaultColumns = [
   "recipientEmail=邮箱",
   "recipientCountryCode=国家",
   "recipientPostalCode=邮编",
-  "recipientRegion=州/区域",
+  "recipientRegion=州/省",
   "recipientCity=城市",
-  "recipientAddress=详细地址",
+  "recipientDistrict=区/县",
+  "recipientStreet=街道",
+  "recipientHouseNumber=门牌号/楼层房号",
+  "recipientAddress=物流完整详细地址",
   "productNames=产品名称",
   "quantity=数量",
   "codAmount=COD金额",

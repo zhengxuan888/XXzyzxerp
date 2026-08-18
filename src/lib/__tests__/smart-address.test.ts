@@ -21,8 +21,23 @@ describe("smart address parsing", () => {
       countryCode: "ES",
       postalCode: "28009",
       city: "Madrid",
+      district: "",
+      street: "Calle de Alcalá",
+      houseNumber: "123, 4º B",
       address: "Calle de Alcalá 123, 4º B, 28009 Madrid, España",
     });
+  });
+
+  it("extracts street, number, floor and door from a one-line customer address", () => {
+    const parsed = parseSmartAddressText(
+      "María García, Calle de Alcalá 123, 4º B, 28009 Madrid, España",
+      "ES",
+    );
+
+    expect(parsed.street).toBe("Calle de Alcalá");
+    expect(parsed.houseNumber).toBe("123, 4º B");
+    expect(parsed.address).toContain("Calle de Alcalá 123, 4º B");
+    expect(parsed.originalText).toContain("María García");
   });
 
   it("recognizes Portuguese postal codes and normalizes their separator", () => {
@@ -40,6 +55,9 @@ describe("smart address parsing", () => {
       countryCode: "PT",
       postalCode: "1100-053",
       city: "Lisboa",
+      district: "",
+      street: "Rua Augusta",
+      houseNumber: "88",
     });
     expect(parsed.address).toContain("Rua Augusta 88");
   });
@@ -111,16 +129,90 @@ describe("smart address parsing", () => {
     expect(parseSmartAddressText("Rua Demo 1\n28009 Madrid", "PT").countryCode).toBe("PT");
   });
 
+  it("conservatively splits a Spanish district, street, house number, floor and door", () => {
+    const source = [
+      "Lucía Martín",
+      "Barrio de Salamanca",
+      "Calle de Velázquez 41, 3º Dcha.",
+      "28001 Madrid",
+      "España",
+    ].join("\n");
+
+    expect(parseSmartAddressText(source)).toMatchObject({
+      originalText: source,
+      countryCode: "ES",
+      postalCode: "28001",
+      city: "Madrid",
+      district: "Salamanca",
+      street: "Calle de Velázquez",
+      houseNumber: "41, 3º Dcha.",
+    });
+    expect(parseSmartAddressText(source).address).toContain("Barrio de Salamanca");
+  });
+
+  it("conservatively splits a Portuguese street, number, floor and side", () => {
+    const source = [
+      "Ana Costa",
+      "Freguesia: Santa Maria Maior",
+      "Rua do Ouro 88, 2.º Esq.",
+      "1100-063 Lisboa",
+      "Portugal",
+    ].join("\n");
+
+    expect(parseSmartAddressText(source)).toMatchObject({
+      originalText: source,
+      countryCode: "PT",
+      postalCode: "1100-063",
+      city: "Lisboa",
+      district: "Santa Maria Maior",
+      street: "Rua do Ouro",
+      houseNumber: "88, 2.º Esq.",
+    });
+  });
+
+  it("keeps an ambiguous street line in the complete address instead of guessing", () => {
+    const parsed = parseSmartAddressText([
+      "María García",
+      "Edificio Sol, entrada junto al mercado",
+      "28009 Madrid",
+      "España",
+    ].join("\n"));
+
+    expect(parsed).toMatchObject({ street: "", houseNumber: "" });
+    expect(parsed.address).toContain("Edificio Sol, entrada junto al mercado");
+  });
+
   it("never clears employee-entered components when a suggestion is partial", () => {
     expect(mergeNonEmptyAddressSuggestion(
-      { countryCode: "ES", postalCode: "28009", region: "Madrid", city: "Madrid", address: "Calle 1" },
-      { countryCode: "", postalCode: "", region: "Comunidad de Madrid", city: "", address: "" },
+      {
+        countryCode: "ES",
+        postalCode: "28009",
+        region: "Madrid",
+        city: "Madrid",
+        district: "Salamanca",
+        street: "Calle 1",
+        houseNumber: "12, 2º B",
+        address: "Calle 1, 12, 2º B",
+      },
+      {
+        countryCode: "",
+        postalCode: "",
+        region: "Comunidad de Madrid",
+        city: "",
+        district: "",
+        street: "",
+        houseNumber: "",
+        address: "",
+      },
     )).toEqual({
       countryCode: "ES",
       postalCode: "28009",
       region: "Comunidad de Madrid",
       city: "Madrid",
-      address: "Calle 1",
+      district: "Salamanca",
+      street: "Calle 1",
+      houseNumber: "12, 2º B",
+      address: "Calle 1, 12, 2º B",
     });
   });
 });

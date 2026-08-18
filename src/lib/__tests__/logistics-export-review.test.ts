@@ -6,6 +6,8 @@ import {
   ORIGINAL_ADDRESS_REVIEW_NOTE,
   applyLogisticsExportPresentation,
   ensureLogisticsExportNoteColumn,
+  findHongyaForwardDeclarationIssues,
+  findHongyaForwardTemplateDeclarationIssues,
   findLogisticsAddressReviewIssues,
   findMissingLogisticsShippingRoutes,
   logisticsBatchSnapshotRequiresOriginalAddressRemoval,
@@ -17,8 +19,10 @@ import {
   CUSTOMER_ORIGINAL_ADDRESS_SOURCE,
   LEGACY_DERIVED_ADDRESS_SOURCE,
 } from "@/lib/order-address";
+import type { LogisticsTemplateColumn } from "@/lib/logistics-provider-template";
 
 const iberiaCode = "HONGYA_IBERIA_DROPSHIP";
+const eastForwardCode = "（鸿亚）东欧转寄";
 
 describe("Hongya logistics review exports", () => {
   it("adds the order-entry note to every export without duplicating configured note columns", () => {
@@ -34,30 +38,6 @@ describe("Hongya logistics review exports", () => {
     ])).toEqual([
       { field: "orderNo", header: "订单号" },
       { field: "note", header: "供应商备注" },
-    ]);
-  });
-
-  it("fills forwarding customs fields while preserving split address columns", () => {
-    const result = normalizeLogisticsExportColumns("HONGYA_IBERIA_FORWARD", [
-      { field: "custom:declaredNameEn", header: "海关报关品名1" },
-      { field: "productNames", header: "中文品名1" },
-      { field: "custom:declaredAmount", header: "申报金额" },
-      { field: "custom:declaredCurrency", header: "海关申报币种" },
-      { field: "recipientRegion", header: "收件人省份" },
-      { field: "recipientCity", header: "收件人城市" },
-      { field: "recipientAddress", header: "收件人地址" },
-      { field: "recipientPostalCode", header: "收件人邮编" },
-    ]);
-
-    expect(result).toEqual([
-      { field: "constant:Phone", header: "海关报关品名1" },
-      { field: "constant:手机", header: "中文品名1" },
-      { field: "declarationAmount", header: "申报金额" },
-      { field: "declarationCurrency", header: "海关申报币种" },
-      { field: "recipientRegion", header: "收件人省份" },
-      { field: "recipientCity", header: "收件人城市" },
-      { field: "recipientAddress", header: "收件人地址" },
-      { field: "recipientPostalCode", header: "收件人邮编" },
     ]);
   });
 
@@ -83,9 +63,30 @@ describe("Hongya logistics review exports", () => {
     expect(normalizeLogisticsExportColumns("FAN_RO_WMS", columns)).toEqual(columns);
   });
 
+  it("keeps the forwarding review address beside all split East-Europe address fields", () => {
+    expect(normalizeLogisticsExportColumns(eastForwardCode, [
+      { field: "recipientCity", header: "收件人城市" },
+      { field: "recipientStreet", header: "收件人地址" },
+      { field: "recipientHouseNumber", header: "收件人门牌号" },
+      { field: "recipientFullAddress", header: "旧审核列" },
+      { field: "custom:streetNumber", header: "收件人街道号" },
+      { field: "recipientPhone", header: "收件人电话" },
+    ])).toEqual([
+      { field: "recipientCity", header: "收件人城市" },
+      { field: "recipientStreet", header: "收件人地址" },
+      { field: "recipientHouseNumber", header: "收件人门牌号" },
+      { field: "custom:streetNumber", header: "收件人街道号" },
+      { field: "recipientFullAddress", header: ORIGINAL_ADDRESS_REVIEW_HEADER },
+      { field: "recipientPhone", header: "收件人电话" },
+    ]);
+  });
+
   it("marks review workbooks in the ASCII-safe filename without changing ordinary exports", () => {
     expect(logisticsExportFilename(iberiaCode, "2026-08-09")).toBe(
       "HONGYA_IBERIA_DROPSHIP-REVIEW-INCLUDES-ORIGINAL-ADDRESS-2026-08-09.xlsx",
+    );
+    expect(logisticsExportFilename(eastForwardCode, "2026-08-09")).toBe(
+      "HONGYA_EAST_EU_FORWARD-REVIEW-INCLUDES-ORIGINAL-ADDRESS-2026-08-09.xlsx",
     );
     expect(logisticsExportFilename("FAN_RO_WMS", "2026-08-09")).toBe("FAN_RO_WMS-2026-08-09.xlsx");
   });
@@ -107,6 +108,8 @@ describe("Hongya logistics review exports", () => {
       bodyFill: null,
       note: null,
     });
+    expect(logisticsExportColumnPresentation(iberiaCode, "recipientStreet")).toMatchObject({ width: 30, wrapText: true });
+    expect(logisticsExportColumnPresentation(iberiaCode, "recipientHouseNumber")).toMatchObject({ width: 20, wrapText: true });
     expect(logisticsExportColumnPresentation(iberiaCode, "productConfigurations")).toMatchObject({ width: 40, wrapText: true });
   });
 
@@ -204,6 +207,55 @@ describe("Hongya logistics review exports", () => {
     }]);
   });
 
+  it("requires every exported structured address field except the optional district", () => {
+    const columns = [
+      { field: "recipientRegion" as const, header: "收件人州/省" },
+      { field: "recipientDistrict" as const, header: "收件人区/县" },
+      { field: "recipientStreet" as const, header: "收件人街道" },
+      { field: "recipientHouseNumber" as const, header: "收件人门牌号" },
+    ];
+    expect(findLogisticsAddressReviewIssues(iberiaCode, [{
+      orderNo: "ZY-STRUCTURED",
+      recipientName: "Maria",
+      recipientPhone: "+34 600 000 000",
+      recipientCountryCode: "ES",
+      recipientRegion: null,
+      recipientCity: "Madrid",
+      recipientDistrict: null,
+      recipientStreet: "",
+      recipientHouseNumber: null,
+      recipientPostalCode: "28009",
+      recipientAddress: "地址待核对",
+      recipientFullAddress: "Maria, 地址待核对, 28009 Madrid, Espana",
+      recipientFullAddressSource: CUSTOMER_ORIGINAL_ADDRESS_SOURCE,
+    }], columns)).toEqual([{
+      orderNo: "ZY-STRUCTURED",
+      missingFields: ["收件人州/省", "收件人街道", "收件人门牌号/楼层房号"],
+    }]);
+  });
+
+  it("accepts safely parsed legacy street fields without mutating the old order", () => {
+    const columns = [
+      { field: "recipientRegion" as const, header: "收件人州/省" },
+      { field: "recipientStreet" as const, header: "收件人街道" },
+      { field: "recipientHouseNumber" as const, header: "收件人门牌号" },
+    ];
+    expect(findLogisticsAddressReviewIssues(iberiaCode, [{
+      orderNo: "ZY-LEGACY-PARSED",
+      recipientName: "Maria",
+      recipientPhone: "+34 600 000 000",
+      recipientCountryCode: "ES",
+      recipientRegion: "Comunidad de Madrid",
+      recipientCity: "Madrid",
+      recipientStreet: null,
+      recipientHouseNumber: null,
+      recipientPostalCode: "28009",
+      recipientAddress: "Calle de Alcalá 123, 4º B",
+      recipientFullAddress: "María García, Calle de Alcalá 123, 4º B, 28009 Madrid, España",
+      recipientFullAddressSource: CUSTOMER_ORIGINAL_ADDRESS_SOURCE,
+    }], columns)).toEqual([]);
+  });
+
   it("does not apply Hongya address validation to unrelated templates", () => {
     expect(findLogisticsAddressReviewIssues("FAN_RO_WMS", [{
       orderNo: "FAN-1",
@@ -237,6 +289,67 @@ describe("Hongya logistics review exports", () => {
       [{ orderNo: "ZY-ANY", recipientCountryCode: null }],
     )).toEqual([]);
   });
+
+  it("blocks only Hongya forwarding orders with a missing amount or non-EUR declaration currency", () => {
+    const orders = [
+      { orderNo: "ZY-OK", productValueCents: 2600, declarationCurrency: " eur " },
+      { orderNo: "ZY-ZERO", productValueCents: 0, declarationCurrency: "EUR" },
+      { orderNo: "ZY-CURRENCY", productValueCents: 2600, declarationCurrency: "PLN" },
+      { orderNo: "ZY-BOTH", productValueCents: -1, declarationCurrency: "" },
+    ];
+    expect(findHongyaForwardDeclarationIssues("HONGYA_IBERIA_FORWARD", orders)).toEqual([
+      { orderNo: "ZY-ZERO", invalidFields: ["申报金额"] },
+      { orderNo: "ZY-CURRENCY", invalidFields: ["申报币种（必须为 EUR）"] },
+      { orderNo: "ZY-BOTH", invalidFields: ["申报金额", "申报币种（必须为 EUR）"] },
+    ]);
+    expect(findHongyaForwardDeclarationIssues(iberiaCode, orders)).toEqual([]);
+    expect(findHongyaForwardDeclarationIssues("FAN_RO_WMS", orders)).toEqual([]);
+  });
+
+  it("fails closed when a forwarding template no longer has the four approved declaration columns", () => {
+    const approved = [
+      { field: "orderNo" as const, header: "客户订单号" },
+      { field: "orderNo" as const, header: "客户订单编号" },
+      { field: "shippingRoute" as const, header: "运输渠道" },
+      { field: "constant:Phone" as const, header: "海关报关品名1" },
+      { field: "constant:手机" as const, header: "中文品名1" },
+      { field: "quantity" as const, header: "申报品数量1" },
+      { field: "declarationAmount" as const, header: "申报金额" },
+      { field: "constant:EUR" as const, header: "海关申报币种" },
+    ];
+    expect(findHongyaForwardTemplateDeclarationIssues("HONGYA_IBERIA_FORWARD", approved)).toEqual([]);
+    expect(findHongyaForwardTemplateDeclarationIssues("HONGYA_IBERIA_FORWARD", [
+      ...approved.slice(0, 6),
+      { field: "unitPrice", header: "申报金额" },
+      { field: "custom:declaredCurrency", header: "海关申报币种" },
+    ])).toEqual([
+      "申报金额（必须读取订单申报总额且列位正确）",
+      "海关申报币种（必须固定 EUR 且列位正确）",
+    ]);
+    expect(findHongyaForwardTemplateDeclarationIssues("HONGYA_IBERIA_FORWARD", [
+      approved[0]!,
+      approved[1]!,
+      approved[3]!,
+      approved[2]!,
+      ...approved.slice(4),
+    ])).toEqual(["海关报关品名1（必须固定 Phone 且列位正确）"]);
+    expect(findHongyaForwardTemplateDeclarationIssues(iberiaCode, [])).toEqual([]);
+  });
+
+  it.each(["（鸿亚）东欧转寄", "HONGYA_EAST_EU_FORWARD", "HONGYA_EAST_FORWARD"])(
+    "accepts the approved declaration positions for East-Europe alias %s",
+    (templateCode) => {
+      const columns: LogisticsTemplateColumn[] = Array.from({ length: 22 }, (_, index) => ({
+        field: "orderNo",
+        header: `占位列${index + 1}`,
+      }));
+      columns[17] = { field: "constant:Phone", header: "海关报关品名1" };
+      columns[18] = { field: "constant:手机", header: "中文品名1" };
+      columns[20] = { field: "declarationAmount", header: "申报价值1" };
+      columns[21] = { field: "constant:EUR", header: "申报币种1" };
+      expect(findHongyaForwardTemplateDeclarationIssues(templateCode, columns)).toEqual([]);
+    },
+  );
 
   it("detects whether a saved batch artifact requires address-column removal confirmation", () => {
     expect(logisticsBatchSnapshotRequiresOriginalAddressRemoval({

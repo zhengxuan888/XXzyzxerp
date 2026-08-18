@@ -1,5 +1,7 @@
 import ExcelJS from "exceljs";
 
+import { parseSmartAddressText } from "@/lib/smart-address";
+
 export const ORDER_IMPORT_MAX_BYTES = 10 * 1024 * 1024;
 export const ORDER_IMPORT_MAX_ROWS = 500;
 
@@ -15,6 +17,9 @@ export type OrderImportRow = {
   country: string;
   region: string;
   city: string;
+  district: string;
+  street: string;
+  houseNumber: string;
   postalCode: string;
   productCode: string;
   quantity: number;
@@ -66,6 +71,23 @@ const HEADER_ALIASES: Record<string, ImportField> = {
   state: "region",
   城市: "city",
   city: "city",
+  区: "district",
+  区县: "district",
+  收件人区: "district",
+  收件人区县: "district",
+  district: "district",
+  recipientdistrict: "district",
+  街道: "street",
+  收件人街道: "street",
+  street: "street",
+  recipientstreet: "street",
+  门牌号: "houseNumber",
+  门牌号楼层房号: "houseNumber",
+  收件人门牌号: "houseNumber",
+  收件人门牌号楼层房号: "houseNumber",
+  housenumber: "houseNumber",
+  doornumber: "houseNumber",
+  recipienthousenumber: "houseNumber",
   邮编: "postalCode",
   postalcode: "postalCode",
   productcode: "productCode",
@@ -108,6 +130,20 @@ function normalizeHeader(value: ExcelJS.CellValue) {
   return cellText(value).toLowerCase().replace(/[\s　/／()（）\[\]【】:_-]+/g, "");
 }
 
+export function enrichOrderImportAddress(row: OrderImportRow): OrderImportRow {
+  const parsed = parseSmartAddressText(row.fullAddress, row.country);
+  return {
+    ...row,
+    country: row.country || parsed.countryCode,
+    postalCode: row.postalCode || parsed.postalCode,
+    city: row.city || parsed.city,
+    district: row.district || parsed.district,
+    street: row.street || parsed.street,
+    houseNumber: row.houseNumber || parsed.houseNumber,
+    address: row.address || parsed.address,
+  };
+}
+
 export async function parseOrderImportWorkbook(input: Buffer | Uint8Array): Promise<OrderImportRow[]> {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(input as unknown as Parameters<typeof workbook.xlsx.load>[0]);
@@ -141,7 +177,7 @@ export async function parseOrderImportWorkbook(input: Buffer | Uint8Array): Prom
     });
     if (!hasContent) return;
 
-    rows.push({
+    rows.push(enrichOrderImportAddress({
       row: rowNumber,
       orderNo: raw.orderNo ?? "",
       shopId: raw.shopId ?? "",
@@ -153,6 +189,9 @@ export async function parseOrderImportWorkbook(input: Buffer | Uint8Array): Prom
       country: (raw.country ?? "").toUpperCase(),
       region: raw.region ?? "",
       city: raw.city ?? "",
+      district: raw.district ?? "",
+      street: raw.street ?? "",
+      houseNumber: raw.houseNumber ?? "",
       postalCode: raw.postalCode ?? "",
       productCode: raw.productCode ?? "",
       quantity: Number(raw.quantity),
@@ -160,7 +199,7 @@ export async function parseOrderImportWorkbook(input: Buffer | Uint8Array): Prom
       codAmountCents: Number(raw.codAmountCents || 0),
       currency: (raw.currency || "EUR").toUpperCase(),
       paymentMethod: raw.paymentMethod ?? "",
-    });
+    }));
   });
   return rows;
 }

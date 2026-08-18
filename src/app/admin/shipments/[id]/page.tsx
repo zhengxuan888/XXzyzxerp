@@ -79,6 +79,9 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
             recipientRegion: true,
             recipientCity: true,
             recipientPostalCode: true,
+            recipientDistrict: true,
+            recipientStreet: true,
+            recipientHouseNumber: true,
             recipientAddress: true,
             codAmountCents: true,
             currency: true,
@@ -157,6 +160,9 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
         recipientRegion={shipment.order.recipientRegion}
         recipientCity={shipment.order.recipientCity}
         recipientPostalCode={shipment.order.recipientPostalCode}
+        recipientDistrict={shipment.order.recipientDistrict}
+        recipientStreet={shipment.order.recipientStreet}
+        recipientHouseNumber={shipment.order.recipientHouseNumber}
         recipientAddress={shipment.order.recipientAddress}
         recipientFullAddress={originalAddressRecord?.recipientFullAddress ?? null}
         recipientFullAddressSource={originalAddressRecord?.recipientFullAddressSource ?? null}
