@@ -4,6 +4,7 @@ import {
   HONGYA_ADDRESS_REVIEW_TEMPLATE_CODES,
   HONGYA_FORWARD_TEMPLATE_CODES,
   isHongyaAddressReviewTemplate,
+  isHongyaForwardTemplate,
 } from "@/lib/logistics-template-policy";
 
 describe("logistics template policy", () => {
@@ -19,6 +20,12 @@ describe("logistics template policy", () => {
     const reviewCodes = new Set(HONGYA_ADDRESS_REVIEW_TEMPLATE_CODES);
     expect(reviewCodes.size).toBe(HONGYA_ADDRESS_REVIEW_TEMPLATE_CODES.length);
     expect(new Set(HONGYA_FORWARD_TEMPLATE_CODES).size).toBe(HONGYA_FORWARD_TEMPLATE_CODES.length);
-    for (const code of HONGYA_FORWARD_TEMPLATE_CODES) expect(reviewCodes.has(code)).toBe(true);
+    for (const code of HONGYA_FORWARD_TEMPLATE_CODES) {
+      expect(reviewCodes.has(code)).toBe(true);
+      expect(isHongyaForwardTemplate(code)).toBe(true);
+    }
+    expect(isHongyaForwardTemplate("HONGYA_IBERIA_DROPSHIP")).toBe(false);
+    expect(isHongyaForwardTemplate("HONGYA_EAST_EU_DROPSHIP")).toBe(false);
+    expect(isHongyaForwardTemplate("FAN_RO_WMS")).toBe(false);
   });
 });

@@ -25,20 +25,25 @@ const iberiaCode = "HONGYA_IBERIA_DROPSHIP";
 const eastForwardCode = "（鸿亚）东欧转寄";
 
 describe("Hongya logistics review exports", () => {
-  it("adds the order-entry note to every export without duplicating configured note columns", () => {
-    expect(ensureLogisticsExportNoteColumn([
+  it("adds the order-entry note only to forwarding exports without duplicating configured note columns", () => {
+    expect(ensureLogisticsExportNoteColumn("HONGYA_IBERIA_FORWARD", [
       { field: "orderNo", header: "订单号" },
     ])).toEqual([
       { field: "orderNo", header: "订单号" },
       { field: "note", header: "录单人备注" },
     ]);
-    expect(ensureLogisticsExportNoteColumn([
+    expect(ensureLogisticsExportNoteColumn(eastForwardCode, [
       { field: "orderNo", header: "订单号" },
       { field: "note", header: "供应商备注" },
     ])).toEqual([
       { field: "orderNo", header: "订单号" },
       { field: "note", header: "供应商备注" },
     ]);
+    const unrelatedColumns = [{ field: "orderNo" as const, header: "订单号" }];
+    expect(ensureLogisticsExportNoteColumn("HONGYA_EAST_EU_DROPSHIP", unrelatedColumns))
+      .toEqual(unrelatedColumns);
+    expect(ensureLogisticsExportNoteColumn("FAN_RO_WMS", unrelatedColumns))
+      .toEqual(unrelatedColumns);
   });
 
   it("keeps exactly one canonical original-address column beside the structured address", () => {

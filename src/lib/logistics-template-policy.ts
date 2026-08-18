@@ -11,6 +11,10 @@ export const HONGYA_ADDRESS_REVIEW_TEMPLATE_CODES = [
   ...HONGYA_FORWARD_TEMPLATE_CODES,
 ] as const;
 
+export function isHongyaForwardTemplate(code: string) {
+  return (HONGYA_FORWARD_TEMPLATE_CODES as readonly string[]).includes(code);
+}
+
 export function isHongyaAddressReviewTemplate(code: string) {
   return (HONGYA_ADDRESS_REVIEW_TEMPLATE_CODES as readonly string[]).includes(code);
 }
