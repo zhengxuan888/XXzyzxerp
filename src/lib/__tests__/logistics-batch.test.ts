@@ -15,6 +15,8 @@ const order = {
   recipientFullAddress: "Demo Street 1, Lisbon, 1000-001, Portugal",
   codAmountCents: 2999,
   currency: "EUR",
+  productValueCents: 300,
+  declarationCurrency: "EUR",
   customerWhatsapp: "+351900000000",
   note: "demo",
   customFields: { provider: { sku: "PT-DEMO-01" } },
@@ -25,6 +27,8 @@ describe("logistics export batch helpers", () => {
   it("reads configured custom order fields without adding a new code branch", () => {
     expect(exportFieldValue(order, "custom:provider.sku")).toBe("PT-DEMO-01");
     expect(exportFieldValue(order, "codAmount")).toBe("29.99");
+    expect(exportFieldValue(order, "declarationAmount")).toBe("3.00");
+    expect(exportFieldValue(order, "declarationCurrency")).toBe("EUR");
     expect(exportFieldValue(order, "constant:PP")).toBe("PP");
     expect(exportFieldValue(order, "recipientFullAddress")).toBe("Demo Street 1, Lisbon, 1000-001, Portugal");
     expect(exportFieldValue(order, "constant:Phone")).toBe("Phone");

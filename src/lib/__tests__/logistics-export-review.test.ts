@@ -5,6 +5,7 @@ import {
   ORIGINAL_ADDRESS_REVIEW_HEADER,
   ORIGINAL_ADDRESS_REVIEW_NOTE,
   applyLogisticsExportPresentation,
+  ensureLogisticsExportNoteColumn,
   findLogisticsAddressReviewIssues,
   findMissingLogisticsShippingRoutes,
   logisticsBatchSnapshotRequiresOriginalAddressRemoval,
@@ -20,6 +21,46 @@ import {
 const iberiaCode = "HONGYA_IBERIA_DROPSHIP";
 
 describe("Hongya logistics review exports", () => {
+  it("adds the order-entry note to every export without duplicating configured note columns", () => {
+    expect(ensureLogisticsExportNoteColumn([
+      { field: "orderNo", header: "订单号" },
+    ])).toEqual([
+      { field: "orderNo", header: "订单号" },
+      { field: "note", header: "录单人备注" },
+    ]);
+    expect(ensureLogisticsExportNoteColumn([
+      { field: "orderNo", header: "订单号" },
+      { field: "note", header: "供应商备注" },
+    ])).toEqual([
+      { field: "orderNo", header: "订单号" },
+      { field: "note", header: "供应商备注" },
+    ]);
+  });
+
+  it("fills forwarding customs fields while preserving split address columns", () => {
+    const result = normalizeLogisticsExportColumns("HONGYA_IBERIA_FORWARD", [
+      { field: "custom:declaredNameEn", header: "海关报关品名1" },
+      { field: "productNames", header: "中文品名1" },
+      { field: "custom:declaredAmount", header: "申报金额" },
+      { field: "custom:declaredCurrency", header: "海关申报币种" },
+      { field: "recipientRegion", header: "收件人省份" },
+      { field: "recipientCity", header: "收件人城市" },
+      { field: "recipientAddress", header: "收件人地址" },
+      { field: "recipientPostalCode", header: "收件人邮编" },
+    ]);
+
+    expect(result).toEqual([
+      { field: "constant:Phone", header: "海关报关品名1" },
+      { field: "constant:手机", header: "中文品名1" },
+      { field: "declarationAmount", header: "申报金额" },
+      { field: "declarationCurrency", header: "海关申报币种" },
+      { field: "recipientRegion", header: "收件人省份" },
+      { field: "recipientCity", header: "收件人城市" },
+      { field: "recipientAddress", header: "收件人地址" },
+      { field: "recipientPostalCode", header: "收件人邮编" },
+    ]);
+  });
+
   it("keeps exactly one canonical original-address column beside the structured address", () => {
     const result = normalizeLogisticsExportColumns(iberiaCode, [
       { field: "orderNo", header: "客户订单号" },
