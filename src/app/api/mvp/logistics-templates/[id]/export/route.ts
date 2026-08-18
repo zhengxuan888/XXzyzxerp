@@ -1,24 +1,27 @@
-import ExcelJS from "exceljs";
 import { Prisma } from "@prisma/client";
 import { NextRequest } from "next/server";
 
 import { requireAuthContext } from "@/lib/api-auth";
 import { fail } from "@/lib/api-response";
 import { writeAuditLog } from "@/lib/audit";
-import { commonDepartmentId, createLogisticsBatchNo, exportFieldValue, logisticsBatchHash } from "@/lib/logistics-batch";
+import { commonDepartmentId, createLogisticsBatchNo, logisticsBatchHash } from "@/lib/logistics-batch";
 import {
-  applyLogisticsExportPresentation,
+  findHongyaForwardDeclarationIssues,
+  findHongyaForwardTemplateDeclarationIssues,
   findLogisticsAddressReviewIssues,
   findMissingLogisticsShippingRoutes,
   isHongyaAddressReviewTemplate,
   logisticsExportFilename,
   normalizeLogisticsExportColumns,
 } from "@/lib/logistics-export-review";
+import { buildLogisticsExportWorkbook } from "@/lib/logistics-export-workbook";
 import { parseLogisticsTemplateConfiguration } from "@/lib/logistics-provider-template";
 import { prepareGeneratedSpreadsheetArtifact } from "@/lib/logistics-spreadsheet";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { localDemoStorage } from "@/lib/storage/local-demo";
+
+type RouteParams = { params: Promise<{ id: string }> };
 
 function parseOrderIds(body: unknown) {
   const input = body && typeof body === "object" ? body as { orderIds?: unknown } : {};
@@ -29,7 +32,7 @@ function parseOrderIds(body: unknown) {
     .filter((value) => value.length > 0 && value.length <= 100))];
 }
 
-export async function POST(request: NextRequest, context: RouteContext<"/api/mvp/logistics-templates/[id]/export">) {
+export async function POST(request: NextRequest, context: RouteParams) {
   const auth = await requireAuthContext(request);
   if (!auth) return fail("UNAUTHENTICATED", "请先登录。", 401);
   const { id } = await context.params;
@@ -50,6 +53,15 @@ export async function POST(request: NextRequest, context: RouteContext<"/api/mvp
   const needsProductConfiguration = isHongyaAddressReviewTemplate(template.code);
   if (needsProductConfiguration && !exportColumns.some((column) => column.field === "productConfigurations")) {
     exportColumns.push({ field: "productConfigurations", header: "具体型号配置" });
+  }
+  const templateDeclarationIssues = findHongyaForwardTemplateDeclarationIssues(template.code, exportColumns);
+  if (templateDeclarationIssues.length) {
+    return fail(
+      "HONGYA_FORWARD_TEMPLATE_DECLARATION_INVALID",
+      `转寄物流模板申报列配置不正确，已禁止生成文件：${templateDeclarationIssues.join("、")}。请先修复模板后重试。`,
+      409,
+      { invalidFields: templateDeclarationIssues },
+    );
   }
 
   const candidateOrders = await prisma.order.findMany({
@@ -113,6 +125,21 @@ export async function POST(request: NextRequest, context: RouteContext<"/api/mvp
     );
   }
 
+  const declarationIssues = findHongyaForwardDeclarationIssues(template.code, candidateOrders);
+  if (declarationIssues.length) {
+    const preview = declarationIssues
+      .slice(0, 10)
+      .map((issue) => `${issue.orderNo}：${issue.invalidFields.join("、")}`)
+      .join("；");
+    const remaining = declarationIssues.length > 10 ? `；另有 ${declarationIssues.length - 10} 单` : "";
+    return fail(
+      "HONGYA_FORWARD_DECLARATION_INVALID",
+      `以下转寄订单申报资料不完整，已禁止生成物流文件：${preview}${remaining}。请先补正订单申报金额和 EUR 申报币种后重试。`,
+      409,
+      { orders: declarationIssues },
+    );
+  }
+
   const inFlight = await prisma.logisticsExportBatchItem.findFirst({
     where: {
       orderId: { in: candidateOrders.map((order) => order.id) },
@@ -124,23 +151,16 @@ export async function POST(request: NextRequest, context: RouteContext<"/api/mvp
     return fail("ORDER_ALREADY_EXPORTED", `所选订单已通过物流批次 ${inFlight.exportBatch.batchNo} 导出。一个订单只能选择一个模板并导出一次。`, 409);
   }
 
-  const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet(configuration.sheetName);
-  sheet.columns = exportColumns.map((column) => ({ header: column.header, key: column.field, width: 18 }));
-  const rowSnapshots = candidateOrders.map((order) => {
-    const values = exportColumns.map((column) => column.field === "shippingRoute"
-      ? configuration.countryRoutes[order.recipientCountryCode?.toUpperCase() ?? ""] ?? ""
-      : exportFieldValue(order, column.field));
-    const payload = Object.fromEntries(exportColumns.map((column, index) => [`${index + 1}:${column.header}`, values[index]]));
-    sheet.addRow(values);
-    return { order, payload };
+  const { output, payloads } = await buildLogisticsExportWorkbook({
+    templateCode: template.code,
+    sheetName: configuration.sheetName,
+    columns: exportColumns,
+    countryRoutes: configuration.countryRoutes,
+    headerFill: configuration.headerFill,
+    headerFontColor: configuration.headerFontColor,
+    orders: candidateOrders,
   });
-  sheet.getRow(1).font = { bold: true, color: configuration.headerFontColor ? { argb: `FF${configuration.headerFontColor}` } : undefined };
-  if (configuration.headerFill) sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${configuration.headerFill}` } };
-  applyLogisticsExportPresentation(sheet, exportColumns, template.code);
-  sheet.views = [{ state: "frozen", ySplit: 1 }];
-  sheet.autoFilter = { from: "A1", to: { row: 1, column: exportColumns.length } };
-  const output = Buffer.from(await workbook.xlsx.writeBuffer());
+  const rowSnapshots = candidateOrders.map((order, index) => ({ order, payload: payloads[index] }));
   const artifact = prepareGeneratedSpreadsheetArtifact(
     logisticsExportFilename(template.code, new Date().toISOString().slice(0, 10)),
     output,
