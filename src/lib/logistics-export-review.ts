@@ -5,6 +5,7 @@ import type { LogisticsTemplateColumn } from "@/lib/logistics-provider-template"
 import {
   HONGYA_FORWARD_TEMPLATE_CODES,
   isHongyaAddressReviewTemplate,
+  isHongyaForwardTemplate,
 } from "@/lib/logistics-template-policy";
 import { hasCustomerOriginalAddress } from "@/lib/order-address";
 
@@ -12,6 +13,7 @@ export {
   HONGYA_ADDRESS_REVIEW_TEMPLATE_CODES,
   HONGYA_FORWARD_TEMPLATE_CODES,
   isHongyaAddressReviewTemplate,
+  isHongyaForwardTemplate,
 } from "@/lib/logistics-template-policy";
 
 export const ORIGINAL_ADDRESS_REVIEW_HEADER = "完整原始地址（核对后删除）";
@@ -92,10 +94,14 @@ export function normalizeLogisticsExportColumns(
 }
 
 export function ensureLogisticsExportNoteColumn(
+  templateCode: string,
   columns: readonly LogisticsTemplateColumn[],
 ): LogisticsTemplateColumn[] {
-  if (columns.some((column) => column.field === "note")) return columns.map((column) => ({ ...column }));
-  return [...columns.map((column) => ({ ...column })), { field: "note", header: "录单人备注" }];
+  const clonedColumns = columns.map((column) => ({ ...column }));
+  if (!isHongyaForwardTemplate(templateCode) || clonedColumns.some((column) => column.field === "note")) {
+    return clonedColumns;
+  }
+  return [...clonedColumns, { field: "note", header: "录单人备注" }];
 }
 
 export function logisticsExportColumnPresentation(

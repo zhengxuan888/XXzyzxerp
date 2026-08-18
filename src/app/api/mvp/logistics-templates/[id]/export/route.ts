@@ -48,6 +48,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
   if (!template) return fail("TEMPLATE_NOT_FOUND", "物流商模板不存在或已停用。", 404);
   const configuration = parseLogisticsTemplateConfiguration(template.configuration);
   const exportColumns = ensureLogisticsExportNoteColumn(
+    template.code,
     normalizeLogisticsExportColumns(template.code, configuration.columns),
   );
   if (!exportColumns.some((column) => column.field === "salesName")) {

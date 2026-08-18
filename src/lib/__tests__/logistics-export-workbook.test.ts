@@ -136,13 +136,13 @@ describe("logistics export workbook", () => {
   });
 
   it("appends one note column after each approved layout without moving customs columns", async () => {
-    const westWithNote = ensureLogisticsExportNoteColumn(westColumns);
+    const westWithNote = ensureLogisticsExportNoteColumn("HONGYA_IBERIA_FORWARD", westColumns);
     const west = await restoredSheet("HONGYA_IBERIA_FORWARD", westWithNote);
     expect(west.sheet.getCell("X1").value).toBe("录单人备注");
     expect(["D2", "E2", "G2", "H2"].map((cell) => west.sheet.getCell(cell).value))
       .toEqual(["Phone", "手机", 26, "EUR"]);
 
-    const eastWithNote = ensureLogisticsExportNoteColumn(eastColumns);
+    const eastWithNote = ensureLogisticsExportNoteColumn("（鸿亚）东欧转寄", eastColumns);
     const east = await restoredSheet("（鸿亚）东欧转寄", eastWithNote);
     expect(east.sheet.getCell("Z1").value).toBe("录单人备注");
     expect(["R2", "S2", "U2", "V2"].map((cell) => east.sheet.getCell(cell).value))
