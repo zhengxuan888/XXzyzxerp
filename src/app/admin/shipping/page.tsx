@@ -4,6 +4,7 @@ import LogisticsReturnImport from "@/components/admin/LogisticsReturnImport";
 import LogisticsTemplateManager from "@/components/admin/LogisticsTemplateManager";
 import ShippingQuickQueue from "@/components/admin/ShippingQuickQueue";
 import { getActiveMembershipById } from "@/lib/auth";
+import { logisticsBatchSnapshotRequiresOriginalAddressRemoval } from "@/lib/logistics-export-review";
 import { createOrderAccessPlan } from "@/lib/order-access";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
@@ -157,6 +158,7 @@ export default async function ShippingWorkbenchPage() {
     orderCount: batch.orderCount,
     exportArtifactId: batch.artifacts[0]?.id ?? null,
     latestReturnArtifactId: batch.returnImports[0]?.artifacts[0]?.id ?? null,
+    requiresOriginalAddressRemoval: logisticsBatchSnapshotRequiresOriginalAddressRemoval(batch.templateSnapshot),
     canPreview,
     canConfirm,
     canDispatch,

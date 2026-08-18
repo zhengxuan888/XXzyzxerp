@@ -70,6 +70,24 @@ describe("Ship24 tracking adapter", () => {
       status: "EXCEPTION",
       priority: "HIGH",
     });
+    expect(normalizeProviderEventStatus("ready_for_pickup")).toMatchObject({
+      eventType: "AVAILABLE_FOR_PICKUP",
+      status: "OUT_FOR_DELIVERY",
+      priority: "HIGH",
+    });
+    expect(normalizeProviderEventStatus("delivery_failed")).toMatchObject({
+      eventType: "DELIVERY_FAILED",
+      status: "EXCEPTION",
+      priority: "HIGH",
+    });
+    expect(normalizeProviderEventStatus("failed_attempt")).toMatchObject({
+      eventType: "DELIVERY_FAILED",
+      status: "EXCEPTION",
+    });
+    expect(normalizeProviderEventStatus("delivery_attempted")).toMatchObject({
+      eventType: "DELIVERY_FAILED",
+      status: "EXCEPTION",
+    });
     expect(normalizeProviderEventStatus("provider_specific_unknown")).toBeNull();
   });
 

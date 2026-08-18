@@ -6,6 +6,7 @@ import type { OrderTemplateConfiguration } from "@/lib/order-template";
 import AttachmentPanel from "@/components/admin/AttachmentPanel";
 import { currencyForCountry } from "@/lib/order-country-currency";
 import { declarationPreview } from "@/lib/order-declaration";
+import { mergeNonEmptyAddressSuggestion, parseSmartAddressText, type StructuredAddress } from "@/lib/smart-address";
 
 type Option = { id: string; code: string; name: string };
 type ProductOption = Option & { skus: { id: string; code: string }[] };
@@ -61,11 +62,14 @@ export default function OrderEntryForm({
   const [searchKeyword, setSearchKeyword] = useState("");
   const [smartAddress, setSmartAddress] = useState("");
   const [smartMessage, setSmartMessage] = useState("");
+  const [recipientEmail, setRecipientEmail] = useState("");
   const [ocrBusy, setOcrBusy] = useState(false);
   const [ocrFileName, setOcrFileName] = useState("");
   const [pendingProofs, setPendingProofs] = useState<File[]>([]);
   const ocrInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const ocrInputRequestRef = useRef(0);
+  const addressValidationRequestRef = useRef(0);
   const [recipientCountryCode, setRecipientCountryCode] = useState("");
   const [addressChecking, setAddressChecking] = useState(false);
   const [addressValidation, setAddressValidation] = useState<AddressValidation | null>(null);
@@ -145,7 +149,7 @@ export default function OrderEntryForm({
       recipientRegion: String(data.get("recipientRegion") ?? ""),
       recipientCity: String(data.get("recipientCity") ?? ""),
       recipientAddress: String(data.get("recipientAddress") ?? ""),
-      recipientFullAddress: String(data.get("recipientFullAddress") ?? data.get("recipientAddress") ?? ""),
+      recipientFullAddress: String(data.get("recipientFullAddress") ?? ""),
       packageWeightGrams: Math.round(Number(data.get("packageWeightKg") || 0) * 1000),
       paymentMethod: String(data.get("paymentMethod") ?? defaultValues.paymentMethod),
       customerWhatsapp: String(data.get("customerWhatsapp") ?? ""),
@@ -213,80 +217,156 @@ export default function OrderEntryForm({
   const input =
     "h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100";
 
-  function parseSmartAddress() {
-    const lines = smartAddress.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    if (!lines.length) return;
-    const form = formRef.current;
-    if (!form) return;
-    const set = (name: string, value: string) => {
-      const field = form.elements.namedItem(name);
-      if (field instanceof HTMLInputElement && value) {
-        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-        setter?.call(field, value);
-        field.dispatchEvent(new Event("input", { bubbles: true }));
-        field.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-    };
-    const email = lines.find((line) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(line));
-    const phone = lines.find((line) => /^[+()\d\s-]{7,}$/.test(line));
-    const name = lines.find((line) => line !== email && line !== phone && !/[,.，。]/.test(line));
-    const address = lines.filter((line) => line !== email && line !== phone && line !== name).join(", ");
-    set("recipientName", name ?? lines[0] ?? "");
-    set("recipientEmail", email ?? "");
-    set("recipientPhone", phone ?? "");
-    set("recipientAddress", address);
-    set("recipientFullAddress", smartAddress.trim());
-    setSmartMessage("已尝试填充收件人、邮箱、电话和地址，请人工核对后再提交。");
-  }
-
   function formValue(name: string) {
     const field = formRef.current?.elements.namedItem(name);
-    return field instanceof HTMLInputElement ? field.value.trim() : "";
+    return field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement ? field.value.trim() : "";
   }
 
   function setFormValue(name: string, value: string) {
     const field = formRef.current?.elements.namedItem(name);
-    if (!(field instanceof HTMLInputElement)) return;
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    if (!(field instanceof HTMLInputElement) && !(field instanceof HTMLTextAreaElement)) return;
+    const prototype = field instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
     setter?.call(field, value);
     field.dispatchEvent(new Event("input", { bubbles: true }));
     field.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
+  function currentStructuredAddress(countryCode = recipientCountryCode): StructuredAddress {
+    return {
+      countryCode,
+      postalCode: formValue("recipientPostalCode"),
+      region: formValue("recipientRegion"),
+      city: formValue("recipientCity"),
+      address: formValue("recipientAddress"),
+    };
+  }
+
+  function applyStructuredAddress(value: StructuredAddress) {
+    if (value.countryCode) {
+      setRecipientCountryCode(value.countryCode);
+      setCodCurrency(currencyForCountry(value.countryCode, defaultValues.currency));
+    }
+    setFormValue("recipientPostalCode", value.postalCode);
+    setFormValue("recipientRegion", value.region);
+    setFormValue("recipientCity", value.city);
+    setFormValue("recipientAddress", value.address);
+  }
+
+  async function requestAddressValidation(value: StructuredAddress) {
+    const response = await fetch("/api/mvp/address/validate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(value),
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(payload?.error?.message || "地址验证失败");
+    return payload.data as AddressValidation;
+  }
+
+  async function parseSmartAddress(rawText = smartAddress) {
+    const requestId = ++addressValidationRequestRef.current;
+    const parsed = parseSmartAddressText(rawText, recipientCountryCode);
+    if (!parsed.originalText) {
+      setAddressChecking(false);
+      setSmartMessage("请先粘贴客户发来的完整收件信息。");
+      return;
+    }
+
+    setSmartAddress(parsed.originalText);
+    setFormValue("recipientFullAddress", parsed.originalText);
+    if (parsed.recipientName) setFormValue("recipientName", parsed.recipientName);
+    if (parsed.recipientPhone) setFormValue("recipientPhone", parsed.recipientPhone);
+    if (parsed.recipientEmail) setRecipientEmail(parsed.recipientEmail);
+    if (parsed.postalCode) setFormValue("recipientPostalCode", parsed.postalCode);
+    if (parsed.city) setFormValue("recipientCity", parsed.city);
+    if (parsed.address) setFormValue("recipientAddress", parsed.address);
+
+    const resolvedCountry = parsed.countryCode || recipientCountryCode;
+    if (resolvedCountry) {
+      setRecipientCountryCode(resolvedCountry);
+      setCodCurrency(currencyForCountry(resolvedCountry, defaultValues.currency));
+    }
+    if (!resolvedCountry) {
+      setAddressChecking(false);
+      setSmartMessage("原始文本已完整保留。请选择目的国家后再点“自动拆分并填入”。");
+      return;
+    }
+
+    setAddressChecking(true);
+    setAddressValidation(null);
+    setAddressValidationMessage("");
+    setSmartMessage("正在自动拆分地址…");
+    try {
+      const validation = await requestAddressValidation(currentStructuredAddress(resolvedCountry));
+      if (requestId !== addressValidationRequestRef.current) return;
+      setAddressValidation(validation);
+      const merged = mergeNonEmptyAddressSuggestion(
+        currentStructuredAddress(resolvedCountry),
+        validation.suggestion,
+      );
+      applyStructuredAddress(merged);
+      const message = validation.status === "verified"
+        ? "已自动拆分并填入，请核对后保存；客户原始文本已独立保留。"
+        : "已填入可识别字段，部分内容仍需人工核对；客户原始文本已独立保留。";
+      setSmartMessage(message);
+      setAddressValidationMessage(message);
+    } catch (reason) {
+      if (requestId !== addressValidationRequestRef.current) return;
+      const message = reason instanceof Error ? reason.message : "地址自动拆分暂时不可用。";
+      setSmartMessage(`原始文本已完整保留，并已填入本地可识别内容；${message}`);
+    } finally {
+      if (requestId === addressValidationRequestRef.current) setAddressChecking(false);
+    }
+  }
+
   async function validateAddress() {
+    const requestId = ++addressValidationRequestRef.current;
     setAddressValidationMessage("");
     setAddressValidation(null);
     setAddressChecking(true);
     try {
-      const response = await fetch("/api/mvp/address/validate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ countryCode: recipientCountryCode, postalCode: formValue("recipientPostalCode"), region: formValue("recipientRegion"), city: formValue("recipientCity"), address: formValue("recipientAddress") }) });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(payload?.error?.message || "地址验证失败");
-      setAddressValidation(payload.data as AddressValidation);
+      const validation = await requestAddressValidation(currentStructuredAddress());
+      if (requestId !== addressValidationRequestRef.current) return;
+      setAddressValidation(validation);
     } catch (reason) {
+      if (requestId !== addressValidationRequestRef.current) return;
       setAddressValidationMessage(reason instanceof Error ? reason.message : "地址验证失败，请稍后重试。");
     } finally {
-      setAddressChecking(false);
+      if (requestId === addressValidationRequestRef.current) setAddressChecking(false);
     }
   }
 
   function applyAddressSuggestion() {
     if (!addressValidation) return;
-    const suggestion = addressValidation.suggestion;
-    if (suggestion.countryCode) { setRecipientCountryCode(suggestion.countryCode); setCodCurrency(currencyForCountry(suggestion.countryCode, defaultValues.currency)); }
-    setFormValue("recipientPostalCode", suggestion.postalCode);
-    setFormValue("recipientRegion", suggestion.region);
-    setFormValue("recipientCity", suggestion.city);
-    setFormValue("recipientAddress", suggestion.address || suggestion.formattedAddress);
+    applyStructuredAddress(mergeNonEmptyAddressSuggestion(currentStructuredAddress(), addressValidation.suggestion));
     setAddressValidationMessage("已采用 Google 建议地址，请再核对一次。");
   }
 
+  function supersedePendingSmartInput() {
+    ocrInputRequestRef.current += 1;
+    addressValidationRequestRef.current += 1;
+    setOcrBusy(false);
+    setAddressChecking(false);
+    setOcrFileName("");
+    setAddressValidation(null);
+    setAddressValidationMessage("");
+  }
+
   async function recognizeImage(file: File) {
+    const requestId = ++ocrInputRequestRef.current;
+    // A new image is also a new address source, so any validation that belongs
+    // to the previous text must no longer be allowed to write back.
+    addressValidationRequestRef.current += 1;
+    setAddressChecking(false);
     setSmartMessage("");
     if (![/^image\/jpeg$/, /^image\/png$/, /^image\/webp$/].some((pattern) => pattern.test(file.type))) {
+      setOcrBusy(false);
       setSmartMessage("仅支持 JPG、PNG 或 WebP 图片。");
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
+      setOcrBusy(false);
       setSmartMessage("图片不能超过 5MB。");
       return;
     }
@@ -299,6 +379,7 @@ export default function OrderEntryForm({
         reader.onerror = () => reject(new Error("图片读取失败"));
         reader.readAsDataURL(file);
       });
+      if (requestId !== ocrInputRequestRef.current) return;
       const imageBase64 = dataUrl.split(",", 2)[1] || "";
       const response = await fetch("/api/mvp/vision/ocr", {
         method: "POST",
@@ -306,13 +387,16 @@ export default function OrderEntryForm({
         body: JSON.stringify({ imageBase64, mimeType: file.type }),
       });
       const payload = await response.json().catch(() => null);
+      if (requestId !== ocrInputRequestRef.current) return;
       if (!response.ok) throw new Error(payload?.error?.message || "图片识别失败");
-      setSmartAddress(String(payload?.data?.text || ""));
-      setSmartMessage("图片文字已识别。请先检查识别结果，再点击“确认并填入”。");
+      const recognizedText = String(payload?.data?.text || "");
+      setSmartAddress(recognizedText);
+      await parseSmartAddress(recognizedText);
     } catch (reason) {
+      if (requestId !== ocrInputRequestRef.current) return;
       setSmartMessage(reason instanceof Error ? reason.message : "图片识别失败，请稍后重试。");
     } finally {
-      setOcrBusy(false);
+      if (requestId === ocrInputRequestRef.current) setOcrBusy(false);
     }
   }
 
@@ -369,6 +453,49 @@ export default function OrderEntryForm({
             {templates.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
         </div>
+
+        <section className="mb-4 rounded-2xl border border-violet-200 bg-violet-50/35 p-4" aria-labelledby="smart-address-title">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 id="smart-address-title" className="flex items-center gap-2 text-sm font-bold text-slate-950"><Sparkles size={16} className="text-violet-600" />智能粘贴收件信息</h2>
+              <p className="mt-1 text-xs leading-5 text-slate-500">粘贴客户原文或截图后自动拆分；拆分字段可修改，完整原文会单独保留供人工核对。</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" disabled={ocrBusy || addressChecking} onClick={() => ocrInputRef.current?.click()} className="inline-flex h-10 items-center gap-2 rounded-xl border border-violet-200 bg-white px-3 text-xs font-semibold text-violet-700 hover:bg-violet-50 disabled:opacity-50"><ImagePlus size={15} />{ocrBusy ? "识别中…" : "识别地址截图"}</button>
+              <button type="button" disabled={!smartAddress.trim() || ocrBusy || addressChecking} onClick={() => void parseSmartAddress()} className="inline-flex h-10 items-center gap-2 rounded-xl bg-violet-600 px-4 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-50">{addressChecking ? <LoaderCircle size={15} className="animate-spin" /> : <Sparkles size={15} />}{addressChecking ? "自动拆分中…" : "自动拆分并填入"}</button>
+              <input ref={ocrInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; event.currentTarget.value = ""; if (file) void recognizeImage(file); }} />
+            </div>
+          </div>
+          <textarea
+            value={smartAddress}
+            onChange={(event) => {
+              supersedePendingSmartInput();
+              setSmartAddress(event.target.value);
+              setSmartMessage("");
+            }}
+            onPaste={(event) => {
+              const image = Array.from(event.clipboardData.items)
+                .find((item) => item.kind === "file" && item.type.startsWith("image/"))
+                ?.getAsFile();
+              if (image) {
+                event.preventDefault();
+                void recognizeImage(image);
+                return;
+              }
+              const text = event.clipboardData.getData("text");
+              if (text.trim()) {
+                event.preventDefault();
+                supersedePendingSmartInput();
+                setSmartAddress(text);
+                void parseSmartAddress(text);
+              }
+            }}
+            rows={5}
+            className="mt-3 w-full resize-y rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm leading-6 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+            placeholder={"示例：\nMaría García\nCalle de Alcalá 123, 4º B, 28009 Madrid, España\n+34 612 345 678\nmaria@example.com"}
+          />
+          {(ocrFileName || smartMessage) && <div role="status" className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs"><span className="text-slate-400">{ocrFileName ? `截图：${ocrFileName}` : "粘贴文本"}</span>{smartMessage && <span className={smartMessage.includes("暂时") || smartMessage.includes("尚未配置") ? "text-amber-700" : "font-medium text-violet-700"}>{smartMessage}</span>}</div>}
+        </section>
 
         <div className="mb-4 rounded-2xl border border-cyan-200 bg-gradient-to-br from-cyan-50/70 to-white p-3">
           <div className="mb-3">
@@ -435,7 +562,7 @@ export default function OrderEntryForm({
           <Field label="电话" required={config?.requireRecipientPhone}>
             <input name="recipientPhone" required={config?.requireRecipientPhone} className={input} placeholder="收件人联系电话" />
           </Field>
-          <EmailValidationField inputClass={input} required={config?.requireRecipientEmail !== false} />
+          <EmailValidationField inputClass={input} required={config?.requireRecipientEmail !== false} email={recipientEmail} onEmailChange={setRecipientEmail} />
           <Field label="国家代码" required={config?.requireRecipientCountryCode}>
             <select name="recipientCountryCode" required={config?.requireRecipientCountryCode} className={input} value={recipientCountryCode} onChange={(event) => { const country = event.target.value; setRecipientCountryCode(country); setCodCurrency(currencyForCountry(country, defaultValues.currency)); }}><option value="">请选择目的地国家</option>{countries.map((country) => <option key={country.code} value={country.code}>{country.name} ({country.code})</option>)}</select>
           </Field>
@@ -449,7 +576,7 @@ export default function OrderEntryForm({
             <input name="recipientCity" required={config?.requireRecipientCity} className={input} placeholder="城市" />
           </Field>
           <Field label="详细地址" wide required={config?.requireRecipientAddress}><input name="recipientAddress" required={config?.requireRecipientAddress} className={input} placeholder="建议填写完整地址" /></Field>
-          <Field label="完整原始地址（人工核对）" wide><input name="recipientFullAddress" className={input} placeholder="保留客户发来的完整地址，供导出与人工核对" /></Field>
+          <Field label="完整原始地址（人工核对）" wide required><textarea name="recipientFullAddress" required rows={3} className={`${input} h-auto min-h-20 py-2 leading-6`} placeholder="完整粘贴客户发来的原文；自动拆分不会覆盖这里" /></Field>
           <div className="md:col-span-4 rounded-xl border border-emerald-100 bg-emerald-50/40 p-3">
             <div className="flex flex-wrap items-center gap-3">
               <button type="button" onClick={() => void validateAddress()} disabled={addressChecking || !recipientCountryCode} className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">{addressChecking ? <LoaderCircle size={16} className="animate-spin" /> : <MapPinCheck size={16} />}{addressChecking ? "正在检测…" : "检测地址"}</button>
@@ -537,15 +664,6 @@ function Metric({ icon, label, value, color }: { icon: React.ReactNode; label: s
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <fieldset className="mb-5 grid gap-3 border-t border-slate-100 pt-4 md:grid-cols-4">
-      <legend className="col-span-full mb-1 pr-3 text-sm font-semibold text-slate-800">{title}</legend>
-      {children}
-    </fieldset>
-  );
-}
-
 function Field({ label, required, wide, children }: { label: string; required?: boolean; wide?: boolean; children: React.ReactNode }) {
   return (
     <label className={`space-y-1 text-sm text-gray-700 ${wide ? "md:col-span-2" : ""}`}>
@@ -592,10 +710,20 @@ type EmailCheck = {
   detail: string;
 };
 
-function EmailValidationField({ inputClass, required }: { inputClass: string; required: boolean }) {
-  const [email, setEmail] = useState("");
+function EmailValidationField({
+  inputClass,
+  required,
+  email,
+  onEmailChange,
+}: {
+  inputClass: string;
+  required: boolean;
+  email: string;
+  onEmailChange: (email: string) => void;
+}) {
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<{
+    checkedEmail: string;
     status: "likely_valid" | "unknown" | "invalid";
     message: string;
     checks?: EmailCheck[];
@@ -614,16 +742,19 @@ function EmailValidationField({ inputClass, required }: { inputClass: string; re
       });
       const payload = await response.json();
       setResult({
+        checkedEmail: normalized,
         status: payload.status ?? "unknown",
         message: payload.message ?? "无法确认邮箱状态",
         checks: payload.checks,
       });
     } catch {
-      setResult({ status: "unknown", message: "检测服务暂时不可用，可稍后重试" });
+      setResult({ checkedEmail: normalized, status: "unknown", message: "检测服务暂时不可用，可稍后重试" });
     } finally {
       setChecking(false);
     }
   }
+
+  const visibleResult = result?.checkedEmail === email.trim().toLowerCase() ? result : null;
 
   return (
     <Field label="客户邮箱" required={required}>
@@ -635,7 +766,7 @@ function EmailValidationField({ inputClass, required }: { inputClass: string; re
             required={required}
             value={email}
             onChange={(event) => {
-              setEmail(event.target.value);
+              onEmailChange(event.target.value);
               setResult(null);
             }}
             onBlur={() => {
@@ -654,11 +785,11 @@ function EmailValidationField({ inputClass, required }: { inputClass: string; re
             检测
           </button>
         </div>
-        <input type="hidden" name="emailValidationStatus" value={result?.status ?? ""} />
-        {result && (
+        <input type="hidden" name="emailValidationStatus" value={visibleResult?.status ?? ""} />
+        {visibleResult && (
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
             <div className="flex flex-wrap gap-1">
-              {result.checks?.map((check) => (
+              {visibleResult.checks?.map((check) => (
                 <span
                   key={check.name}
                   title={check.detail}
@@ -671,10 +802,10 @@ function EmailValidationField({ inputClass, required }: { inputClass: string; re
               ))}
             </div>
             <p className={`mt-1 flex items-start gap-1 text-[11px] ${
-              result.status === "likely_valid" ? "text-emerald-700" : result.status === "unknown" ? "text-amber-700" : "text-rose-700"
+              visibleResult.status === "likely_valid" ? "text-emerald-700" : visibleResult.status === "unknown" ? "text-amber-700" : "text-rose-700"
             }`}>
-              {result.status === "likely_valid" ? <CircleCheck size={13} /> : result.status === "unknown" ? <CircleHelp size={13} /> : <CircleX size={13} />}
-              {result.message}
+              {visibleResult.status === "likely_valid" ? <CircleCheck size={13} /> : visibleResult.status === "unknown" ? <CircleHelp size={13} /> : <CircleX size={13} />}
+              {visibleResult.message}
             </p>
           </div>
         )}

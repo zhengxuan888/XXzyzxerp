@@ -36,7 +36,7 @@ test.describe.serial("物流工作台分页", () => {
     });
     expect(login.ok(), await login.text()).toBe(true);
 
-    await page.goto(`/admin/shipments?carrier=${carrier}`);
+    await page.goto(`/admin/shipments?carrier=${carrier}&owner=all&queue=all`);
     await expect(page.getByText("共 12 条", { exact: true })).toBeVisible();
     await expect(page.getByText("第 1/2 页", { exact: true })).toBeVisible();
     await expect(page.getByText("E2E-WB-TRACK-12", { exact: true })).toBeVisible();

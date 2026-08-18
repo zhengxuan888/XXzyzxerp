@@ -31,6 +31,7 @@ const EVENT_DEFS = {
   TRACKING_NUMBER_ASSIGNED: { status: "PENDING", workStatus: "MONITORING", priority: "LOW" as const },
   PICKED_UP: { status: "PICKED_UP", workStatus: "MONITORING", priority: "LOW" as const },
   IN_TRANSIT: { status: "IN_TRANSIT", workStatus: "MONITORING", priority: "LOW" as const },
+  AVAILABLE_FOR_PICKUP: { status: "OUT_FOR_DELIVERY", workStatus: "IN_PROGRESS", priority: "HIGH" as const },
   OUT_FOR_DELIVERY: { status: "OUT_FOR_DELIVERY", workStatus: "IN_PROGRESS", priority: "HIGH" as const },
   DELIVERED: { status: "DELIVERED", workStatus: "CLOSED", priority: "LOW" as const },
   EXCEPTION: { status: "EXCEPTION", workStatus: "NEEDS_ATTENTION", priority: "HIGH" as const },
@@ -39,6 +40,7 @@ const EVENT_DEFS = {
   RETURNED: { status: "RETURNED", workStatus: "RESOLVED", priority: "MEDIUM" as const },
   ADDRESS_ERROR: { status: "EXCEPTION", workStatus: "WAITING_CUSTOMER", priority: "HIGH" as const },
   CUSTOMER_ABSENT: { status: "EXCEPTION", workStatus: "WAITING_CUSTOMER", priority: "HIGH" as const },
+  DELIVERY_FAILED: { status: "EXCEPTION", workStatus: "NEEDS_ATTENTION", priority: "HIGH" as const },
   REFUSED: { status: "EXCEPTION", workStatus: "NEEDS_ATTENTION", priority: "HIGH" as const },
 } as const;
 

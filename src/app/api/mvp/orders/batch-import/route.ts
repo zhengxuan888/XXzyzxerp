@@ -14,6 +14,7 @@ import {
 } from "@/lib/order-batch-import";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
+import { CUSTOMER_ORIGINAL_ADDRESS_SOURCE } from "@/lib/order-address";
 import { allocateOrderNumber, OrderNumberingError } from "@/lib/order-numbering";
 
 export const runtime = "nodejs";
@@ -142,9 +143,12 @@ export async function POST(request: NextRequest) {
             recipientPhone: row.phone || null,
             recipientEmail: row.email || null,
             recipientCountryCode: row.country || null,
+            recipientRegion: row.region || null,
             recipientCity: row.city || null,
             recipientPostalCode: row.postalCode || null,
             recipientAddress: row.address || null,
+            recipientFullAddress: row.fullAddress || null,
+            recipientFullAddressSource: CUSTOMER_ORIGINAL_ADDRESS_SOURCE,
             paymentMethod: row.paymentMethod || null,
             items: {
               create: {

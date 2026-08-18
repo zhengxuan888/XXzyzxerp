@@ -7,6 +7,7 @@ import type { Prisma } from "@prisma/client";
 import OrderWorkflowActions from "@/components/admin/OrderWorkflowActions";
 import DraftOrderEditForm from "@/components/admin/DraftOrderEditForm";
 import AttachmentPanel from "@/components/admin/AttachmentPanel";
+import AddressComparison from "@/components/admin/AddressComparison";
 import { formatMoneyCents } from "@/lib/money";
 import { getSessionFromCookie } from "@/lib/session";
 import { getActiveMembershipById } from "@/lib/auth";
@@ -208,10 +209,6 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             ["电话", order.recipientPhone],
             ["WhatsApp", order.customerWhatsapp],
             ["邮箱", order.recipientEmail],
-            ["国家/地区", order.recipientCountryCode],
-            ["州/区域", order.recipientRegion],
-            ["城市", order.recipientCity],
-            ["邮编", order.recipientPostalCode],
             ["付款方式", order.paymentMethod],
             ["物流渠道", order.logisticsChannel],
             ["订单模板", order.orderTemplate?.name],
@@ -221,18 +218,6 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               <dd className={`mt-1 break-words font-medium ${value ? "text-slate-900" : "text-rose-600"}`}>{value || "未填写"}</dd>
             </div>
           ))}
-          <div className="sm:col-span-2 xl:col-span-4">
-            <dt className="text-xs font-semibold text-slate-500">完整地址</dt>
-            <dd className={`mt-1 break-words font-medium ${order.recipientAddress ? "text-slate-900" : "text-rose-600"}`}>
-              {order.recipientAddress || "未填写"}
-            </dd>
-          </div>
-          <div className="sm:col-span-2 xl:col-span-4">
-            <dt className="text-xs font-semibold text-slate-500">完整原始地址（人工核对）</dt>
-            <dd className="mt-1 break-words font-medium text-slate-900">
-              {order.recipientFullAddress || order.recipientAddress || "未填写"}
-            </dd>
-          </div>
           {order.note && (
             <div className="sm:col-span-2 xl:col-span-4">
               <dt className="text-xs font-semibold text-slate-500">订单备注</dt>
@@ -240,6 +225,20 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             </div>
           )}
         </dl>
+        <AddressComparison
+          className="mt-5 shadow-none"
+          recipientName={order.recipientName}
+          recipientPhone={order.recipientPhone}
+          recipientCountryCode={order.recipientCountryCode}
+          recipientRegion={order.recipientRegion}
+          recipientCity={order.recipientCity}
+          recipientPostalCode={order.recipientPostalCode}
+          recipientAddress={order.recipientAddress}
+          recipientFullAddress={order.recipientFullAddress}
+          recipientFullAddressSource={order.recipientFullAddressSource}
+          orderId={order.id}
+          canCapture={canUpdate.allowed || canReview.allowed || canShip.allowed}
+        />
       </section>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -292,7 +291,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             orderedAt: format(order.orderedAt, "yyyy-MM-dd"), recipientName: order.recipientName ?? "", recipientPhone: order.recipientPhone ?? "",
             recipientEmail: order.recipientEmail ?? "", recipientCountryCode: order.recipientCountryCode ?? "", recipientPostalCode: order.recipientPostalCode ?? "",
             recipientRegion: order.recipientRegion ?? "", recipientCity: order.recipientCity ?? "", recipientAddress: order.recipientAddress ?? "",
-            recipientFullAddress: order.recipientFullAddress ?? order.recipientAddress ?? "",
+            recipientFullAddress: order.recipientFullAddress ?? "",
+            recipientFullAddressSource: order.recipientFullAddressSource,
             customerWhatsapp: order.customerWhatsapp ?? "", staffWhatsapp: order.staffWhatsapp ?? "", packageWeightGrams: order.packageWeightGrams ?? 0,
             paymentMethod: order.paymentMethod ?? "COD", logisticsChannel: order.logisticsChannel ?? "", note: order.note ?? "", returnReason: order.exceptionNote,
           }}

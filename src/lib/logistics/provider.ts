@@ -21,12 +21,14 @@ export interface TrackingProviderAdapter {
 
 const PROVIDER_STATUS_ALIASES: Array<{ pattern: RegExp; eventType: string; status: ShipmentStatus; workStatus: LogisticsWorkStatus; priority: "HIGH" | "NORMAL" }> = [
   { pattern: /DELIVERED|SIGNED|签收|已送达/i, eventType: "DELIVERED", status: "DELIVERED", workStatus: "CLOSED", priority: "NORMAL" },
+  { pattern: /AVAILABLE.?FOR.?PICKUP|READY.?FOR.?PICKUP|COD.?READY|到达[代待]取|等待取件/i, eventType: "AVAILABLE_FOR_PICKUP", status: "OUT_FOR_DELIVERY", workStatus: "IN_PROGRESS", priority: "HIGH" },
   { pattern: /OUT.?FOR.?DELIVERY|派送中|准备派送|TODAY.*DELIVER/i, eventType: "OUT_FOR_DELIVERY", status: "OUT_FOR_DELIVERY", workStatus: "IN_PROGRESS", priority: "HIGH" },
   { pattern: /ADDRESS|地址错误/i, eventType: "ADDRESS_ERROR", status: "EXCEPTION", workStatus: "WAITING_CUSTOMER", priority: "HIGH" },
   { pattern: /REFUS|拒收/i, eventType: "REFUSED", status: "EXCEPTION", workStatus: "NEEDS_ATTENTION", priority: "HIGH" },
   { pattern: /RETURNED|已退回/i, eventType: "RETURNED", status: "RETURNED", workStatus: "RESOLVED", priority: "HIGH" },
   { pattern: /RETURN|退回/i, eventType: "RETURNING", status: "RETURNING", workStatus: "WAITING_CARRIER", priority: "HIGH" },
-  { pattern: /FAIL|EXCEPTION|异常|派送失败/i, eventType: "EXCEPTION", status: "EXCEPTION", workStatus: "NEEDS_ATTENTION", priority: "HIGH" },
+  { pattern: /DELIVERY.?FAIL|FAILED.?DELIVERY|FAILED.?ATTEMPT|DELIVERY.?ATTEMPTED|ATTEMPTED.?DELIVERY|派送失败/i, eventType: "DELIVERY_FAILED", status: "EXCEPTION", workStatus: "NEEDS_ATTENTION", priority: "HIGH" },
+  { pattern: /FAIL|EXCEPTION|异常/i, eventType: "EXCEPTION", status: "EXCEPTION", workStatus: "NEEDS_ATTENTION", priority: "HIGH" },
   { pattern: /PICKED.?UP|已发出|揽收/i, eventType: "PICKED_UP", status: "PICKED_UP", workStatus: "MONITORING", priority: "NORMAL" },
   { pattern: /IN.?TRANSIT|运输中|转运/i, eventType: "IN_TRANSIT", status: "IN_TRANSIT", workStatus: "MONITORING", priority: "NORMAL" },
 ];

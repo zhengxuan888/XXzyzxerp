@@ -13,6 +13,7 @@ import { getShip24Credential } from "@/lib/integration-credentials";
 import { parseLogisticsWorkbenchConfig } from "@/lib/logistics-workbench-config";
 import { queueLogisticsNotification } from "@/lib/notifications/logistics-delivery";
 import { translateAndCacheTrackingText } from "@/lib/tracking-translation-service";
+import { assertShipmentSyncAllowed, shipmentSyncBlock, ShipmentSyncBlockedError } from "@/lib/logistics/shipment-sync-policy";
 
 export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const auth = await requireAuthContext(request);
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
   const { id } = await props.params;
   const shipment = await prisma.shipment.findFirst({
     where: { id, businessUnitId: auth.membership.businessUnitId },
-    include: { order: { select: { departmentId: true, creatorUserId: true, ownedByMembershipId: true } } },
+    include: { order: { select: { departmentId: true, creatorUserId: true, ownedByMembershipId: true, exceptionNote: true } } },
   });
   if (!shipment) return fail("SHIPMENT_NOT_FOUND", "物流订单不存在或无权限。", 404);
   const permission = await checkPermission({
@@ -34,7 +35,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     targetMembershipId: shipment.order.ownedByMembershipId,
   });
   if (!permission.allowed) return fail("FORBIDDEN", "没有同步物流轨迹的权限。", 403);
-  if (shipment.status === "CLOSED") return fail("SHIPMENT_CLOSED", "订单已由售后结束，不再同步物流轨迹。", 409);
+  const initialBlock = shipmentSyncBlock({ status: shipment.status, orderExceptionNote: shipment.order.exceptionNote });
+  if (initialBlock) return fail(initialBlock.code, initialBlock.message, 409, { reason: initialBlock.reason });
   if (!shipment.trackingNo) return fail("TRACKING_NO_REQUIRED", "请先填写物流单号。", 409);
 
   const body = await request.json().catch(() => null) as { provider?: string } | null;
@@ -46,11 +48,25 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
           return new Ship24Adapter({ ...config, enabled: true });
         });
     const result = await adapter.track(shipment.trackingNo, shipment.carrier ?? undefined);
+    const refreshedShipment = await prisma.shipment.findUnique({
+      where: { id: shipment.id },
+      select: { status: true, order: { select: { exceptionNote: true } } },
+    });
+    if (!refreshedShipment) return fail("SHIPMENT_NOT_FOUND", "物流订单已不存在。", 404);
+    const refreshedBlock = shipmentSyncBlock({ status: refreshedShipment.status, orderExceptionNote: refreshedShipment.order.exceptionNote });
+    if (refreshedBlock) return fail(refreshedBlock.code, refreshedBlock.message, 409, { reason: refreshedBlock.reason });
     await Promise.allSettled(result.events.map((event) => translateAndCacheTrackingText(shipment.businessUnitId, event.description)));
     const workbenchSetting = await prisma.logisticsWorkbenchSetting.findUnique({
       where: { businessUnitId: shipment.businessUnitId },
     });
     const syncResult = await prisma.$transaction(async (tx) => {
+      const currentShipment = await tx.shipment.findUnique({
+        where: { id: shipment.id },
+        select: { status: true, firstTrackedAt: true, orderId: true, order: { select: { exceptionNote: true } } },
+      });
+      if (!currentShipment) throw new Error("SHIPMENT_DISAPPEARED");
+      assertShipmentSyncAllowed({ status: currentShipment.status, orderExceptionNote: currentShipment.order.exceptionNote });
+
       let inserted = 0;
       let ignoredUnknown = 0;
       let notificationQueued = 0;
@@ -95,11 +111,6 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       }
 
       const latestInserted = insertedEvents.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())[0];
-      const currentShipment = await tx.shipment.findUnique({
-        where: { id: shipment.id },
-        select: { status: true, firstTrackedAt: true, orderId: true },
-      });
-      if (!currentShipment) throw new Error("SHIPMENT_DISAPPEARED");
       const newerEventCount = latestInserted
         ? await tx.shipmentEvent.count({
             where: { shipmentId: shipment.id, occurredAt: { gt: latestInserted.occurredAt } },
@@ -174,6 +185,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     return ok({ provider: adapter.key, received: result.events.length, ...syncResult, trackingNo: result.trackingNo });
   } catch (error) {
+    if (error instanceof ShipmentSyncBlockedError) {
+      return fail(error.block.code, error.block.message, 409, { reason: error.block.reason });
+    }
     if (error instanceof ProviderConfigurationError) return fail("PROVIDER_NOT_CONFIGURED", error.message, 503);
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
       return fail("TRACKING_SYNC_RETRY_REQUIRED", "物流状态刚刚发生变化，请重新同步。", 409);

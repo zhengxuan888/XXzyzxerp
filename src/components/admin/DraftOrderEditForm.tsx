@@ -4,6 +4,10 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { currencyForCountry } from "@/lib/order-country-currency";
 import { declarationPreview } from "@/lib/order-declaration";
+import {
+  hasCustomerOriginalAddress,
+  LEGACY_DERIVED_ADDRESS_SOURCE,
+} from "@/lib/order-address";
 
 type Product = { id: string; name: string; skus: { id: string; code: string }[] };
 type InitialOrder = {
@@ -12,6 +16,7 @@ type InitialOrder = {
   currency: string; orderedAt: string; recipientName: string; recipientPhone: string;
   recipientEmail: string; recipientCountryCode: string; recipientPostalCode: string;
   recipientRegion: string; recipientCity: string; recipientAddress: string; recipientFullAddress: string;
+  recipientFullAddressSource: string | null;
   customerWhatsapp: string; staffWhatsapp: string; packageWeightGrams: number;
   paymentMethod: string; logisticsChannel: string; note: string; returnReason: string;
 };
@@ -26,6 +31,10 @@ export default function DraftOrderEditForm({ order, products, countries }: { ord
   const [codAmount, setCodAmount] = useState((order.codAmountCents / 100).toFixed(2));
   const [message, setMessage] = useState("");
   const product = products.find((item) => item.id === productId);
+  const originalAddressLocked = hasCustomerOriginalAddress(order.recipientFullAddressSource);
+  const legacyDerivedAddress = order.recipientFullAddressSource === LEGACY_DERIVED_ADDRESS_SOURCE
+    ? order.recipientFullAddress.trim()
+    : "";
   const field = "h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100";
 
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -79,7 +88,24 @@ export default function DraftOrderEditForm({ order, products, countries }: { ord
       <Label text="州/区域"><input name="recipientRegion" defaultValue={order.recipientRegion} className={field}/></Label>
       <Label text="城市"><input name="recipientCity" defaultValue={order.recipientCity} className={field}/></Label>
       <Label text="详细地址" wide><input name="recipientAddress" defaultValue={order.recipientAddress} className={field}/></Label>
-      <Label text="完整原始地址（人工核对）" wide><input name="recipientFullAddress" defaultValue={order.recipientFullAddress} className={field}/></Label>
+      <Label text={originalAddressLocked ? "客户完整原始地址（只读留档）" : "客户完整原始地址（补录后锁定）"} wide>
+        {legacyDerivedAddress && (
+          <span className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-normal leading-5 text-amber-900">
+            历史值来自拆分地址，不能作为客户原文：{legacyDerivedAddress}
+          </span>
+        )}
+        <textarea
+          name="recipientFullAddress"
+          readOnly={originalAddressLocked}
+          required={!originalAddressLocked}
+          maxLength={1000}
+          defaultValue={originalAddressLocked ? order.recipientFullAddress : ""}
+          rows={3}
+          placeholder="请完整粘贴客户提供的原始地址"
+          className={`w-full resize-y rounded-lg border px-3 py-2 text-sm leading-6 text-slate-800 outline-none ${originalAddressLocked ? "border-rose-200 bg-rose-50" : "border-amber-300 bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-100"}`}
+        />
+        <span className={`text-xs font-normal ${originalAddressLocked ? "text-rose-700" : "text-amber-700"}`}>{originalAddressLocked ? "客户原文只用于核对；请在上方修改拆分后的地址字段。" : "请粘贴客户提供的完整原文；保存后不可覆盖。"}</span>
+      </Label>
       <Label text="客户 WhatsApp"><input name="customerWhatsapp" defaultValue={order.customerWhatsapp} className={field}/></Label>
       <Label text="员工 WhatsApp"><input name="staffWhatsapp" defaultValue={order.staffWhatsapp} className={field}/></Label>
       <Label text="重量（kg）"><input min="0" step="0.001" type="number" name="packageWeightKg" defaultValue={(order.packageWeightGrams / 1000).toString()} className={field}/></Label>

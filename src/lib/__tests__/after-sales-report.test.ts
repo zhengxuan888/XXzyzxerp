@@ -20,4 +20,16 @@ describe("after-sales report time ranges", () => {
     expect(isWithinReportRange(end, start, end)).toBe(false);
     expect(isWithinReportRange(null, start, end)).toBe(false);
   });
+
+  it("uses a selected Shanghai calendar date", () => {
+    const range = shanghaiReportRanges(new Date("2026-08-08T08:00:00.000Z"), "2026-07-31");
+    expect(range.date).toBe("2026-07-31");
+    expect(range.today.toISOString()).toBe("2026-07-30T16:00:00.000Z");
+    expect(range.tomorrow.toISOString()).toBe("2026-07-31T16:00:00.000Z");
+    expect(range.monthStart.toISOString()).toBe("2026-06-30T16:00:00.000Z");
+  });
+
+  it("rejects an invalid selected date", () => {
+    expect(() => shanghaiReportRanges(new Date(), "2026-02-31")).toThrow("INVALID_REPORT_DATE");
+  });
 });

@@ -387,6 +387,7 @@ model BusinessUnit {
   logisticsTemplates                  LogisticsProviderTemplate[]
   logisticsFollowUps                  LogisticsFollowUp[]
   logisticsEventAnnotations           LogisticsEventAnnotation[]
+  shipmentCardPins                    ShipmentCardPin[]
   logisticsWorkbenchSetting           LogisticsWorkbenchSetting?
   integrationCredentials              IntegrationCredential[]
   dashboardWorkbenchSetting           DashboardWorkbenchSetting?
@@ -661,6 +662,7 @@ model Membership {
   ownedShipments                               Shipment[]                           @relation("ShipmentAftersalesOwner")
   logisticsFollowUps                           LogisticsFollowUp[]
   handledLogisticsAnnotations                  LogisticsEventAnnotation[]           @relation("LogisticsAnnotationHandler")
+  pinnedShipmentCards                          ShipmentCardPin[]
   inventoryTransactions                        InventoryTransaction[]
   assignedConversations                        ConversationAssignment[]             @relation("ConversationAssignee")
   conversationAssignmentsMade                  ConversationAssignment[]             @relation("ConversationAssigner")
@@ -881,6 +883,7 @@ model Order {
   recipientCity                       String?
   recipientAddress                    String?
   recipientFullAddress                String?
+  recipientFullAddressSource          String?
   packageWeightGrams                  Int?
   paymentMethod                       String?
   customerWhatsapp                    String?
@@ -1289,6 +1292,7 @@ model Shipment {
   events                 ShipmentEvent[]
   followUps              LogisticsFollowUp[]
   eventAnnotations       LogisticsEventAnnotation[]
+  cardPins               ShipmentCardPin[]
   notificationDeliveries NotificationDelivery[]
   financeStatementLines  FinanceStatementLine[]
   financeReconciliations FinanceReconciliation[]
@@ -1344,6 +1348,24 @@ model LogisticsEventAnnotation {
 
   @@index([businessUnitId, isHandled, updatedAt])
   @@index([shipmentId, updatedAt])
+}
+
+model ShipmentCardPin {
+  id             String   @id @default(uuid())
+  businessUnitId String
+  membershipId   String
+  shipmentId     String
+  pinnedAt       DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Cascade)
+  membership   Membership   @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  shipment     Shipment     @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@unique([membershipId, shipmentId])
+  @@index([membershipId, pinnedAt(sort: Desc)])
+  @@index([businessUnitId, shipmentId])
 }
 
 model LogisticsFollowUp {

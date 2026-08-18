@@ -5,13 +5,71 @@ const prisma = new PrismaClient();
 const password = process.env.SEED_DEMO_PASSWORD || "123456.";
 const shipmentId = "00000000-0000-4000-8000-000000000201";
 const trackingNo = "DEMO-TRACK-001";
+const originalAddress = "Demo Customer, Calle de Alcalá 123, 4º B, 28009 Madrid, España";
 
 test.describe.serial("物流敏感字段动态授权门禁", () => {
   const grantIds: string[] = [];
+  let orderSnapshot: {
+    id: string;
+    recipientCountryCode: string | null;
+    recipientRegion: string | null;
+    recipientCity: string | null;
+    recipientPostalCode: string | null;
+    recipientAddress: string | null;
+    recipientFullAddress: string | null;
+    recipientFullAddressSource: string | null;
+  } | null = null;
+
+  test.beforeAll(async () => {
+    const shipment = await prisma.shipment.findUniqueOrThrow({
+      where: { id: shipmentId },
+      select: {
+        order: {
+          select: {
+            id: true,
+            recipientCountryCode: true,
+            recipientRegion: true,
+            recipientCity: true,
+            recipientPostalCode: true,
+            recipientAddress: true,
+            recipientFullAddress: true,
+            recipientFullAddressSource: true,
+          },
+        },
+      },
+    });
+    orderSnapshot = shipment.order;
+    await prisma.order.update({
+      where: { id: shipment.order.id },
+      data: {
+        recipientCountryCode: "ES",
+        recipientRegion: "Comunidad de Madrid",
+        recipientCity: "Madrid",
+        recipientPostalCode: "28009",
+        recipientAddress: "Calle de Alcalá 123, 4º B",
+        recipientFullAddress: originalAddress,
+        recipientFullAddressSource: "CUSTOMER_ORIGINAL",
+      },
+    });
+  });
 
   test.afterAll(async () => {
     if (grantIds.length > 0) {
       await prisma.accessGrant.deleteMany({ where: { id: { in: grantIds } } });
+    }
+    if (orderSnapshot) {
+      await prisma.order.update({
+        where: { id: orderSnapshot.id },
+        data: {
+          recipientCountryCode: orderSnapshot.recipientCountryCode,
+          recipientRegion: orderSnapshot.recipientRegion,
+          recipientCity: orderSnapshot.recipientCity,
+          recipientPostalCode: orderSnapshot.recipientPostalCode,
+          recipientAddress: orderSnapshot.recipientAddress,
+          recipientFullAddress: orderSnapshot.recipientFullAddress,
+          recipientFullAddressSource: orderSnapshot.recipientFullAddressSource,
+        },
+      });
     }
     await prisma.$disconnect();
   });
@@ -36,6 +94,10 @@ test.describe.serial("物流敏感字段动态授权门禁", () => {
     await page.goto(`/admin/shipments/${shipmentId}`);
     await expect(page.getByRole("heading", { name: "物流单号受限" })).toBeVisible();
     await expect(page.getByText(trackingNo, { exact: true })).toHaveCount(0);
+    await expect(page.getByTestId("structured-address-card")).toBeVisible();
+    await expect(page.getByText("拆分字段完整", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("original-address-card")).toHaveCount(0);
+    await expect(page.getByText(originalAddress, { exact: true })).toHaveCount(0);
     const deniedEvents = await page.request.get(`/api/mvp/shipments/${shipmentId}/events`);
     expect(deniedEvents.status()).toBe(403);
 
@@ -57,6 +119,9 @@ test.describe.serial("物流敏感字段动态授权门禁", () => {
 
     await page.reload();
     await expect(page.getByRole("heading", { name: trackingNo })).toBeVisible();
+    await expect(page.getByTestId("original-address-card")).toBeVisible();
+    await expect(page.getByText(originalAddress, { exact: true })).toBeVisible();
+    await expect(page.getByText("客户原文已保留", { exact: true })).toBeVisible();
     const allowedEvents = await page.request.get(`/api/mvp/shipments/${shipmentId}/events`);
     expect(allowedEvents.status(), await allowedEvents.text()).toBe(200);
     expect((await allowedEvents.json()).data.length).toBeGreaterThan(0);
@@ -68,6 +133,8 @@ test.describe.serial("物流敏感字段动态授权门禁", () => {
     await page.reload();
     await expect(page.getByRole("heading", { name: "物流单号受限" })).toBeVisible();
     await expect(page.getByText(trackingNo, { exact: true })).toHaveCount(0);
+    await expect(page.getByTestId("original-address-card")).toHaveCount(0);
+    await expect(page.getByText(originalAddress, { exact: true })).toHaveCount(0);
     const revokedEvents = await page.request.get(`/api/mvp/shipments/${shipmentId}/events`);
     expect(revokedEvents.status()).toBe(403);
   });

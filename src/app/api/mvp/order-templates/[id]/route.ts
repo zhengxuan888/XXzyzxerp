@@ -7,7 +7,9 @@ import { parseOrderTemplateConfiguration } from "@/lib/order-template";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 
-export async function PATCH(request: NextRequest, props: RouteContext<"/api/mvp/order-templates/[id]">) {
+type RouteParams = { params: Promise<{ id: string }> };
+
+export async function PATCH(request: NextRequest, props: RouteParams) {
   const auth = await requireAuthContext(request);
   if (!auth) return fail("UNAUTHENTICATED", "请先登录。", 401);
   const permission = await checkPermission({ userId: auth.userId, membershipId: auth.membership.id, actionKey: "order_template.manage", targetBusinessUnitId: auth.membership.businessUnitId });
@@ -37,7 +39,7 @@ export async function PATCH(request: NextRequest, props: RouteContext<"/api/mvp/
   return ok(updated);
 }
 
-export async function DELETE(request: NextRequest, props: RouteContext<"/api/mvp/order-templates/[id]">) {
+export async function DELETE(request: NextRequest, props: RouteParams) {
   const auth = await requireAuthContext(request);
   if (!auth) return fail("UNAUTHENTICATED", "请先登录。", 401);
   const permission = await checkPermission({ userId: auth.userId, membershipId: auth.membership.id, actionKey: "order_template.manage", targetBusinessUnitId: auth.membership.businessUnitId });

@@ -1,8 +1,9 @@
 "use client";
 
-import { Check, Download, LoaderCircle, Pencil, Plus, Trash2, X } from "lucide-react";
+import { AlertTriangle, Check, Download, LoaderCircle, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 
+import { isHongyaAddressReviewTemplate } from "@/lib/logistics-export-review";
 import {
   DEFAULT_RETURN_WORKBOOK_MAPPING,
   countryRouteLines,
@@ -46,6 +47,7 @@ const defaultColumns = [
   "customerWhatsapp=WhatsApp",
   "note=备注",
   "salesName=录单员工",
+  "productConfigurations=具体型号配置",
 ].join("\n");
 
 const defaultReturnMappings = returnMappingLines(DEFAULT_RETURN_WORKBOOK_MAPPING);
@@ -77,6 +79,8 @@ export default function LogisticsTemplateManager({
   const selectedSet = useMemo(() => new Set(selectedOrderIds), [selectedOrderIds]);
   const countries = useMemo(() => [...new Set(exportCandidates.map((order) => order.countryCode).filter((value): value is string => Boolean(value)))].sort(), [exportCandidates]);
   const visibleCandidates = useMemo(() => countryFilter ? exportCandidates.filter((order) => order.countryCode === countryFilter) : exportCandidates, [countryFilter, exportCandidates]);
+  const selectedTemplate = templates.find((template) => template.id === selectedTemplateId);
+  const selectedTemplateRequiresAddressReview = Boolean(selectedTemplate && isHongyaAddressReviewTemplate(selectedTemplate.code));
 
   function toggleOrder(orderId: string) {
     setSelectedOrderIds((current) => current.includes(orderId)
@@ -108,6 +112,9 @@ export default function LogisticsTemplateManager({
       setMessage("请先勾选需要交给该物流商的订单。");
       return;
     }
+    if (isHongyaAddressReviewTemplate(template.code) && !window.confirm(
+      "本次下载的是物流核对版，包含醒目的“完整原始地址（核对后删除）”列。请先由售后核对结构化地址，发送给物流商前务必删除整列。是否继续导出？",
+    )) return;
     setLoading(true);
     setMessage("");
     const response = await fetch(`/api/mvp/logistics-templates/${template.id}/export`, {
@@ -133,7 +140,7 @@ export default function LogisticsTemplateManager({
     const batchNo = response.headers.get("x-logistics-export-batch-no");
     setSelectedOrderIds([]);
     setLoading(false);
-    setMessage(`已创建${batchNo ? `批次 ${batchNo}` : "物流导出批次"}，文件已下载。回传时请在下方选择该批次；回填运单号不等于确认发货。`);
+    setMessage(`已创建${batchNo ? `批次 ${batchNo}` : "物流导出批次"}，文件已下载。${isHongyaAddressReviewTemplate(template.code) ? "核对完成后，请删除“完整原始地址（核对后删除）”整列再发送物流商。" : ""}回传时请在下方选择该批次；回填运单号不等于确认发货。`);
     window.setTimeout(() => window.location.reload(), 1200);
   }
 
@@ -159,6 +166,7 @@ export default function LogisticsTemplateManager({
           <p className="mt-1 text-sm text-slate-500">
             先选择订单，再按物流商模板导出。系统会锁定模板版本、订单清单和原始文件，防止重复交单或把回传单号直接当作已发货。
           </p>
+          <p className="mt-1 text-xs font-medium text-amber-700">回填运单号不等于确认发货；回传成功后仍需完成发货确认。</p>
         </div>
         {canManage && (
           <button
@@ -214,6 +222,12 @@ export default function LogisticsTemplateManager({
             </div>
           )}
         </div>
+        {selectedTemplateRequiresAddressReview && (
+          <div role="note" className="flex items-start gap-2 border-b border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+            <AlertTriangle size={17} className="mt-0.5 shrink-0" />
+            <p><span className="font-bold">当前下载的是物流核对版：</span>文件同时包含拆分后的结构化地址和“完整原始地址（核对后删除）”。售后核对完成后，发送物流商前必须删除原始地址整列。</p>
+          </div>
+        )}
         {visibleCandidates.length ? (
           <div className="max-h-[520px] min-h-80 overflow-auto">
             {visibleCandidates.map((order) => {

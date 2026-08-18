@@ -8,6 +8,7 @@ import { parseLogisticsWorkbenchConfig } from "@/lib/logistics-workbench-config"
 import { queueLogisticsNotification } from "@/lib/notifications/logistics-delivery";
 import { getShip24Credential } from "@/lib/integration-credentials";
 import { translateAndCacheTrackingText } from "@/lib/tracking-translation-service";
+import { shipmentSyncBlock } from "@/lib/logistics/shipment-sync-policy";
 
 function validSignature(raw: string, signature: string | null, secret?: string) {
   if (!secret || !signature) return false;
@@ -25,7 +26,10 @@ export async function POST(request: NextRequest) {
   const eventKey = String(data.eventId ?? data.id ?? payload.eventId ?? "").trim();
   const status = String(data.statusMilestone ?? data.status ?? "UNKNOWN").toUpperCase();
   if (!trackingNo || !eventKey) return NextResponse.json({ ok: false, error: "trackingNumber and event id are required." }, { status: 400 });
-  const candidates = await prisma.shipment.findMany({ where: { trackingNo, status: { notIn: ["PENDING", "CLOSED"] } }, select: { id: true, businessUnitId: true, status: true } });
+  const candidates = await prisma.shipment.findMany({
+    where: { trackingNo, status: { not: "PENDING" } },
+    select: { id: true, businessUnitId: true, status: true, order: { select: { exceptionNote: true } } },
+  });
   let shipment: (typeof candidates)[number] | undefined;
   for (const candidate of candidates) {
     const credential = await getShip24Credential(candidate.businessUnitId);
@@ -35,6 +39,8 @@ export async function POST(request: NextRequest) {
     }
   }
   if (!shipment) return NextResponse.json({ ok: false, error: "Invalid webhook signature." }, { status: 401 });
+  const initialBlock = shipmentSyncBlock({ status: shipment.status, orderExceptionNote: shipment.order.exceptionNote });
+  if (initialBlock) return NextResponse.json({ ok: true, ignored: true, reason: initialBlock.reason });
   const normalized = normalizeProviderEventStatus(status);
   if (!normalized) return NextResponse.json({ ok: true, ignored: true, reason: "UNKNOWN_STATUS" });
   const occurredAt = new Date(String(data.dateTime ?? data.datetime ?? new Date().toISOString()));
@@ -47,6 +53,14 @@ export async function POST(request: NextRequest) {
   });
   try {
     const result = await prisma.$transaction(async (tx) => {
+      const currentShipment = await tx.shipment.findUnique({
+        where: { id: shipment.id },
+        select: { status: true, orderId: true, order: { select: { exceptionNote: true } } },
+      });
+      if (!currentShipment) throw new Error("SHIPMENT_DISAPPEARED");
+      const currentBlock = shipmentSyncBlock({ status: currentShipment.status, orderExceptionNote: currentShipment.order.exceptionNote });
+      if (currentBlock) return { ignored: true, reason: currentBlock.reason, stateUpdated: false, notificationQueued: false };
+
       const created = await tx.shipmentEvent.createMany({
         data: [{
           shipmentId: shipment.id,
@@ -61,12 +75,6 @@ export async function POST(request: NextRequest) {
         skipDuplicates: true,
       });
       if (!created.count) return { duplicate: true, stateUpdated: false, notificationQueued: false };
-
-      const currentShipment = await tx.shipment.findUnique({
-        where: { id: shipment.id },
-        select: { status: true, orderId: true },
-      });
-      if (!currentShipment) throw new Error("SHIPMENT_DISAPPEARED");
 
       const notification = await queueLogisticsNotification({
         businessUnitId: shipment.businessUnitId,

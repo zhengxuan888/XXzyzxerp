@@ -18,7 +18,7 @@ const order = {
   customerWhatsapp: "+351900000000",
   note: "demo",
   customFields: { provider: { sku: "PT-DEMO-01" } },
-  items: [{ productName: "Demo Product", quantity: 2 }],
+  items: [{ productName: "iPhone 16 Pro Max 黑色 256GB", quantity: 2 }],
 };
 
 describe("logistics export batch helpers", () => {
@@ -30,6 +30,7 @@ describe("logistics export batch helpers", () => {
     expect(exportFieldValue(order, "constant:Phone")).toBe("Phone");
     expect(exportFieldValue(order, "constant:手机")).toBe("手机");
     expect(exportFieldValue(order, "constant:HYBH-SJ-X")).toBe("HYBH-SJ-X");
+    expect(exportFieldValue(order, "productConfigurations")).toBe("iPhone 16 Pro Max 黑色 256GB");
   });
 
   it("uses a stable object hash for a batch row snapshot", () => {

@@ -11,8 +11,11 @@ import { HIGH_PRIORITY_SHIPMENT_EVENTS, shipmentEventMeta } from "@/lib/logistic
 import { prisma } from "@/lib/prisma";
 import { formatMoneyCents } from "@/lib/money";
 import { getServerNowMs } from "@/lib/server-clock";
-import { logisticsQueueKeys, parseLogisticsWorkbenchConfig, type LogisticsQueueKey } from "@/lib/logistics-workbench-config";
+import { logisticsPriorityQuickTags, logisticsQueueKeys, matchesLogisticsQuickTagFilters, parseLogisticsQuickTagFilters, parseLogisticsWorkbenchConfig, type LogisticsQueueKey } from "@/lib/logistics-workbench-config";
 import { loadTrackingTranslations, trackingTextHash } from "@/lib/tracking-translation-service";
+import { classifyLogisticsColorTags, logisticsColorTagKeys, logisticsColorTags, parseLogisticsColorTagKeys } from "@/lib/logistics-color-tags";
+import { buildShipmentSyncScope } from "@/lib/logistics/shipment-sync-scope";
+import { sortPinnedShipmentCards } from "@/lib/logistics/shipment-card-pin";
 
 type Urgency = "critical" | "high" | "normal";
 
@@ -57,7 +60,7 @@ function classifyUrgency(overdue: boolean, highPriority: boolean, followAt: Date
 }
 
 function urgencyBadge(urgency: Urgency) {
-  if (urgency === "critical") return "超期高风险";
+  if (urgency === "critical") return "跟进已超期";
   if (urgency === "high") return "需跟进";
   return "正常";
 }
@@ -78,7 +81,8 @@ function matchesQueueSignals(
   if (queue === "unhandled") return row.unhandledEventCount > 0;
   if (queue === "in_transit") return ["PICKED_UP", "IN_TRANSIT"].includes(row.status);
   if (queue === "out_for_delivery") return row.status === "OUT_FOR_DELIVERY";
-  if (queue === "delivered") return ["DELIVERED", "CLOSED"].includes(row.status);
+  if (queue === "delivered") return row.status === "DELIVERED";
+  if (queue === "closed") return row.status === "CLOSED";
   if (queue === "exception") return row.status === "EXCEPTION";
   if (queue === "returning") return ["RETURNING", "RETURNED"].includes(row.status);
   if (!configuredMatches.length) return false;
@@ -101,6 +105,8 @@ export default async function ShipmentsPage({
     status?: string;
     carrier?: string;
     destination?: string;
+    colorTags?: string;
+    quickTags?: string;
     owner?: string;
     page?: string;
     pageSize?: string;
@@ -114,9 +120,10 @@ export default async function ShipmentsPage({
   const overdueOnly = params.overdue === "1";
   const pageSize = [10, 20, 50].includes(Number(params.pageSize)) ? Number(params.pageSize) : 10;
   const requestedPage = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
-  const requestedStatus = Object.values(ShipmentStatus).includes(params.status as ShipmentStatus) && params.status !== "PENDING"
-    ? params.status as ShipmentStatus
-    : null;
+  const requestedStatuses = [...new Set((params.status ?? "").split(","))]
+    .filter((status): status is ShipmentStatus => Object.values(ShipmentStatus).includes(status as ShipmentStatus) && status !== "PENDING");
+  const requestedCreatorMembershipIds = [...new Set((params.creatorMembershipId ?? "").split(",").map((id) => id.trim()).filter(Boolean))];
+  const requestedColorTags = parseLogisticsColorTagKeys(params.colorTags);
   const requestedOwnerFilter = params.owner === "mine" || params.owner === "unassigned" || params.owner === "all" ? params.owner : null;
 
   const session = await getSessionFromCookie();
@@ -158,6 +165,7 @@ export default async function ShipmentsPage({
   ]);
   if (!readAccess.allowed) redirect("/admin");
   const workbenchConfig = parseLogisticsWorkbenchConfig(workbenchSetting);
+  const requestedQuickTags = parseLogisticsQuickTagFilters(params.quickTags, workbenchConfig.quickTags);
   // 所有售后人员默认先看自己认领的任务；负责人可主动切换到全部或未分配。
   const ownerFilter = requestedOwnerFilter === "all" && !canReassign ? "mine" : (requestedOwnerFilter ?? "mine");
 
@@ -166,7 +174,7 @@ export default async function ShipmentsPage({
   // after the query because their rules are configuration- and scope-driven.
   const orderWhere: Prisma.OrderWhereInput = {
     ...(params.departmentId ? { departmentId: params.departmentId } : {}),
-    ...(params.creatorMembershipId ? { ownedByMembershipId: params.creatorMembershipId } : {}),
+    ...(requestedCreatorMembershipIds.length ? { ownedByMembershipId: { in: requestedCreatorMembershipIds } } : {}),
     ...(params.destination ? { recipientCountryCode: params.destination } : {}),
     ...(params.managerMembershipId ? { ownerMembership: { is: { managerMembershipId: params.managerMembershipId } } } : {}),
   };
@@ -174,7 +182,9 @@ export default async function ShipmentsPage({
     AND: [
       readAccess.where,
       {
-        status: requestedStatus ?? { not: "PENDING" },
+        status: requestedStatuses.length ? { in: requestedStatuses } : { not: "PENDING" },
+        trackingNo: { not: null },
+        NOT: { trackingNo: "" },
         ...(params.carrier ? { carrier: params.carrier } : {}),
         ...(ownerFilter === "mine" ? { ownerMembershipId: membership.id } : {}),
         ...(ownerFilter === "unassigned" ? { ownerMembershipId: null } : {}),
@@ -195,6 +205,7 @@ export default async function ShipmentsPage({
       carrier: true,
       trackingNo: true,
       status: true,
+      estimatedDeliveryAt: true,
       nextFollowUpAt: true,
       createdAt: true,
       updatedAt: true,
@@ -234,6 +245,46 @@ export default async function ShipmentsPage({
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
+  const syncCandidateRows = annotationAccess.allowed
+    ? await prisma.shipment.findMany({
+        where: {
+          AND: [
+            annotationAccess.where,
+            {
+              businessUnitId: membership.businessUnitId,
+              status: { not: "PENDING" },
+            },
+          ],
+        },
+        select: {
+          id: true,
+          trackingNo: true,
+          status: true,
+          order: { select: { exceptionNote: true } },
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      })
+    : [];
+  const cardPins = candidateRows.length
+    ? await prisma.shipmentCardPin.findMany({
+        where: {
+          businessUnitId: membership.businessUnitId,
+          membershipId: membership.id,
+          shipmentId: { in: candidateRows.map((row) => row.id) },
+        },
+        select: { shipmentId: true, pinnedAt: true },
+      })
+    : [];
+  const cardPinByShipmentId = new Map(
+    cardPins.map((pin) => [pin.shipmentId, pin.pinnedAt.toISOString()] as const),
+  );
+  const syncScope = buildShipmentSyncScope(syncCandidateRows.map((row) => ({
+    id: row.id,
+    status: row.status,
+    orderExceptionNote: row.order.exceptionNote,
+    trackingNo: row.trackingNo,
+    canSync: true,
+  })));
   const unhandledEventGroups = candidateRows.length
     ? await prisma.shipmentEvent.groupBy({
         by: ["shipmentId"],
@@ -288,6 +339,14 @@ export default async function ShipmentsPage({
       const isHighPriority =
         latest && HIGH_PRIORITY_SHIPMENT_EVENTS.includes(latest.eventType as keyof typeof shipmentEventMeta);
       const urgency = classifyUrgency(overdue, Boolean(isHighPriority), latestFollowAt, nowTs);
+      const colorTagKeys = classifyLogisticsColorTags({
+        status: row.status,
+        estimatedDeliveryAt: row.estimatedDeliveryAt,
+        orderExceptionNote: row.order.exceptionNote,
+        signals: timeline ? (queueSignals.get(row.id) ?? []) : [],
+        latestEventType: timeline ? latest?.eventType : null,
+        now: new Date(nowTs),
+      });
 
       return {
         ...row,
@@ -303,6 +362,7 @@ export default async function ShipmentsPage({
         urgency,
         urgencyLabel: urgencyBadge(urgency),
         priorityTag: isHighPriority ? "高优先级" : "-",
+        colorTagKeys,
         urgencyScore: urgencyScore(urgency),
         followUpAt: latestFollowAt ? new Date(latestFollowAt).toLocaleString("zh-CN") : "-",
         canViewTrackingNo: trackingNo,
@@ -333,10 +393,16 @@ export default async function ShipmentsPage({
     return searchable.includes(keyword);
   });
   const matchesCard = (row: (typeof baseFiltered)[number], key: LogisticsQueueKey) => {
-    if (key === "delivered") return row.status === "DELIVERED" && row.order.exceptionNote === "人工确认成功签收";
-    if (key === "signed_refund") return row.order.exceptionNote === "签收后退款";
-    if (key === "unhandled") return row._count.events > 0 && !row.latestFollowed;
-    if (key === "followed") return row._count.events > 0 && row.latestFollowed;
+    const isConfirmedDelivery = row.status === "DELIVERED" && row.order.exceptionNote === "人工确认成功签收";
+    const isSignedRefund = row.order.exceptionNote === "签收后退款";
+    const isClosed = row.status === "CLOSED";
+    const isTerminal = isConfirmedDelivery || isSignedRefund || isClosed;
+    if (key === "delivered") return isConfirmedDelivery;
+    if (key === "signed_refund") return isSignedRefund;
+    if (key === "closed") return isClosed;
+    if (key === "all") return !isTerminal;
+    if (key === "unhandled") return !isTerminal && row._count.events > 0 && !row.latestFollowed;
+    if (key === "followed") return !isTerminal && row._count.events > 0 && row.latestFollowed;
     if (key === "pending_delivery_confirmation") return row.status === "DELIVERED" && row.order.exceptionNote !== "人工确认成功签收" && row.order.exceptionNote !== "签收后退款";
     if (key === "due_today") {
       if (!row.nextFollowUpAt) return false;
@@ -358,13 +424,38 @@ export default async function ShipmentsPage({
       queueSignals: row.canViewTimeline ? (queueSignals.get(row.id) ?? new Set<string>()) : new Set<string>(),
     }, key, configuredMatches);
   };
+  const colorKeyByQuickTag = new Map<string, (typeof logisticsColorTags)[number]["key"]>(
+    logisticsColorTags.map((tag) => [tag.label, tag.key]),
+  );
+  const priorityQueueByQuickTag = new Map(
+    logisticsPriorityQuickTags
+      .filter((tag) => !colorKeyByQuickTag.has(tag.label))
+      .map((tag) => [tag.label, tag.key] as const),
+  );
+  const quickTagFiltered = baseFiltered.filter((row) => {
+    if (!requestedQuickTags.length) return true;
+    if (row.canViewTimeline && matchesLogisticsQuickTagFilters(queueSignals.get(row.id) ?? [], requestedQuickTags)) return true;
+    return requestedQuickTags.some((tag) => {
+      const colorKey = colorKeyByQuickTag.get(tag);
+      if (colorKey) return row.colorTagKeys.includes(colorKey);
+      const priorityQueue = priorityQueueByQuickTag.get(tag);
+      return priorityQueue ? matchesCard(row, priorityQueue) : false;
+    });
+  });
+  const colorTagCounts = Object.fromEntries(logisticsColorTagKeys.map((key) => [key, quickTagFiltered.filter((row) => row.colorTagKeys.includes(key)).length]));
+  const colorFiltered = quickTagFiltered.filter((row) => !requestedColorTags.length || requestedColorTags.some((key) => row.colorTagKeys.includes(key)));
   const queueCounts = Object.fromEntries(
-    workbenchConfig.cards.map((card) => [card.key, baseFiltered.filter((row) => matchesCard(row, card.key)).length]),
+    workbenchConfig.cards.map((card) => [card.key, colorFiltered.filter((row) => matchesCard(row, card.key)).length]),
   ) as Partial<Record<LogisticsQueueKey, number>>;
-  const filteredRows = baseFiltered.filter((row) => matchesCard(row, queue));
-  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const filteredRows = colorFiltered.filter((row) => matchesCard(row, queue));
+  const orderedRows = sortPinnedShipmentCards(filteredRows.map((row) => ({
+    ...row,
+    isPinned: cardPinByShipmentId.has(row.id),
+    pinnedAt: cardPinByShipmentId.get(row.id) ?? null,
+  })));
+  const pageCount = Math.max(1, Math.ceil(orderedRows.length / pageSize));
   const page = Math.min(requestedPage, pageCount);
-  const pageRows = filteredRows.slice((page - 1) * pageSize, page * pageSize);
+  const pageRows = orderedRows.slice((page - 1) * pageSize, page * pageSize);
   const pageIds = pageRows.map((row) => row.id);
   const detailRows = pageIds.length
     ? await prisma.shipment.findMany({
@@ -453,11 +544,14 @@ export default async function ShipmentsPage({
       canViewTrackingNo: row.canViewTrackingNo,
       canViewTimeline: row.canViewTimeline,
       canAnnotate: row.canAnnotate,
+      isPinned: row.isPinned,
+      pinnedAt: row.pinnedAt,
       carrier: detail.carrier,
       status: detail.status,
       urgency: row.urgency,
       urgencyLabel: row.urgencyLabel,
       priorityTag: row.priorityTag,
+      colorTagKeys: row.colorTagKeys,
       dueStatus: row.dueStatus,
       order: {
         ...detail.order,
@@ -501,7 +595,8 @@ export default async function ShipmentsPage({
       canReassign={canReassign.allowed}
       pagination={{ page, pageSize, total: filteredRows.length, pageCount }}
       queueCounts={queueCounts}
-      filterOptions={{ departments, managers, creators, statuses, carriers, destinations }}
+      filterOptions={{ departments, managers, creators, statuses, carriers, destinations, colorTagCounts }}
+      syncScope={syncScope}
       rows={presentationRows}
     />
     </div>

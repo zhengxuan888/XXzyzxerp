@@ -22,7 +22,9 @@ function validRow(overrides: Partial<OrderImportRow> = {}): OrderImportRow {
     phone: "13800000000",
     email: "customer@example.com",
     address: "测试地址",
+    fullAddress: "测试客户，测试地址，518000 深圳，中国",
     country: "CN",
+    region: "广东省",
     city: "深圳",
     postalCode: "518000",
     productCode: "SKU-1",
@@ -38,8 +40,8 @@ function validRow(overrides: Partial<OrderImportRow> = {}): OrderImportRow {
 describe("order batch import", () => {
   it("recognizes a template whose first mapped header starts after column A", async () => {
     const buffer = await workbookBuffer([
-      ["说明", "店铺ID", "客户姓名", "商品编码", "数量", "单价分"],
-      ["忽略", "SHOP-1", "客户甲", "SKU-1", 2, 1000],
+      ["说明", "店铺ID", "客户姓名", "商品编码", "数量", "单价分", "完整原始地址（人工核对）"],
+      ["忽略", "SHOP-1", "客户甲", "SKU-1", 2, 1000, "客户甲，完整原始地址"],
     ]);
 
     const rows = await parseOrderImportWorkbook(buffer);
@@ -57,15 +59,32 @@ describe("order batch import", () => {
 
   it("skips empty spreadsheet rows instead of importing them", async () => {
     const buffer = await workbookBuffer([
-      ["店铺ID", "客户姓名", "商品编码", "数量", "单价分"],
-      ["SHOP-1", "客户甲", "SKU-1", 1, 100],
-      ["", "", "", "", ""],
-      ["SHOP-2", "客户乙", "SKU-1", 2, 200],
+      ["店铺ID", "客户姓名", "商品编码", "数量", "单价分", "完整原始地址（人工核对）"],
+      ["SHOP-1", "客户甲", "SKU-1", 1, 100, "客户甲，完整原始地址"],
+      ["", "", "", "", "", ""],
+      ["SHOP-2", "客户乙", "SKU-1", 2, 200, "客户乙，完整原始地址"],
     ]);
 
     const rows = await parseOrderImportWorkbook(buffer);
 
     expect(rows.map((row) => row.row)).toEqual([2, 4]);
+  });
+
+  it("preserves structured region data and the complete original address", async () => {
+    const buffer = await workbookBuffer([
+      ["店铺ID", "客户姓名", "商品编码", "数量", "单价分", "国家", "州/省", "城市", "邮编", "详细地址", "完整原始地址（人工核对）"],
+      ["SHOP-ES", "María García", "SKU-1", 1, 100, "ES", "Comunidad de Madrid", "Madrid", "28009", "Calle de Alcalá 123, 4º B", "María García, Calle de Alcalá 123, 4º B, 28009 Madrid, España"],
+    ]);
+
+    await expect(parseOrderImportWorkbook(buffer)).resolves.toEqual([
+      expect.objectContaining({
+        region: "Comunidad de Madrid",
+        city: "Madrid",
+        postalCode: "28009",
+        address: "Calle de Alcalá 123, 4º B",
+        fullAddress: "María García, Calle de Alcalá 123, 4º B, 28009 Madrid, España",
+      }),
+    ]);
   });
 
   it("rejects templates missing required columns", async () => {
@@ -74,7 +93,7 @@ describe("order batch import", () => {
       ["SHOP-1", "客户甲", "SKU-1"],
     ]);
 
-    await expect(parseOrderImportWorkbook(buffer)).rejects.toThrow("模板缺少必填列：数量、单价分");
+    await expect(parseOrderImportWorkbook(buffer)).rejects.toThrow("模板缺少必填列：数量、单价分、完整原始地址（人工核对）");
   });
 
   it("reports file duplicates, existing orders and invalid money fields before commit", () => {
@@ -105,5 +124,11 @@ describe("order batch import", () => {
       productId: "product-1",
       resolvedProductName: "测试商品",
     });
+  });
+
+  it("rejects a row whose complete original address is empty", () => {
+    const products = new Map([["sku-1", { id: "product-1", name: "测试商品" }]]);
+    const [checked] = validateOrderImportRows([validRow({ fullAddress: "" })], products);
+    expect(checked.errors).toContain("完整原始地址必填");
   });
 });

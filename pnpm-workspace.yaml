@@ -21,5 +21,10 @@ auditConfig:
     - GHSA-mh99-v99m-4gvg
 
 allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
   electron: true
   electron-winstaller: true
+  esbuild: true
+  prisma: true
+  unrs-resolver: true

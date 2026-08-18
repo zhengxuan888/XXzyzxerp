@@ -7,9 +7,11 @@ import { writeAuditLog } from "@/lib/audit";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 
+type RouteParams = { params: Promise<{ id: string; eventId: string }> };
+
 export async function PATCH(
   request: NextRequest,
-  context: RouteContext<"/api/mvp/shipments/[id]/events/[eventId]/annotation">,
+  context: RouteParams,
 ) {
   const auth = await requireAuthContext(request);
   if (!auth) return fail("UNAUTHENTICATED", "请先登录。", 401);
@@ -47,7 +49,7 @@ export async function PATCH(
   const note = typeof body?.note === "string" ? body.note.trim().slice(0, 1000) : "";
   if (body?.isHandled === true && !note) return fail("TRACKING_NOTE_REQUIRED", "标记物流轨迹完成前必须填写备注。", 400);
   const tags: string[] = Array.isArray(body?.tags)
-    ? [...new Set<string>(body.tags.filter((tag: unknown): tag is string => typeof tag === "string").map((tag: string) => tag.trim().slice(0, 30)).filter(Boolean))].slice(0, 10)
+    ? [...new Set<string>(body.tags.filter((tag: unknown): tag is string => typeof tag === "string").map((tag: string) => tag.trim().slice(0, 30)).filter(Boolean))].slice(0, 40)
     : [];
   const isHandled = body?.isHandled === true;
   const expectedUpdatedAt = body?.expectedUpdatedAt === null

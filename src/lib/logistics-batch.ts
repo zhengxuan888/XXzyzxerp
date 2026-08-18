@@ -57,7 +57,7 @@ export function exportFieldValue(order: BatchExportOrder, field: LogisticsExport
     recipientRegion: order.recipientRegion ?? "",
     recipientCity: order.recipientCity ?? "",
     recipientAddress: order.recipientAddress ?? "",
-    recipientFullAddress: order.recipientFullAddress ?? order.recipientAddress ?? "",
+    recipientFullAddress: order.recipientFullAddress ?? "",
     productNames: order.items.map((item) => item.productName).join(" / "),
     quantity: order.items.reduce((sum, item) => sum + item.quantity, 0),
     codAmount: (order.codAmountCents / 100).toFixed(2),
@@ -65,6 +65,10 @@ export function exportFieldValue(order: BatchExportOrder, field: LogisticsExport
     customerWhatsapp: order.customerWhatsapp ?? "",
     note: order.note ?? "",
     salesName: order.creatorUser?.fullName || order.creatorUser?.username || "",
+    productConfigurations: order.items
+      .map((item) => item.productName.trim() || item.sku?.code || "")
+      .filter(Boolean)
+      .join(" / "),
     productSkus: order.items.map((item) => item.sku?.code).filter(Boolean).join(" / "),
     unitPrice: typeof order.items[0]?.unitPriceCents === "number" ? (order.items[0].unitPriceCents / 100).toFixed(2) : "",
     shippingRoute: "",

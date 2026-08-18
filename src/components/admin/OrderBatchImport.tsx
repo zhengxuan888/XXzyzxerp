@@ -10,6 +10,12 @@ type PreviewRow = {
   customerName: string;
   phone: string;
   email: string;
+  address: string;
+  fullAddress: string;
+  country: string;
+  region: string;
+  city: string;
+  postalCode: string;
   productCode: string;
   resolvedProductName?: string;
   quantity: number;
@@ -99,7 +105,8 @@ export default function OrderBatchImport({ canCreate }: { canCreate: boolean }) 
           <details className="mt-2 text-xs text-slate-500">
             <summary className="cursor-pointer font-medium text-slate-700">查看模板列名</summary>
             <p className="mt-2 leading-5">
-              必填：店铺ID、客户姓名、商品编码、数量、单价分。可选：订单号、电话、邮箱、收货地址、国家、城市、邮编、COD金额分、币种、付款方式。
+              必填：店铺ID、客户姓名、商品编码、数量、单价分。地址列：国家、州/省、城市、邮编、详细地址、完整原始地址（人工核对）。
+              其余可选：订单号、电话、邮箱、COD金额分、币种、付款方式。
               商品编码必须属于当前业务板块；金额统一使用最小货币单位（分）。
             </p>
           </details>
@@ -199,13 +206,14 @@ export default function OrderBatchImport({ canCreate }: { canCreate: boolean }) 
             <span className="rounded-full bg-rose-50 px-2.5 py-1 text-rose-700">需修正 {preview.invalid}</span>
           </div>
           <div className="max-h-96 overflow-auto rounded-xl border border-slate-200">
-            <table className="w-full min-w-[980px] text-left text-sm">
+            <table className="w-full min-w-[1180px] text-left text-sm">
               <thead className="sticky top-0 bg-slate-50 text-xs text-slate-500">
                 <tr>
                   <th className="p-3">行号</th>
                   <th>订单 / 店铺</th>
                   <th>客户</th>
                   <th>联系方式</th>
+                  <th>地址核对</th>
                   <th>商品</th>
                   <th>数量</th>
                   <th>单价 / COD</th>
@@ -224,6 +232,10 @@ export default function OrderBatchImport({ canCreate }: { canCreate: boolean }) 
                     <td>
                       <span className="block">{row.phone || "-"}</span>
                       <span className="text-xs text-slate-500">{row.email || "-"}</span>
+                    </td>
+                    <td className="max-w-xs pr-3">
+                      <span className="block text-xs text-slate-700">{[row.country, row.region, row.city, row.postalCode, row.address].filter(Boolean).join(" / ") || "-"}</span>
+                      <span className="mt-1 block line-clamp-2 text-[11px] text-slate-400" title={row.fullAddress}>{row.fullAddress || row.address || "未填写原始地址"}</span>
                     </td>
                     <td>
                       <span className="block font-mono text-xs">{row.productCode || "-"}</span>
