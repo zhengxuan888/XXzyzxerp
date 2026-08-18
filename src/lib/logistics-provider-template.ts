@@ -22,6 +22,7 @@ export const LOGISTICS_EXPORT_FIELDS = [
   "productConfigurations",
   "productSkus",
   "unitPrice",
+  "declaredAmount",
   "shippingRoute",
 ] as const;
 

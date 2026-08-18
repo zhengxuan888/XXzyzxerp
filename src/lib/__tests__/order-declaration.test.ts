@@ -4,6 +4,9 @@ import { declarationAmountEurCents } from "@/lib/order-declaration";
 describe("declarationAmountEurCents", () => {
   it.each([
     [30_000, "EUR", 3_000],
+    [35_000, "EUR", 3_500],
+    [112_500, "PLN", 2_600],
+    [650_000, "CZK", 2_687],
     [100_000, "PLN", 2_311],
     [100_000, "CZK", 413],
     [100_000, "RON", 1_911],

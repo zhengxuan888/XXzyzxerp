@@ -116,6 +116,7 @@ export function logisticsExportColumnPresentation(
   if (field === "recipientEmail") return { ...defaultColumnPresentation, width: 30 };
   if (field === "recipientName" || field === "orderNo") return { ...defaultColumnPresentation, width: 22 };
   if (field === "salesName") return { ...defaultColumnPresentation, width: 16 };
+  if (field === "declaredAmount") return { ...defaultColumnPresentation, width: 16 };
   return { ...defaultColumnPresentation };
 }
 
@@ -128,6 +129,7 @@ export function applyLogisticsExportPresentation(
     const presentation = logisticsExportColumnPresentation(templateCode, column.field);
     const worksheetColumn = sheet.getColumn(index + 1);
     worksheetColumn.width = presentation.width;
+    if (column.field === "declaredAmount") worksheetColumn.numFmt = "0.00";
     if (!presentation.wrapText && !presentation.headerFill && !presentation.note) return;
 
     worksheetColumn.eachCell({ includeEmpty: true }, (cell, rowNumber) => {
@@ -195,6 +197,41 @@ export type LogisticsShippingRouteIssue = {
   countryCode: string;
 };
 
+type HongyaForwardDeclarationOrder = {
+  orderNo: string;
+  productValueCents: number;
+  declarationCurrency: string | null;
+};
+
+export type HongyaForwardDeclarationIssue = {
+  orderNo: string;
+  invalidFields: string[];
+};
+
+export function findHongyaForwardTemplateDeclarationIssues(
+  templateCode: string,
+  columns: readonly LogisticsTemplateColumn[],
+): string[] {
+  if (!(HONGYA_FORWARD_TEMPLATE_CODES as readonly string[]).includes(templateCode)) return [];
+  const eastEurope = templateCode !== "HONGYA_IBERIA_FORWARD";
+  const required: Array<[number, LogisticsTemplateColumn["field"], string, string]> = [
+    [eastEurope ? 17 : 3, "constant:Phone", "海关报关品名1", "海关报关品名1（必须固定 Phone 且列位正确）"],
+    [eastEurope ? 18 : 4, "constant:手机", "中文品名1", "中文品名1（必须固定手机且列位正确）"],
+    [eastEurope ? 20 : 6, "declaredAmount", eastEurope ? "申报价值1" : "申报金额", "申报金额（必须读取订单申报总额且列位正确）"],
+    [eastEurope ? 21 : 7, "constant:EUR", eastEurope ? "申报币种1" : "海关申报币种", "海关申报币种（必须固定 EUR 且列位正确）"],
+  ];
+  return required.flatMap(([index, field, header, label]) => {
+    const headerColumns = columns.filter((column) => column.header === header);
+    const positionedColumn = columns[index];
+    return headerColumns.length === 1
+      && headerColumns[0]?.field === field
+      && positionedColumn?.field === field
+      && positionedColumn.header === header
+      ? []
+      : [label];
+  });
+}
+
 export function findLogisticsAddressReviewIssues(
   templateCode: string,
   orders: readonly AddressReviewOrder[],
@@ -241,6 +278,20 @@ export function findMissingLogisticsShippingRoutes(
     const countryCode = order.recipientCountryCode?.trim().toUpperCase() ?? "";
     const route = countryRoutes[countryCode]?.trim();
     return route ? [] : [{ orderNo: order.orderNo, countryCode: countryCode || "未填写国家" }];
+  });
+}
+
+export function findHongyaForwardDeclarationIssues(
+  templateCode: string,
+  orders: readonly HongyaForwardDeclarationOrder[],
+): HongyaForwardDeclarationIssue[] {
+  if (!(HONGYA_FORWARD_TEMPLATE_CODES as readonly string[]).includes(templateCode)) return [];
+  return orders.flatMap((order) => {
+    const invalidFields = [
+      ...(Number.isSafeInteger(order.productValueCents) && order.productValueCents > 0 ? [] : ["申报金额"]),
+      ...(order.declarationCurrency?.trim().toUpperCase() === "EUR" ? [] : ["申报币种（必须为 EUR）"]),
+    ];
+    return invalidFields.length ? [{ orderNo: order.orderNo, invalidFields }] : [];
   });
 }
 

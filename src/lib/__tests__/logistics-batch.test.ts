@@ -18,6 +18,8 @@ const order = {
   recipientFullAddress: "Demo Street 1, Lisbon, 1000-001, Portugal",
   codAmountCents: 2999,
   currency: "EUR",
+  productValueCents: 2600,
+  declarationCurrency: "EUR",
   customerWhatsapp: "+351900000000",
   note: "demo",
   customFields: {
@@ -25,8 +27,10 @@ const order = {
     recipientDistrict: "Legacy district",
     streetNumber: "Legacy street",
     doorNumber: "Legacy house number",
+    declaredAmount: "999.99",
+    declaredCurrency: "PLN",
   },
-  items: [{ productName: "iPhone 16 Pro Max 黑色 256GB", quantity: 2 }],
+  items: [{ productName: "iPhone 16 Pro Max 黑色 256GB", quantity: 3, unitPriceCents: 867 }],
 };
 
 describe("logistics export batch helpers", () => {
@@ -42,6 +46,8 @@ describe("logistics export batch helpers", () => {
     expect(exportFieldValue(order, "constant:手机")).toBe("手机");
     expect(exportFieldValue(order, "constant:HYBH-SJ-X")).toBe("HYBH-SJ-X");
     expect(exportFieldValue(order, "productConfigurations")).toBe("iPhone 16 Pro Max 黑色 256GB");
+    expect(exportFieldValue(order, "declaredAmount")).toBe(26);
+    expect(exportFieldValue(order, "unitPrice")).toBe("8.67");
   });
 
   it("keeps provider custom columns intact while preferring unambiguous structured fields", () => {
