@@ -6,6 +6,7 @@ import { formatMoneyCents } from "@/lib/money";
 import { getActiveMembershipById } from "@/lib/auth";
 import { createOrderAccessPlan } from "@/lib/order-access";
 import { parseOrderTemplateConfiguration } from "@/lib/order-template";
+import { classifyOrderContactHistory } from "@/lib/order-contact-history";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookie } from "@/lib/session";
 
@@ -30,20 +31,6 @@ type Params = {
 
 function validDate(value?: string) {
   return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00.000Z`) : null;
-}
-
-function duplicateKey(order: { recipientEmail: string | null; recipientPhone: string | null; customerWhatsapp: string | null; recipientCountryCode: string | null }) {
-  const contact = (order.recipientEmail || order.customerWhatsapp || order.recipientPhone || "").trim().toLowerCase().replace(/\s+/g, "");
-  return contact ? `${order.recipientCountryCode || "?"}:${contact}` : "";
-}
-
-function businessDateKey(value: Date) {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(value);
 }
 
 export default async function OrderReviewWorkbenchPage({ searchParams }: { searchParams: Promise<Params> }) {
@@ -124,14 +111,6 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
     prisma.country.findMany({ where: { isActive: true }, select: { code: true, name: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
   ]);
 
-  const historyByContact = new Map<string, Date[]>();
-  rawCustomerHistory.forEach((order) => {
-    const key = duplicateKey(order);
-    if (!key) return;
-    const dates = historyByContact.get(key) ?? [];
-    dates.push(order.createdAt);
-    historyByContact.set(key, dates);
-  });
   const visibleEmployeeIds = [...new Set(candidateIndex.map((order) => order.creatorUserId))];
   const employees = visibleEmployeeIds.length
     ? await prisma.user.findMany({
@@ -140,25 +119,12 @@ export default async function OrderReviewWorkbenchPage({ searchParams }: { searc
         orderBy: [{ fullName: "asc" }, { username: "asc" }],
       })
     : [];
-  const duplicateCounts = new Map<string, number>();
-  rawCustomerHistory.forEach((order) => {
-    const contactKey = duplicateKey(order);
-    if (!contactKey) return;
-    const key = `${businessDateKey(order.createdAt)}:${contactKey}`;
-    duplicateCounts.set(key, (duplicateCounts.get(key) ?? 0) + 1);
-  });
-  const isDuplicate = (order: (typeof candidateIndex)[number]) => {
-    const contactKey = duplicateKey(order);
-    if (!contactKey) return false;
-    const key = `${businessDateKey(order.createdAt)}:${contactKey}`;
-    return Boolean(key && (duplicateCounts.get(key) ?? 0) > 1);
-  };
-  const isRepeat = (order: (typeof candidateIndex)[number]) => {
-    const key = duplicateKey(order);
-    if (!key || isDuplicate(order)) return false;
-    const orderDay = businessDateKey(order.createdAt);
-    return (historyByContact.get(key) ?? []).some((createdAt) => businessDateKey(createdAt) < orderDay);
-  };
+  const contactHistory = new Map(candidateIndex.map((order) => [
+    order.id,
+    classifyOrderContactHistory(order, rawCustomerHistory),
+  ]));
+  const isDuplicate = (order: (typeof candidateIndex)[number]) => contactHistory.get(order.id)?.duplicate ?? false;
+  const isRepeat = (order: (typeof candidateIndex)[number]) => contactHistory.get(order.id)?.repeat ?? false;
   const classified = {
     ALL: candidateIndex,
     REPEAT: candidateIndex.filter(isRepeat),

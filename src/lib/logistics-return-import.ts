@@ -39,9 +39,23 @@ function findColumn(headers: string[], aliases: string[]) {
 }
 
 function columnsForHeader(headers: string[], mapping: ReturnWorkbookMapping) {
+  // Forwarding providers commonly rename the newly assigned parcel number
+  // while keeping the ERP order column unchanged. Accept these unambiguous
+  // tracking headers even for an older template snapshot.
+  const trackingAliases = [...new Set([
+    ...mapping.aliases.trackingNo,
+    "转寄单号",
+    "新单号",
+    "新物流单号",
+    "跟踪号",
+    "跟踪单号",
+    "追踪单号",
+    "快递单号",
+    "包裹号",
+  ])];
   return {
     orderNo: findColumn(headers, mapping.aliases.orderNo),
-    trackingNo: findColumn(headers, mapping.aliases.trackingNo),
+    trackingNo: findColumn(headers, trackingAliases),
     carrier: findColumn(headers, mapping.aliases.carrier),
     providerStatus: findColumn(headers, mapping.aliases.providerStatus),
   };

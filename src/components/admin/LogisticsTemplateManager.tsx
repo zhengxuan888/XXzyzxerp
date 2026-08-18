@@ -166,6 +166,7 @@ export default function LogisticsTemplateManager({
           <p className="mt-1 text-sm text-slate-500">
             先选择订单，再按物流商模板导出。系统会锁定模板版本、订单清单和原始文件，防止重复交单或把回传单号直接当作已发货。
           </p>
+          <p className="mt-1 text-xs font-medium text-amber-700">回填运单号不等于确认发货；回传成功后仍需完成发货确认。</p>
         </div>
         {canManage && (
           <button

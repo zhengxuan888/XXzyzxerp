@@ -14,6 +14,7 @@ const eslintConfig = defineConfig([
     "storybook-static/**",
     "playwright-report/**",
     "test-results/**",
+    "docs/acceptance/**",
     "next-env.d.ts",
   ]),
 ]);

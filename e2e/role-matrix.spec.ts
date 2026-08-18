@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-const password = process.env.SEED_DEMO_PASSWORD || "123456";
+const password = process.env.SEED_DEMO_PASSWORD || "123456.";
 
 const profiles = [
   {
@@ -23,8 +23,8 @@ const profiles = [
   },
   {
     username: "demo_after_sales",
-    visible: ["/admin/orders", "/admin/shipments", "/admin/inbox"],
-    hidden: ["/admin/order-review", "/admin/shipping", "/admin/expenses", "/admin/users"],
+    visible: ["/admin/orders", "/admin/shipping", "/admin/shipments", "/admin/inbox"],
+    hidden: ["/admin/order-review", "/admin/expenses", "/admin/users"],
     forbiddenApi: "/api/mvp/expenses",
   },
   {
@@ -180,6 +180,17 @@ test("订单动作按归属、角色和状态机拒绝越权", async ({ page }) 
   const emptyUpload = (targetType: string, targetId: string) => ({
     multipart: { targetType, targetId },
   });
+  const validReviewUpload = (targetId: string) => ({
+    multipart: {
+      targetType: "ORDER_REVIEW",
+      targetId,
+      file: {
+        name: "review-proof.png",
+        mimeType: "image/png",
+        buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nWQAAAAASUVORK5CYII=", "base64"),
+      },
+    },
+  });
 
   await login("demo_manager");
   const peerOrder = await findOrder("DEMO-PEER-ORDER-001");
@@ -212,7 +223,7 @@ test("订单动作按归属、角色和状态机拒绝越权", async ({ page }) 
   expect(reviewRelease.ok(), await reviewRelease.text()).toBe(true);
   const unclaimedReviewProof = await page.request.post(
     "/api/mvp/attachments",
-    emptyUpload("ORDER_REVIEW", submittedOrder.id),
+    validReviewUpload(submittedOrder.id),
   );
   expect(unclaimedReviewProof.status()).toBe(409);
   const reclaim = await page.request.put(`/api/mvp/orders/${submittedOrder.id}/review-claim`, {

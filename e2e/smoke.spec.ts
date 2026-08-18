@@ -16,7 +16,7 @@ async function login(page: import("@playwright/test").Page, account = username, 
 
 test("登录后可看到岗位工作台和核心业务入口", async ({ page }) => {
   await login(page);
-  await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "经营驾驶舱" })).toBeVisible();
   await expect(page.getByRole("link", { name: /录入订单/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /订单核单/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /发货处理/ })).toBeVisible();
@@ -173,11 +173,12 @@ test("订单提交核单前强制上传客户沟通凭证", async ({ page }) => 
       unitPriceCents: 100,
       codAmountCents: 100,
       shippingFeeCents: 0,
-      currency: "CNY",
+      currency: "EUR",
       recipientName: "本地验收客户",
       recipientPhone: "10000000000",
       recipientEmail: "acceptance@example.com",
       recipientAddress: "本地验收地址",
+      recipientFullAddress: "本地验收客户，10000000000，本地验收地址",
       paymentMethod: "COD",
     },
   });

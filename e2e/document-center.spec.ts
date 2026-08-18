@@ -3,12 +3,14 @@ import { PrismaClient } from "@prisma/client";
 
 import { localDemoStorage } from "@/lib/storage/local-demo";
 
-const password = process.env.SEED_FOUNDER_PASSWORD || "ChangeMe#2026";
+const founderPassword = process.env.SEED_FOUNDER_PASSWORD || "ChangeMe#2026";
+const demoPassword = process.env.SEED_DEMO_PASSWORD || "123456.";
 const prisma = new PrismaClient();
 let createdDocumentId = "";
 let createdStorageKey = "";
 
 async function login(page: import("@playwright/test").Page, username: string) {
+  const password = username === "founder" ? founderPassword : demoPassword;
   const response = await page.request.post("/api/auth/login", { data: { username, password } });
   expect(response.ok(), await response.text()).toBeTruthy();
 }

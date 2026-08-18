@@ -19,6 +19,8 @@ import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 import { localDemoStorage } from "@/lib/storage/local-demo";
 
+type RouteParams = { params: Promise<{ id: string }> };
+
 function parseOrderIds(body: unknown) {
   const input = body && typeof body === "object" ? body as { orderIds?: unknown } : {};
   if (!Array.isArray(input.orderIds)) return [];
@@ -28,7 +30,7 @@ function parseOrderIds(body: unknown) {
     .filter((value) => value.length > 0 && value.length <= 100))];
 }
 
-export async function POST(request: NextRequest, context: RouteContext<"/api/mvp/logistics-templates/[id]/export">) {
+export async function POST(request: NextRequest, context: RouteParams) {
   const auth = await requireAuthContext(request);
   if (!auth) return fail("UNAUTHENTICATED", "请先登录。", 401);
   const { id } = await context.params;
