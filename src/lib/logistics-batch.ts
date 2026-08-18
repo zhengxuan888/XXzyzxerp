@@ -22,6 +22,8 @@ export type BatchExportOrder = {
   recipientFullAddress?: string | null;
   codAmountCents: number;
   currency: string;
+  productValueCents?: number;
+  declarationCurrency?: string | null;
   customerWhatsapp: string | null;
   note: string | null;
   customFields: unknown;
@@ -62,6 +64,8 @@ export function exportFieldValue(order: BatchExportOrder, field: LogisticsExport
     quantity: order.items.reduce((sum, item) => sum + item.quantity, 0),
     codAmount: (order.codAmountCents / 100).toFixed(2),
     currency: order.currency,
+    declarationAmount: typeof order.productValueCents === "number" ? (order.productValueCents / 100).toFixed(2) : "",
+    declarationCurrency: order.declarationCurrency ?? "EUR",
     customerWhatsapp: order.customerWhatsapp ?? "",
     note: order.note ?? "",
     salesName: order.creatorUser?.fullName || order.creatorUser?.username || "",

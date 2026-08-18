@@ -7,6 +7,7 @@ export const HONGYA_ADDRESS_REVIEW_TEMPLATE_CODES = [
   "HONGYA_IBERIA_DROPSHIP",
   "HONGYA_EAST_EU_DROPSHIP",
 ] as const;
+export const HONGYA_FORWARD_TEMPLATE_CODE = "HONGYA_IBERIA_FORWARD";
 
 export const ORIGINAL_ADDRESS_REVIEW_HEADER = "完整原始地址（核对后删除）";
 export const ORIGINAL_ADDRESS_REVIEW_NOTE = "此列仅供售后核对。发送给物流商前，请删除整列（不是只清空内容）。";
@@ -59,6 +60,15 @@ export function normalizeLogisticsExportColumns(
   templateCode: string,
   columns: readonly LogisticsTemplateColumn[],
 ): LogisticsTemplateColumn[] {
+  if (templateCode === HONGYA_FORWARD_TEMPLATE_CODE) {
+    return columns.map((column) => {
+      if (column.field === "custom:declaredNameEn") return { ...column, field: "constant:Phone" };
+      if (column.field === "productNames") return { ...column, field: "constant:手机" };
+      if (column.field === "custom:declaredAmount") return { ...column, field: "declarationAmount" };
+      if (column.field === "custom:declaredCurrency") return { ...column, field: "declarationCurrency" };
+      return { ...column };
+    });
+  }
   if (!isHongyaAddressReviewTemplate(templateCode)) return columns.map((column) => ({ ...column }));
 
   const normalized = columns
@@ -75,6 +85,13 @@ export function normalizeLogisticsExportColumns(
     reviewColumn,
     ...normalized.slice(structuredAddressIndex + 1),
   ];
+}
+
+export function ensureLogisticsExportNoteColumn(
+  columns: readonly LogisticsTemplateColumn[],
+): LogisticsTemplateColumn[] {
+  if (columns.some((column) => column.field === "note")) return columns.map((column) => ({ ...column }));
+  return [...columns.map((column) => ({ ...column })), { field: "note", header: "录单人备注" }];
 }
 
 export function logisticsExportColumnPresentation(

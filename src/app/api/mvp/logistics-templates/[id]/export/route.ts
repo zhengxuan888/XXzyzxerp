@@ -8,6 +8,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { commonDepartmentId, createLogisticsBatchNo, exportFieldValue, logisticsBatchHash } from "@/lib/logistics-batch";
 import {
   applyLogisticsExportPresentation,
+  ensureLogisticsExportNoteColumn,
   findLogisticsAddressReviewIssues,
   findMissingLogisticsShippingRoutes,
   logisticsExportFilename,
@@ -44,7 +45,9 @@ export async function POST(request: NextRequest, context: RouteParams) {
   });
   if (!template) return fail("TEMPLATE_NOT_FOUND", "物流商模板不存在或已停用。", 404);
   const configuration = parseLogisticsTemplateConfiguration(template.configuration);
-  const exportColumns = normalizeLogisticsExportColumns(template.code, configuration.columns);
+  const exportColumns = ensureLogisticsExportNoteColumn(
+    normalizeLogisticsExportColumns(template.code, configuration.columns),
+  );
   if (!exportColumns.some((column) => column.field === "salesName")) {
     exportColumns.push({ field: "salesName", header: "录单员工" });
   }

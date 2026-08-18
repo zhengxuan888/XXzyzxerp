@@ -13,6 +13,8 @@ export const LOGISTICS_EXPORT_FIELDS = [
   "quantity",
   "codAmount",
   "currency",
+  "declarationAmount",
+  "declarationCurrency",
   "customerWhatsapp",
   "note",
   "salesName",
