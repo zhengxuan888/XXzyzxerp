@@ -5,6 +5,7 @@ import {
   ORIGINAL_ADDRESS_REVIEW_HEADER,
   ORIGINAL_ADDRESS_REVIEW_NOTE,
   applyLogisticsExportPresentation,
+  ensureLogisticsExportNoteColumn,
   findHongyaForwardDeclarationIssues,
   findHongyaForwardTemplateDeclarationIssues,
   findLogisticsAddressReviewIssues,
@@ -24,6 +25,22 @@ const iberiaCode = "HONGYA_IBERIA_DROPSHIP";
 const eastForwardCode = "（鸿亚）东欧转寄";
 
 describe("Hongya logistics review exports", () => {
+  it("adds the order-entry note to every export without duplicating configured note columns", () => {
+    expect(ensureLogisticsExportNoteColumn([
+      { field: "orderNo", header: "订单号" },
+    ])).toEqual([
+      { field: "orderNo", header: "订单号" },
+      { field: "note", header: "录单人备注" },
+    ]);
+    expect(ensureLogisticsExportNoteColumn([
+      { field: "orderNo", header: "订单号" },
+      { field: "note", header: "供应商备注" },
+    ])).toEqual([
+      { field: "orderNo", header: "订单号" },
+      { field: "note", header: "供应商备注" },
+    ]);
+  });
+
   it("keeps exactly one canonical original-address column beside the structured address", () => {
     const result = normalizeLogisticsExportColumns(iberiaCode, [
       { field: "orderNo", header: "客户订单号" },
@@ -297,7 +314,7 @@ describe("Hongya logistics review exports", () => {
       { field: "constant:Phone" as const, header: "海关报关品名1" },
       { field: "constant:手机" as const, header: "中文品名1" },
       { field: "quantity" as const, header: "申报品数量1" },
-      { field: "declaredAmount" as const, header: "申报金额" },
+      { field: "declarationAmount" as const, header: "申报金额" },
       { field: "constant:EUR" as const, header: "海关申报币种" },
     ];
     expect(findHongyaForwardTemplateDeclarationIssues("HONGYA_IBERIA_FORWARD", approved)).toEqual([]);
@@ -328,7 +345,7 @@ describe("Hongya logistics review exports", () => {
       }));
       columns[17] = { field: "constant:Phone", header: "海关报关品名1" };
       columns[18] = { field: "constant:手机", header: "中文品名1" };
-      columns[20] = { field: "declaredAmount", header: "申报价值1" };
+      columns[20] = { field: "declarationAmount", header: "申报价值1" };
       columns[21] = { field: "constant:EUR", header: "申报币种1" };
       expect(findHongyaForwardTemplateDeclarationIssues(templateCode, columns)).toEqual([]);
     },

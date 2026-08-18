@@ -50,4 +50,21 @@ describe("logistics return import", () => {
     expect(parsed.headerRowNumber).toBe(2);
     expect(parsed.rows).toEqual([{ rowNumber: 3, orderNo: "ERP-002", trackingNo: "TRACK-002", carrier: "", providerStatus: "created" }]);
   });
+
+  it("recognizes forwarding-provider tracking headers from an older template snapshot", async () => {
+    const bytes = await workbookBuffer([
+      ["客户订单号", "客户订单编号", "转寄单号"],
+      ["OLD-TRACK-1", "ERP-003", "NEW-TRACK-3"],
+    ]);
+    const parsed = await parseLogisticsReturnWorkbookDetails(bytes, {
+      headerScanRows: 5,
+      aliases: {
+        orderNo: ["客户订单编号"],
+        trackingNo: ["转单号", "物流单号", "运单号"],
+        carrier: ["运输渠道"],
+        providerStatus: ["状态"],
+      },
+    });
+    expect(parsed.rows[0]).toMatchObject({ orderNo: "ERP-003", trackingNo: "NEW-TRACK-3" });
+  });
 });

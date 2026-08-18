@@ -7,9 +7,11 @@ import { writeAuditLog } from "@/lib/audit";
 import { checkPermission } from "@/lib/permission";
 import { prisma } from "@/lib/prisma";
 
+type RouteParams = { params: Promise<{ id: string; eventId: string }> };
+
 export async function PATCH(
   request: NextRequest,
-  context: RouteContext<"/api/mvp/shipments/[id]/events/[eventId]/annotation">,
+  context: RouteParams,
 ) {
   const auth = await requireAuthContext(request);
   if (!auth) return fail("UNAUTHENTICATED", "请先登录。", 401);

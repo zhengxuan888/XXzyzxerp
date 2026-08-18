@@ -6,6 +6,7 @@ import { fail } from "@/lib/api-response";
 import { writeAuditLog } from "@/lib/audit";
 import { commonDepartmentId, createLogisticsBatchNo, logisticsBatchHash } from "@/lib/logistics-batch";
 import {
+  ensureLogisticsExportNoteColumn,
   findHongyaForwardDeclarationIssues,
   findHongyaForwardTemplateDeclarationIssues,
   findLogisticsAddressReviewIssues,
@@ -46,7 +47,9 @@ export async function POST(request: NextRequest, context: RouteParams) {
   });
   if (!template) return fail("TEMPLATE_NOT_FOUND", "物流商模板不存在或已停用。", 404);
   const configuration = parseLogisticsTemplateConfiguration(template.configuration);
-  const exportColumns = normalizeLogisticsExportColumns(template.code, configuration.columns);
+  const exportColumns = ensureLogisticsExportNoteColumn(
+    normalizeLogisticsExportColumns(template.code, configuration.columns),
+  );
   if (!exportColumns.some((column) => column.field === "salesName")) {
     exportColumns.push({ field: "salesName", header: "录单员工" });
   }
@@ -240,7 +243,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
     throw error;
   }
 
-  return new Response(output, {
+  return new Response(new Uint8Array(output), {
     headers: {
       "Content-Type": artifact.mimeType,
       "Content-Disposition": `attachment; filename="${artifact.originalName}"`,

@@ -27,7 +27,7 @@ export type BatchExportOrder = {
   codAmountCents: number;
   currency: string;
   productValueCents: number;
-  declarationCurrency: string;
+  declarationCurrency: string | null;
   customerWhatsapp: string | null;
   note: string | null;
   customFields: unknown;
@@ -138,6 +138,10 @@ export function exportFieldValue(order: BatchExportOrder, field: LogisticsExport
     quantity: order.items.reduce((sum, item) => sum + item.quantity, 0),
     codAmount: (order.codAmountCents / 100).toFixed(2),
     currency: order.currency,
+    declarationAmount: Number.isSafeInteger(order.productValueCents) && order.productValueCents > 0
+      ? order.productValueCents / 100
+      : "",
+    declarationCurrency: order.declarationCurrency?.trim().toUpperCase() ?? "",
     customerWhatsapp: order.customerWhatsapp ?? "",
     note: order.note ?? "",
     salesName: order.creatorUser?.fullName || order.creatorUser?.username || "",
@@ -147,9 +151,6 @@ export function exportFieldValue(order: BatchExportOrder, field: LogisticsExport
       .join(" / "),
     productSkus: order.items.map((item) => item.sku?.code).filter(Boolean).join(" / "),
     unitPrice: typeof order.items[0]?.unitPriceCents === "number" ? (order.items[0].unitPriceCents / 100).toFixed(2) : "",
-    declaredAmount: Number.isSafeInteger(order.productValueCents) && order.productValueCents > 0
-      ? order.productValueCents / 100
-      : "",
     shippingRoute: "",
   };
   return values[field as LogisticsCoreExportField];

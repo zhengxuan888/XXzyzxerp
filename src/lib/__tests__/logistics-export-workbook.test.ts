@@ -2,6 +2,7 @@ import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
 
 import { buildLogisticsExportWorkbook } from "@/lib/logistics-export-workbook";
+import { ensureLogisticsExportNoteColumn } from "@/lib/logistics-export-review";
 import type { LogisticsTemplateColumn } from "@/lib/logistics-provider-template";
 
 const westColumns: LogisticsTemplateColumn[] = [
@@ -11,7 +12,7 @@ const westColumns: LogisticsTemplateColumn[] = [
   { field: "constant:Phone", header: "海关报关品名1" },
   { field: "constant:手机", header: "中文品名1" },
   { field: "quantity", header: "申报品数量1" },
-  { field: "declaredAmount", header: "申报金额" },
+  { field: "declarationAmount", header: "申报金额" },
   { field: "constant:EUR", header: "海关申报币种" },
   { field: "recipientName", header: "收件人姓名" },
   { field: "recipientPhone", header: "收件人电话" },
@@ -51,7 +52,7 @@ const eastColumns: LogisticsTemplateColumn[] = [
   { field: "constant:Phone", header: "海关报关品名1" },
   { field: "constant:手机", header: "中文品名1" },
   { field: "quantity", header: "申报品数量1" },
-  { field: "declaredAmount", header: "申报价值1" },
+  { field: "declarationAmount", header: "申报价值1" },
   { field: "constant:EUR", header: "申报币种1" },
   { field: "constant:HYBH-SJ-X", header: "配货信息1" },
   { field: "salesName", header: "录单员工" },
@@ -101,14 +102,15 @@ async function restoredSheet(templateCode: string, columns: LogisticsTemplateCol
     orders: [order],
   });
   const restored = new ExcelJS.Workbook();
-  await restored.xlsx.load(output);
+  await restored.xlsx.load(new Uint8Array(output).buffer);
   return { sheet: restored.getWorksheet("Sheet1")!, payload: payloads[0]! };
 }
 
 describe("logistics export workbook", () => {
   it("writes the four approved Iberia forwarding values into D/E/G/H", async () => {
     const { sheet, payload } = await restoredSheet("HONGYA_IBERIA_FORWARD", westColumns);
-    expect(sheet.getRow(1).values.slice(1)).toEqual(westColumns.map((column) => column.header));
+    expect((sheet.getRow(1).values as ExcelJS.CellValue[]).slice(1))
+      .toEqual(westColumns.map((column) => column.header));
     expect([sheet.getCell("D1").value, sheet.getCell("E1").value, sheet.getCell("G1").value, sheet.getCell("H1").value])
       .toEqual(["海关报关品名1", "中文品名1", "申报金额", "海关申报币种"]);
     expect([sheet.getCell("D2").value, sheet.getCell("E2").value, sheet.getCell("G2").value, sheet.getCell("H2").value])
@@ -121,7 +123,8 @@ describe("logistics export workbook", () => {
 
   it("writes the four approved East-Europe forwarding values into R/S/U/V", async () => {
     const { sheet, payload } = await restoredSheet("（鸿亚）东欧转寄", eastColumns);
-    expect(sheet.getRow(1).values.slice(1)).toEqual(eastColumns.map((column) => column.header));
+    expect((sheet.getRow(1).values as ExcelJS.CellValue[]).slice(1))
+      .toEqual(eastColumns.map((column) => column.header));
     expect([sheet.getCell("R1").value, sheet.getCell("S1").value, sheet.getCell("U1").value, sheet.getCell("V1").value])
       .toEqual(["海关报关品名1", "中文品名1", "申报价值1", "申报币种1"]);
     expect([sheet.getCell("R2").value, sheet.getCell("S2").value, sheet.getCell("U2").value, sheet.getCell("V2").value])
@@ -130,6 +133,20 @@ describe("logistics export workbook", () => {
     expect(payload["21:申报价值1"]).toBe(26);
     expect([sheet.getCell("W1").value, sheet.getCell("X1").value, sheet.getCell("Y1").value])
       .toEqual(["配货信息1", "录单员工", "具体型号配置"]);
+  });
+
+  it("appends one note column after each approved layout without moving customs columns", async () => {
+    const westWithNote = ensureLogisticsExportNoteColumn(westColumns);
+    const west = await restoredSheet("HONGYA_IBERIA_FORWARD", westWithNote);
+    expect(west.sheet.getCell("X1").value).toBe("录单人备注");
+    expect(["D2", "E2", "G2", "H2"].map((cell) => west.sheet.getCell(cell).value))
+      .toEqual(["Phone", "手机", 26, "EUR"]);
+
+    const eastWithNote = ensureLogisticsExportNoteColumn(eastColumns);
+    const east = await restoredSheet("（鸿亚）东欧转寄", eastWithNote);
+    expect(east.sheet.getCell("Z1").value).toBe("录单人备注");
+    expect(["R2", "S2", "U2", "V2"].map((cell) => east.sheet.getCell(cell).value))
+      .toEqual(["Phone", "手机", 26, "EUR"]);
   });
 
   it("keeps an unrelated provider's legacy custom declaration columns unchanged", async () => {

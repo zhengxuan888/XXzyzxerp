@@ -98,6 +98,13 @@ export function normalizeLogisticsExportColumns(
   ];
 }
 
+export function ensureLogisticsExportNoteColumn(
+  columns: readonly LogisticsTemplateColumn[],
+): LogisticsTemplateColumn[] {
+  if (columns.some((column) => column.field === "note")) return columns.map((column) => ({ ...column }));
+  return [...columns.map((column) => ({ ...column })), { field: "note", header: "录单人备注" }];
+}
+
 export function logisticsExportColumnPresentation(
   templateCode: string,
   field: LogisticsTemplateColumn["field"],
@@ -116,7 +123,7 @@ export function logisticsExportColumnPresentation(
   if (field === "recipientEmail") return { ...defaultColumnPresentation, width: 30 };
   if (field === "recipientName" || field === "orderNo") return { ...defaultColumnPresentation, width: 22 };
   if (field === "salesName") return { ...defaultColumnPresentation, width: 16 };
-  if (field === "declaredAmount") return { ...defaultColumnPresentation, width: 16 };
+  if (field === "declarationAmount") return { ...defaultColumnPresentation, width: 16 };
   return { ...defaultColumnPresentation };
 }
 
@@ -129,7 +136,7 @@ export function applyLogisticsExportPresentation(
     const presentation = logisticsExportColumnPresentation(templateCode, column.field);
     const worksheetColumn = sheet.getColumn(index + 1);
     worksheetColumn.width = presentation.width;
-    if (column.field === "declaredAmount") worksheetColumn.numFmt = "0.00";
+    if (column.field === "declarationAmount") worksheetColumn.numFmt = "0.00";
     if (!presentation.wrapText && !presentation.headerFill && !presentation.note) return;
 
     worksheetColumn.eachCell({ includeEmpty: true }, (cell, rowNumber) => {
@@ -217,7 +224,7 @@ export function findHongyaForwardTemplateDeclarationIssues(
   const required: Array<[number, LogisticsTemplateColumn["field"], string, string]> = [
     [eastEurope ? 17 : 3, "constant:Phone", "海关报关品名1", "海关报关品名1（必须固定 Phone 且列位正确）"],
     [eastEurope ? 18 : 4, "constant:手机", "中文品名1", "中文品名1（必须固定手机且列位正确）"],
-    [eastEurope ? 20 : 6, "declaredAmount", eastEurope ? "申报价值1" : "申报金额", "申报金额（必须读取订单申报总额且列位正确）"],
+    [eastEurope ? 20 : 6, "declarationAmount", eastEurope ? "申报价值1" : "申报金额", "申报金额（必须读取订单申报总额且列位正确）"],
     [eastEurope ? 21 : 7, "constant:EUR", eastEurope ? "申报币种1" : "海关申报币种", "海关申报币种（必须固定 EUR 且列位正确）"],
   ];
   return required.flatMap(([index, field, header, label]) => {

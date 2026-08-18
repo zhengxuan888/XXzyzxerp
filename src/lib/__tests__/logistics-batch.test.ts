@@ -37,6 +37,8 @@ describe("logistics export batch helpers", () => {
   it("reads configured custom order fields without adding a new code branch", () => {
     expect(exportFieldValue(order, "custom:provider.sku")).toBe("PT-DEMO-01");
     expect(exportFieldValue(order, "codAmount")).toBe("29.99");
+    expect(exportFieldValue(order, "declarationAmount")).toBe(26);
+    expect(exportFieldValue(order, "declarationCurrency")).toBe("EUR");
     expect(exportFieldValue(order, "constant:PP")).toBe("PP");
     expect(exportFieldValue(order, "recipientFullAddress")).toBe("Demo Street 1, Lisbon, 1000-001, Portugal");
     expect(exportFieldValue(order, "recipientDistrict")).toBe("Baixa");
@@ -46,7 +48,6 @@ describe("logistics export batch helpers", () => {
     expect(exportFieldValue(order, "constant:手机")).toBe("手机");
     expect(exportFieldValue(order, "constant:HYBH-SJ-X")).toBe("HYBH-SJ-X");
     expect(exportFieldValue(order, "productConfigurations")).toBe("iPhone 16 Pro Max 黑色 256GB");
-    expect(exportFieldValue(order, "declaredAmount")).toBe(26);
     expect(exportFieldValue(order, "unitPrice")).toBe("8.67");
   });
 

@@ -52,8 +52,8 @@ describe("logistics provider template", () => {
   });
 
   it("accepts the frozen order declaration total as a core export field", () => {
-    expect(parseColumnLines("declaredAmount=申报金额")).toEqual([
-      { field: "declaredAmount", header: "申报金额" },
+    expect(parseColumnLines("declarationAmount=申报金额")).toEqual([
+      { field: "declarationAmount", header: "申报金额" },
     ]);
   });
 });

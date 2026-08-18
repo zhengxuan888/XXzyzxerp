@@ -33,6 +33,35 @@ DECLARE
     {"field":"recipientEmail","header":"收件人邮箱"}
   ]
   $json$::jsonb;
+  -- Compatibility fingerprint for databases that deployed the later
+  -- 20260818153000 master migration before this branch migration existed.
+  -- It changed only the four customs field identifiers in the 20-column
+  -- legacy layout. Treat it as a known input, then rebuild the complete
+  -- operations-approved forwarding layout below.
+  west_master_customs_columns JSONB := $json$
+  [
+    {"field":"custom:originalTrackingNo","header":"客户订单号"},
+    {"field":"orderNo","header":"客户订单编号"},
+    {"field":"shippingRoute","header":"运输渠道"},
+    {"field":"constant:Phone","header":"海关报关品名1"},
+    {"field":"constant:手机","header":"中文品名1"},
+    {"field":"quantity","header":"申报品数量1"},
+    {"field":"declarationAmount","header":"申报金额"},
+    {"field":"declarationCurrency","header":"海关申报币种"},
+    {"field":"recipientName","header":"收件人姓名"},
+    {"field":"recipientPhone","header":"收件人电话"},
+    {"field":"recipientCountryCode","header":"国家代码"},
+    {"field":"custom:weightKg","header":"重量"},
+    {"field":"recipientRegion","header":"收件人省份"},
+    {"field":"recipientCity","header":"收件人城市"},
+    {"field":"recipientAddress","header":"收件人地址"},
+    {"field":"recipientPostalCode","header":"收件人邮编"},
+    {"field":"constant:1","header":"包裹件数"},
+    {"field":"codAmount","header":"代收金额"},
+    {"field":"currency","header":"代收货款币种"},
+    {"field":"recipientEmail","header":"收件人邮箱"}
+  ]
+  $json$::jsonb;
   west_target_columns JSONB := $json$
   [
     {"field":"custom:originalTrackingNo","header":"客户订单号"},
@@ -123,6 +152,7 @@ BEGIN
       RAISE EXCEPTION 'HONGYA_IBERIA_FORWARD columns must be a JSON array';
     END IF;
     IF template_record."configuration"->'columns' IS DISTINCT FROM west_legacy_columns
+       AND template_record."configuration"->'columns' IS DISTINCT FROM west_master_customs_columns
        AND template_record."configuration"->'columns' IS DISTINCT FROM west_target_columns THEN
       RAISE EXCEPTION 'HONGYA_IBERIA_FORWARD has an unknown column layout; refusing to overwrite it';
     END IF;

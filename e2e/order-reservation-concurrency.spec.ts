@@ -110,6 +110,7 @@ test.describe.serial("订单提交与库存预占并发门禁", () => {
         recipientCountryCode: "ES",
         recipientCity: "Madrid",
         recipientAddress: "Concurrency Street 1",
+        recipientFullAddress: "并发验收收件人, +34123456789, Concurrency Street 1, Madrid, ES",
         paymentMethod: "COD",
         items: {
           create: {

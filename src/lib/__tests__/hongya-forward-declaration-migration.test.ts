@@ -6,6 +6,10 @@ const migration = readFileSync(new URL(
   "../../../prisma/migrations/20260818160000_hongya_forward_declared_amount/migration.sql",
   import.meta.url,
 ), "utf8");
+const layoutMigration = readFileSync(new URL(
+  "../../../prisma/migrations/20260813100000_hongya_forward_export_layouts/migration.sql",
+  import.meta.url,
+), "utf8");
 
 function declaredColumns(name: "west" | "east") {
   const match = migration.match(new RegExp(`${name}_declared_amount_columns JSONB := \\$json\\$([\\s\\S]*?)\\$json\\$::jsonb`));
@@ -14,6 +18,21 @@ function declaredColumns(name: "west" | "east") {
 }
 
 describe("Hongya forwarding declaration migration", () => {
+  it("accepts the master-first West customs fingerprint before rebuilding the complete layout", () => {
+    const match = layoutMigration.match(/west_master_customs_columns JSONB := \$json\$([\s\S]*?)\$json\$::jsonb/);
+    if (!match?.[1]) throw new Error("master-first West customs layout not found");
+    const columns = JSON.parse(match[1]) as Array<{ field: string; header: string }>;
+    expect([columns[3], columns[4], columns[6], columns[7]]).toEqual([
+      { field: "constant:Phone", header: "海关报关品名1" },
+      { field: "constant:手机", header: "中文品名1" },
+      { field: "declarationAmount", header: "申报金额" },
+      { field: "declarationCurrency", header: "海关申报币种" },
+    ]);
+    expect(layoutMigration).toContain(
+      `template_record."configuration"->'columns' IS DISTINCT FROM west_master_customs_columns`,
+    );
+  });
+
   it("upgrades only forwarding template codes", () => {
     expect(migration).toContain("HONGYA_IBERIA_FORWARD");
     expect(migration).toContain("HONGYA_EAST_EU_FORWARD");
@@ -29,7 +48,7 @@ describe("Hongya forwarding declaration migration", () => {
     expect([columns[3], columns[4], columns[6], columns[7]]).toEqual([
       { field: "constant:Phone", header: "海关报关品名1" },
       { field: "constant:手机", header: "中文品名1" },
-      { field: "declaredAmount", header: "申报金额" },
+      { field: "declarationAmount", header: "申报金额" },
       { field: "constant:EUR", header: "海关申报币种" },
     ]);
   });
@@ -39,7 +58,7 @@ describe("Hongya forwarding declaration migration", () => {
     expect([columns[17], columns[18], columns[20], columns[21]]).toEqual([
       { field: "constant:Phone", header: "海关报关品名1" },
       { field: "constant:手机", header: "中文品名1" },
-      { field: "declaredAmount", header: "申报价值1" },
+      { field: "declarationAmount", header: "申报价值1" },
       { field: "constant:EUR", header: "申报币种1" },
     ]);
   });
