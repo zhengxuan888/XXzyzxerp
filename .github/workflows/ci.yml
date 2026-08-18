@@ -85,6 +85,7 @@ jobs:
       REDIS_URL: redis://localhost:6379
       SESSION_SECRET: ci-only-not-for-production
       SEED_FOUNDER_PASSWORD: "ChangeMe#2026"
+      SEED_DEMO_PASSWORD: "123456."
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

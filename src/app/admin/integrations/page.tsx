@@ -22,7 +22,7 @@ export default async function IntegrationsPage() {
   if (!access.allowed) redirect("/admin");
 
   return (
-    <main className="space-y-4" aria-labelledby="integration-page-title">
+    <div className="space-y-4" aria-labelledby="integration-page-title">
       <header className="rounded-2xl border border-slate-200 bg-white px-5 py-5 shadow-sm sm:px-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3">
@@ -44,6 +44,6 @@ export default async function IntegrationsPage() {
       </header>
 
       <IntegrationCredentialSettings />
-    </main>
+    </div>
   );
 }
