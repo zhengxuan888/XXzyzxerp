@@ -10,6 +10,7 @@ import {
   applyLogisticsExportPresentation,
   findLogisticsAddressReviewIssues,
   findMissingLogisticsShippingRoutes,
+  isHongyaAddressReviewTemplate,
   logisticsExportFilename,
   normalizeLogisticsExportColumns,
 } from "@/lib/logistics-export-review";
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
   if (!exportColumns.some((column) => column.field === "salesName")) {
     exportColumns.push({ field: "salesName", header: "录单员工" });
   }
-  const needsProductConfiguration = ["HONGYA_IBERIA_DROPSHIP", "HONGYA_EAST_EU_DROPSHIP"].includes(template.code);
+  const needsProductConfiguration = isHongyaAddressReviewTemplate(template.code);
   if (needsProductConfiguration && !exportColumns.some((column) => column.field === "productConfigurations")) {
     exportColumns.push({ field: "productConfigurations", header: "具体型号配置" });
   }
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
     return fail("FORBIDDEN", "当前权限不能导出所选订单。", 403);
   }
 
-  const addressIssues = findLogisticsAddressReviewIssues(template.code, candidateOrders);
+  const addressIssues = findLogisticsAddressReviewIssues(template.code, candidateOrders, exportColumns);
   if (addressIssues.length) {
     const preview = addressIssues
       .slice(0, 10)

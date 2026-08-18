@@ -11,13 +11,21 @@ const order = {
   recipientPostalCode: "1000-001",
   recipientRegion: "Lisbon",
   recipientCity: "Lisbon",
+  recipientDistrict: "Baixa",
+  recipientStreet: "Rua Augusta",
+  recipientHouseNumber: "88, 2º D",
   recipientAddress: "Demo Street 1",
   recipientFullAddress: "Demo Street 1, Lisbon, 1000-001, Portugal",
   codAmountCents: 2999,
   currency: "EUR",
   customerWhatsapp: "+351900000000",
   note: "demo",
-  customFields: { provider: { sku: "PT-DEMO-01" } },
+  customFields: {
+    provider: { sku: "PT-DEMO-01" },
+    recipientDistrict: "Legacy district",
+    streetNumber: "Legacy street",
+    doorNumber: "Legacy house number",
+  },
   items: [{ productName: "iPhone 16 Pro Max 黑色 256GB", quantity: 2 }],
 };
 
@@ -27,10 +35,46 @@ describe("logistics export batch helpers", () => {
     expect(exportFieldValue(order, "codAmount")).toBe("29.99");
     expect(exportFieldValue(order, "constant:PP")).toBe("PP");
     expect(exportFieldValue(order, "recipientFullAddress")).toBe("Demo Street 1, Lisbon, 1000-001, Portugal");
+    expect(exportFieldValue(order, "recipientDistrict")).toBe("Baixa");
+    expect(exportFieldValue(order, "recipientStreet")).toBe("Rua Augusta");
+    expect(exportFieldValue(order, "recipientHouseNumber")).toBe("88, 2º D");
     expect(exportFieldValue(order, "constant:Phone")).toBe("Phone");
     expect(exportFieldValue(order, "constant:手机")).toBe("手机");
     expect(exportFieldValue(order, "constant:HYBH-SJ-X")).toBe("HYBH-SJ-X");
     expect(exportFieldValue(order, "productConfigurations")).toBe("iPhone 16 Pro Max 黑色 256GB");
+  });
+
+  it("keeps provider custom columns intact while preferring unambiguous structured fields", () => {
+    expect(exportFieldValue(order, "custom:recipientDistrict")).toBe("Baixa");
+    expect(exportFieldValue(order, "custom:streetNumber")).toBe("Legacy street");
+    expect(exportFieldValue(order, "custom:doorNumber")).toBe("88, 2º D");
+
+    const legacy = {
+      ...order,
+      recipientDistrict: null,
+      recipientStreet: null,
+      recipientHouseNumber: null,
+      customFields: { recipientDistrict: "Centro", street: "Avenida 5", streetNumber: "Legacy number", doorNumber: "12" },
+    };
+    expect(exportFieldValue(legacy, "recipientDistrict")).toBe("Centro");
+    expect(exportFieldValue(legacy, "recipientStreet")).toBe("Avenida 5");
+    expect(exportFieldValue(legacy, "recipientHouseNumber")).toBe("12");
+    expect(exportFieldValue(legacy, "custom:streetNumber")).toBe("Legacy number");
+  });
+
+  it("conservatively resolves missing structured fields from a legacy complete address", () => {
+    const legacy = {
+      ...order,
+      recipientRegion: "Comunidad de Madrid",
+      recipientDistrict: null,
+      recipientStreet: null,
+      recipientHouseNumber: null,
+      recipientCountryCode: "ES",
+      recipientFullAddress: "María García, Calle de Alcalá 123, 4º B, 28009 Madrid, España",
+      customFields: {},
+    };
+    expect(exportFieldValue(legacy, "recipientStreet")).toBe("Calle de Alcalá");
+    expect(exportFieldValue(legacy, "recipientHouseNumber")).toBe("123, 4º B");
   });
 
   it("uses a stable object hash for a batch row snapshot", () => {

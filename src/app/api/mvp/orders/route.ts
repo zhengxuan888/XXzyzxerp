@@ -155,6 +155,9 @@ export async function POST(request: NextRequest) {
   const recipientPostalCode = typeof body.recipientPostalCode === "string" ? body.recipientPostalCode.trim() : "";
   const recipientRegion = typeof body.recipientRegion === "string" ? body.recipientRegion.trim() : "";
   const recipientCity = typeof body.recipientCity === "string" ? body.recipientCity.trim() : "";
+  const recipientDistrict = typeof body.recipientDistrict === "string" ? body.recipientDistrict.trim() : "";
+  const recipientStreet = typeof body.recipientStreet === "string" ? body.recipientStreet.trim() : "";
+  const recipientHouseNumber = typeof body.recipientHouseNumber === "string" ? body.recipientHouseNumber.trim() : "";
   if (templateConfiguration.requireRecipientPhone && !recipientPhone) {
     return fail("RECIPIENT_PHONE_REQUIRED", "当前订单模板要求填写收件人电话。", 400);
   }
@@ -311,6 +314,9 @@ export async function POST(request: NextRequest) {
         recipientPostalCode: recipientPostalCode ? recipientPostalCode.slice(0, 30) : null,
         recipientRegion: recipientRegion ? recipientRegion.slice(0, 100) : null,
         recipientCity: recipientCity ? recipientCity.slice(0, 100) : null,
+        recipientDistrict: recipientDistrict ? recipientDistrict.slice(0, 100) : null,
+        recipientStreet: recipientStreet ? recipientStreet.slice(0, 300) : null,
+        recipientHouseNumber: recipientHouseNumber ? recipientHouseNumber.slice(0, 120) : null,
         recipientAddress: recipientAddress || null,
         recipientFullAddress,
         recipientFullAddressSource: CUSTOMER_ORIGINAL_ADDRESS_SOURCE,
@@ -475,7 +481,17 @@ export async function PUT(request: NextRequest) {
         orderedAt,
         recipientName, recipientPhone: text(body.recipientPhone, 100), recipientEmail: text(body.recipientEmail, 200)?.toLowerCase(),
         recipientCountryCode, recipientPostalCode: text(body.recipientPostalCode, 30),
-        recipientRegion: text(body.recipientRegion, 100), recipientCity: text(body.recipientCity, 100), recipientAddress: text(body.recipientAddress, 500),
+        recipientRegion: text(body.recipientRegion, 100), recipientCity: text(body.recipientCity, 100),
+        recipientDistrict: body.recipientDistrict === undefined
+          ? target.recipientDistrict
+          : text(body.recipientDistrict, 100),
+        recipientStreet: body.recipientStreet === undefined
+          ? target.recipientStreet
+          : text(body.recipientStreet, 300),
+        recipientHouseNumber: body.recipientHouseNumber === undefined
+          ? target.recipientHouseNumber
+          : text(body.recipientHouseNumber, 120),
+        recipientAddress: text(body.recipientAddress, 500),
         customerWhatsapp: text(body.customerWhatsapp, 50), staffWhatsapp: text(body.staffWhatsapp, 50), packageWeightGrams,
         paymentMethod: text(body.paymentMethod, 30), logisticsChannel: text(body.logisticsChannel, 50), note: text(body.note, 2000),
         exceptionNote: null,

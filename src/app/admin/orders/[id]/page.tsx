@@ -161,6 +161,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     !order.recipientCountryCode && "国家",
     !order.recipientPostalCode && "邮编",
     !order.recipientCity && "城市",
+    !order.recipientStreet && "街道",
     !order.recipientAddress && "详细地址",
   ].filter(Boolean) as string[];
 
@@ -233,6 +234,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           recipientRegion={order.recipientRegion}
           recipientCity={order.recipientCity}
           recipientPostalCode={order.recipientPostalCode}
+          recipientDistrict={order.recipientDistrict}
+          recipientStreet={order.recipientStreet}
+          recipientHouseNumber={order.recipientHouseNumber}
           recipientAddress={order.recipientAddress}
           recipientFullAddress={order.recipientFullAddress}
           recipientFullAddressSource={order.recipientFullAddressSource}
@@ -290,7 +294,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             codAmountCents: order.codAmountCents, shippingFeeCents: order.shippingFeeCents, currency: order.currency,
             orderedAt: format(order.orderedAt, "yyyy-MM-dd"), recipientName: order.recipientName ?? "", recipientPhone: order.recipientPhone ?? "",
             recipientEmail: order.recipientEmail ?? "", recipientCountryCode: order.recipientCountryCode ?? "", recipientPostalCode: order.recipientPostalCode ?? "",
-            recipientRegion: order.recipientRegion ?? "", recipientCity: order.recipientCity ?? "", recipientAddress: order.recipientAddress ?? "",
+            recipientRegion: order.recipientRegion ?? "", recipientCity: order.recipientCity ?? "", recipientDistrict: order.recipientDistrict ?? "",
+            recipientStreet: order.recipientStreet ?? "", recipientHouseNumber: order.recipientHouseNumber ?? "", recipientAddress: order.recipientAddress ?? "",
             recipientFullAddress: order.recipientFullAddress ?? "",
             recipientFullAddressSource: order.recipientFullAddressSource,
             customerWhatsapp: order.customerWhatsapp ?? "", staffWhatsapp: order.staffWhatsapp ?? "", packageWeightGrams: order.packageWeightGrams ?? 0,

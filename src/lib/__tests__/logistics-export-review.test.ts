@@ -18,6 +18,7 @@ import {
 } from "@/lib/order-address";
 
 const iberiaCode = "HONGYA_IBERIA_DROPSHIP";
+const eastForwardCode = "（鸿亚）东欧转寄";
 
 describe("Hongya logistics review exports", () => {
   it("keeps exactly one canonical original-address column beside the structured address", () => {
@@ -42,9 +43,30 @@ describe("Hongya logistics review exports", () => {
     expect(normalizeLogisticsExportColumns("FAN_RO_WMS", columns)).toEqual(columns);
   });
 
+  it("keeps the forwarding review address beside all split East-Europe address fields", () => {
+    expect(normalizeLogisticsExportColumns(eastForwardCode, [
+      { field: "recipientCity", header: "收件人城市" },
+      { field: "recipientStreet", header: "收件人地址" },
+      { field: "recipientHouseNumber", header: "收件人门牌号" },
+      { field: "recipientFullAddress", header: "旧审核列" },
+      { field: "custom:streetNumber", header: "收件人街道号" },
+      { field: "recipientPhone", header: "收件人电话" },
+    ])).toEqual([
+      { field: "recipientCity", header: "收件人城市" },
+      { field: "recipientStreet", header: "收件人地址" },
+      { field: "recipientHouseNumber", header: "收件人门牌号" },
+      { field: "custom:streetNumber", header: "收件人街道号" },
+      { field: "recipientFullAddress", header: ORIGINAL_ADDRESS_REVIEW_HEADER },
+      { field: "recipientPhone", header: "收件人电话" },
+    ]);
+  });
+
   it("marks review workbooks in the ASCII-safe filename without changing ordinary exports", () => {
     expect(logisticsExportFilename(iberiaCode, "2026-08-09")).toBe(
       "HONGYA_IBERIA_DROPSHIP-REVIEW-INCLUDES-ORIGINAL-ADDRESS-2026-08-09.xlsx",
+    );
+    expect(logisticsExportFilename(eastForwardCode, "2026-08-09")).toBe(
+      "HONGYA_EAST_EU_FORWARD-REVIEW-INCLUDES-ORIGINAL-ADDRESS-2026-08-09.xlsx",
     );
     expect(logisticsExportFilename("FAN_RO_WMS", "2026-08-09")).toBe("FAN_RO_WMS-2026-08-09.xlsx");
   });
@@ -66,6 +88,8 @@ describe("Hongya logistics review exports", () => {
       bodyFill: null,
       note: null,
     });
+    expect(logisticsExportColumnPresentation(iberiaCode, "recipientStreet")).toMatchObject({ width: 30, wrapText: true });
+    expect(logisticsExportColumnPresentation(iberiaCode, "recipientHouseNumber")).toMatchObject({ width: 20, wrapText: true });
     expect(logisticsExportColumnPresentation(iberiaCode, "productConfigurations")).toMatchObject({ width: 40, wrapText: true });
   });
 
@@ -161,6 +185,55 @@ describe("Hongya logistics review exports", () => {
       orderNo: "ZY-LEGACY",
       missingFields: ["完整原始地址（需补录客户原文）"],
     }]);
+  });
+
+  it("requires every exported structured address field except the optional district", () => {
+    const columns = [
+      { field: "recipientRegion" as const, header: "收件人州/省" },
+      { field: "recipientDistrict" as const, header: "收件人区/县" },
+      { field: "recipientStreet" as const, header: "收件人街道" },
+      { field: "recipientHouseNumber" as const, header: "收件人门牌号" },
+    ];
+    expect(findLogisticsAddressReviewIssues(iberiaCode, [{
+      orderNo: "ZY-STRUCTURED",
+      recipientName: "Maria",
+      recipientPhone: "+34 600 000 000",
+      recipientCountryCode: "ES",
+      recipientRegion: null,
+      recipientCity: "Madrid",
+      recipientDistrict: null,
+      recipientStreet: "",
+      recipientHouseNumber: null,
+      recipientPostalCode: "28009",
+      recipientAddress: "地址待核对",
+      recipientFullAddress: "Maria, 地址待核对, 28009 Madrid, Espana",
+      recipientFullAddressSource: CUSTOMER_ORIGINAL_ADDRESS_SOURCE,
+    }], columns)).toEqual([{
+      orderNo: "ZY-STRUCTURED",
+      missingFields: ["收件人州/省", "收件人街道", "收件人门牌号/楼层房号"],
+    }]);
+  });
+
+  it("accepts safely parsed legacy street fields without mutating the old order", () => {
+    const columns = [
+      { field: "recipientRegion" as const, header: "收件人州/省" },
+      { field: "recipientStreet" as const, header: "收件人街道" },
+      { field: "recipientHouseNumber" as const, header: "收件人门牌号" },
+    ];
+    expect(findLogisticsAddressReviewIssues(iberiaCode, [{
+      orderNo: "ZY-LEGACY-PARSED",
+      recipientName: "Maria",
+      recipientPhone: "+34 600 000 000",
+      recipientCountryCode: "ES",
+      recipientRegion: "Comunidad de Madrid",
+      recipientCity: "Madrid",
+      recipientStreet: null,
+      recipientHouseNumber: null,
+      recipientPostalCode: "28009",
+      recipientAddress: "Calle de Alcalá 123, 4º B",
+      recipientFullAddress: "María García, Calle de Alcalá 123, 4º B, 28009 Madrid, España",
+      recipientFullAddressSource: CUSTOMER_ORIGINAL_ADDRESS_SOURCE,
+    }], columns)).toEqual([]);
   });
 
   it("does not apply Hongya address validation to unrelated templates", () => {

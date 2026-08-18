@@ -13,6 +13,9 @@ type AddressComparisonProps = {
   recipientRegion: string | null;
   recipientCity: string | null;
   recipientPostalCode: string | null;
+  recipientDistrict: string | null;
+  recipientStreet: string | null;
+  recipientHouseNumber: string | null;
   recipientAddress: string | null;
   recipientFullAddress: string | null;
   recipientFullAddressSource: string | null;
@@ -33,6 +36,9 @@ export default function AddressComparison({
   recipientRegion,
   recipientCity,
   recipientPostalCode,
+  recipientDistrict,
+  recipientStreet,
+  recipientHouseNumber,
   recipientAddress,
   recipientFullAddress,
   recipientFullAddressSource,
@@ -45,10 +51,13 @@ export default function AddressComparison({
     { label: "收件人", value: recipientName, required: true },
     { label: "电话", value: recipientPhone, required: true },
     { label: "国家/地区", value: recipientCountryCode, required: true },
-    { label: "州/区域（可选）", value: recipientRegion, required: false },
+    { label: "州/省（可选）", value: recipientRegion, required: false },
     { label: "城市", value: recipientCity, required: true },
+    { label: "区/县（可选）", value: recipientDistrict, required: false },
     { label: "邮编", value: recipientPostalCode, required: true },
-    { label: "详细地址", value: recipientAddress, required: true, wide: true },
+    { label: "街道", value: recipientStreet, required: true, wide: true },
+    { label: "门牌号/楼层房号（可选）", value: recipientHouseNumber, required: false },
+    { label: "物流完整详细地址", value: recipientAddress, required: true, wide: true },
   ];
   const missingFields = structuredFields.filter((field) => field.required && !hasValue(field.value)).map((field) => field.label);
   const structuredComplete = missingFields.length === 0;
